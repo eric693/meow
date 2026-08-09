@@ -29,7 +29,7 @@ function createOrder({
   guildId, customerId, customerName = '', staffId, staffName = '', csId = '', csName = '',
   kind = 'order', item = '', qty = 1, unitPrice = 0, listPrice = null, amount = null,
   staffShare = null, source = 'self', note = '', operator = '', orderNo = null, createdAt = null,
-  status = 'pending', skipWallet = false
+  status = 'pending', skipWallet = false, payMethod = '雨幣扣款'
 }) {
   guildId = orgOf(guildId);
   const staff = getStaff(guildId, staffId);
@@ -54,13 +54,14 @@ function createOrder({
       .run(paid, guildId, customerId);
     db.prepare(`INSERT INTO orders
         (order_no, guild_id, customer_id, staff_id, cs_id, customer_name, staff_name, cs_name,
-         kind, item, qty, unit_price, list_price, amount, staff_share, net, source, status, note, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?, datetime('now','localtime')))`)
+         kind, item, qty, unit_price, list_price, amount, staff_share, net, source, status, note,
+         pay_method, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?, datetime('now','localtime')))`)
       .run(no, guildId, customerId, staffId, csId,
            customerName || getCustomer(guildId, customerId).name || customerId,
            staffName || staff.name || staff.code, csName,
            kind, item, Number(qty) || 1, Math.round(unitPrice) || 0,
-           list, paid, share, net, source, status, note, createdAt);
+           list, paid, share, net, source, status, note, payMethod || '雨幣扣款', createdAt);
     if (status === 'settled') {
       db.prepare(`UPDATE staff SET income = income + ?, total_income = total_income + ?
                   WHERE guild_id=? AND user_id=?`).run(share, share, guildId, staffId);
@@ -101,12 +102,13 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
     }
     db.prepare(`UPDATE orders SET kind=?, item=?, qty=?, unit_price=?, list_price=?, amount=?,
                 staff_share=?, net=?, note=?, cs_id=?, cs_name=?, customer_name=?, staff_name=?,
-                source=?, created_at=? WHERE id=?`)
+                source=?, pay_method=?, created_at=? WHERE id=?`)
       .run(patch.kind ?? o.kind, patch.item ?? o.item, patch.qty ?? o.qty,
            patch.unit_price ?? o.unit_price, list, paid, share, paid - share,
            patch.note ?? o.note, patch.cs_id ?? o.cs_id, patch.cs_name ?? o.cs_name,
            patch.customer_name ?? o.customer_name, patch.staff_name ?? o.staff_name,
-           patch.source ?? o.source, patch.created_at ?? o.created_at, o.id);
+           patch.source ?? o.source, patch.pay_method ?? o.pay_method,
+           patch.created_at ?? o.created_at, o.id);
   })();
 
   refreshVip(guildId, o.customer_id);
@@ -133,6 +135,31 @@ function deleteOrder(guildId, orderNo, operator = '') {
   })();
   audit(operator, '刪除交易', orderNo, guildId);
   return { ok: true };
+}
+
+/** 依編號取單（跨群共用同一份帳） */
+function getOrder(guildId, orderNo) {
+  return db.prepare('SELECT * FROM orders WHERE guild_id=? AND order_no=?')
+    .get(orgOf(guildId), String(orderNo || '').trim().toUpperCase());
+}
+
+/**
+ * 陪玩在員工群報單：認領主群結帳時已建立的訂單。
+ * 只補上回報人、服務內容與時間，不動任何金流（錢在結帳時就收了）。
+ */
+function reportOrder(guildId, orderNo, { reporterId = '', item = null, qty = null, note = '' } = {}) {
+  guildId = orgOf(guildId);
+  const o = getOrder(guildId, orderNo);
+  if (!o) throw new Error(`查無訂單 ${orderNo}，請向客服確認結帳時提供的編號`);
+  if (o.status === 'refunded') throw new Error(`訂單 ${o.order_no} 已退單，無法報單`);
+  if (o.status === 'settled') throw new Error(`訂單 ${o.order_no} 已核銷完畢，不需再報單`);
+  if (o.reported_at) throw new Error(`訂單 ${o.order_no} 已於 ${o.reported_at} 報過單了`);
+
+  db.prepare(`UPDATE orders SET reporter_id=?, reported_at=?, item=COALESCE(?, item),
+              qty=COALESCE(?, qty), note=? WHERE id=?`)
+    .run(reporterId, now(), item, qty, note ? (o.note ? o.note + ' / ' + note : note) : o.note, o.id);
+  audit(reporterId, '陪玩報單', o.order_no, guildId);
+  return db.prepare('SELECT * FROM orders WHERE id=?').get(o.id);
 }
 
 /** 核銷：暫存薪水 → 可提領薪水 */
@@ -221,6 +248,6 @@ function reviewWithdraw(guildId, id, status, operator = '') {
 }
 
 module.exports = {
-  createOrder, updateOrder, deleteOrder, settleOrder, refundOrder,
+  createOrder, updateOrder, deleteOrder, getOrder, reportOrder, settleOrder, refundOrder,
   requestWithdraw, reviewWithdraw, shareRate, KINDS, STATUS, kindLabel
 };

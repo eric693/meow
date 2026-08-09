@@ -5,6 +5,7 @@ const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const M = require('../util/money');
 const R = require('../util/reports');
 const { isAdmin, isCS } = require('./perm');
+const { checkoutMessage } = require('../util/checkout');
 const panels = require('./panels');
 
 const firstId = (msg, argStr) => {
@@ -143,18 +144,43 @@ const handlers = {
   },
 
   // ---------- 日常操作與管理 ----------
+  // !結帳 @老闆 陪玩 原價 [折抵] [支付方式]
+  async 結帳(msg, args) {
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    // 第一個 mention／長數字是老闆，其餘依序是 陪玩 原價 折抵 支付方式
+    // （不能用整串 replace：陪玩若填 Discord ID 會被誤刪）
+    const tokens = args.trim().split(/\s+/).filter(Boolean);
+    const bossAt = tokens.findIndex(t => /^<@!?\d{15,25}>$/.test(t) || /^\d{15,25}$/.test(t));
+    const target = bossAt < 0 ? null : tokens[bossAt].replace(/\D/g, '');
+    const [staffKey, listRaw, discountRaw, ...payParts] = tokens.filter((_, i) => i !== bossAt);
+    if (!target || !staffKey || listRaw === undefined)
+      throw new Error('用法：`!結帳 @老闆 陪玩代號 訂單原價 [折抵] [支付方式]`');
+    const s = findStaff(msg.guild.id, staffKey);
+    if (!s) throw new Error(`查無陪玩「${staffKey}」`);
+    const list = Number(listRaw);
+    const discount = discountRaw === undefined ? 0 : Number(discountRaw);
+    if (!Number.isFinite(list) || !Number.isFinite(discount)) throw new Error('訂單原價與折抵必須是數字。');
+    if (discount > list) throw new Error('折抵金額不可大於訂單原價。');
+
+    const o = M.createOrder({
+      guildId: msg.guild.id, customerId: target, staffId: s.user_id,
+      csId: msg.author.id, csName: msg.author.tag, item: '陪玩服務', qty: 1,
+      unitPrice: list - discount, listPrice: list, amount: list - discount,
+      source: 'ticket', operator: msg.author.tag,
+      payMethod: payParts.join(' ') || '雨幣扣款'
+    });
+    await msg.channel.send(checkoutMessage(msg.guild.id, o));
+    if (msg.deletable) await msg.delete().catch(() => {});
+  },
+
   async 核銷(msg, args) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const no = args.trim().split(/\s+/)[0];
-    if (!no) throw new Error('請輸入訂單編號，例如 `!核銷 M202608090001`');
+    if (!no) throw new Error('請輸入訂單編號，例如 `!核銷 ORD-63876816`');
     const o = M.settleOrder(msg.guild.id, no, msg.author.tag);
-    const s = getStaff(msg.guild.id, o.staff_id);
-    await msg.reply({ embeds: [ok(msg.guild.id, `訂單 ${no} 核銷成功`,
-      `**${s ? s.name || s.code : o.staff_id}** 的暫存薪水已轉入可提領`, [
-        { name: '訂單金額', value: n(o.amount), inline: true },
-        { name: '本次入帳', value: n(o.staff_share), inline: true },
-        { name: '目前可提領', value: n(s ? s.income : 0), inline: true }
-      ])] });
+    await msg.reply({ embeds: [ok(msg.guild.id, '訂單核銷成功',
+      `訂單 \`${no}\` 已由 ${mention(msg.author.id)} 核銷完畢。\n`
+      + `陪玩 ${mention(o.staff_id)} 的暫存薪水已轉入可提領帳戶！`)] });
   },
 
   async 未銷(msg) {
@@ -246,8 +272,8 @@ const handlers = {
       fields: [
         { name: '📊 查詢與統計', value: '`!消費查詢` `!查點單` `!消費榜` `!薪資查詢` `!全服雨幣` `!雨幣查詢` `!業績查詢` `!客服業績`' },
         { name: '📤 匯出', value: '`!匯出消費總表` `!匯出報表` `!匯出提領報表` `!財務報表`' },
-        { name: '🔧 日常操作', value: '`!核銷 編號` `!未銷` `!結單` `!退單` `!儲值` `!扣款` `!提領` `!離職` `!刷新人事`' },
-        { name: '⚙️ 面板建置', value: '`!sendrole` `!sendorder` `!setup-ticket` `!setup-report` `!setup-report-cross` `!setup-report-cross-2` `!setup-exam` `!setup-bank` `!setup-intimacy` `!setup-suggestion` `!setup-staff-suggestion`' },
+        { name: '🔧 日常操作', value: '`!結帳 @老闆 陪玩 原價 [折抵] [支付方式]` `!核銷 編號` `!未銷` `!結單` `!退單` `!儲值` `!扣款` `!提領` `!離職` `!刷新人事`' },
+        { name: '⚙️ 面板建置', value: '`!sendrole` `!sendorder` `!setup-ticket` `!setup-checkout` `!setup-report` `!setup-report-cross` `!setup-report-cross-2` `!setup-exam` `!setup-bank` `!setup-intimacy` `!setup-suggestion` `!setup-staff-suggestion`' },
         { name: '📖 玩家手冊', value: '`!手冊`　https://meow.crownai.ink/rules' },
         { name: '⌨️ 斜線指令', value: '`/對帳` `/陪玩業績詳報` `/送禮` `/愛戀查詢` `/親密調整` `/vip等級` `/背包查詢` `/新增地盤` `/發布投票` `/入職`' }
       ]

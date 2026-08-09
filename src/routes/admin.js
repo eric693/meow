@@ -42,8 +42,17 @@ const ORG_KEYS = ['brand_name', 'staff_share_rate', 'vip_thresholds', 'vip_names
 const GUILD_KEYS = [
   'bot_activity',
   'role_admin', 'role_cs', 'role_player', 'role_boss', 'role_drop',
-  'category_ticket', 'category_exam',
-  'channel_order_log', 'channel_suggestion', 'channel_staff_box'
+  'category_ticket', 'category_exam', 'category_report',
+  'category_order_done', 'category_order_public',
+  'channel_order_log', 'channel_suggestion', 'channel_staff_box',
+  // 播報類
+  'channel_vip_announce', 'channel_gift_announce', 'channel_title_announce',
+  // 後台類
+  'channel_update_log', 'channel_bug_report', 'channel_finance', 'channel_export',
+  // 會員售後類
+  'channel_member_system', 'channel_notice_log', 'channel_cs_lobby',
+  // 入口類
+  'channel_order_entry', 'channel_exam_entry', 'channel_intro'
 ];
 const SETTING_KEYS = [...ORG_KEYS, ...GUILD_KEYS];
 

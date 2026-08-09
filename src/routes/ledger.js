@@ -51,6 +51,7 @@ router.post('/ledger', (req, res) => {
     amount: b.amount,
     staffShare: b.staff_share,
     source: b.source || 'manual',
+    payMethod: b.pay_method || '雨幣扣款',
     status: ['pending', 'settled', 'refunded'].includes(b.status) ? b.status : 'pending',
     createdAt: b.created_at || null,
     note: b.note || '',
@@ -206,7 +207,8 @@ router.post('/ledger/import', express.text({ type: '*/*', limit: '32mb' }), (req
   const col = {
     no: idx('訂單編號'), time: idx('交易時間'), kind: idx('交易類型'), cs: idx('經辦客服'),
     customer: idx('金主名稱'), staff: idx('陪玩名稱'), list: idx('訂單原價'), amount: idx('實收金額'),
-    share: idx('陪玩抽成'), net: idx('伺服器淨利'), status: idx('狀態'), note: idx('備註')
+    share: idx('陪玩抽成'), net: idx('伺服器淨利'), status: idx('狀態'), note: idx('備註'),
+    pay: idx('支付方式')
   };
   if (col.amount < 0 || col.staff < 0)
     return res.status(400).json({ error: '找不到「實收金額」或「陪玩名稱」欄位，請確認是流水帳格式的 CSV' });
@@ -252,6 +254,7 @@ router.post('/ledger/import', express.text({ type: '*/*', limit: '32mb' }), (req
           listPrice: col.list >= 0 ? num(r[col.list]) : amount,
           amount, staffShare: share,
           source: 'import',
+          payMethod: clean(col.pay >= 0 ? r[col.pay] : '') || '雨幣扣款',
           status: STATUS_BY_LABEL[statusLabel] || 'settled',
           createdAt: at,
           note: clean(col.note >= 0 ? r[col.note] : ''),

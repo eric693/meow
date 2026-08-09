@@ -7,6 +7,7 @@ const { db, getSetting, getCustomer, findStaff, getStaff, now, audit, orgOf } = 
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const M = require('../util/money');
 const G = require('../util/gifts');
+const { checkoutMessage } = require('../util/checkout');
 const { isAdmin, isCS } = require('./perm');
 
 const btn = (id, label, style = ButtonStyle.Primary, emoji) => {
@@ -70,8 +71,19 @@ const commands = {
   async 'setup-report'(msg) {
     adminOnly(msg);
     await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '📝 自主報單系統', desc: '陪玩／客服完成服務後於此回報訂單，系統自動扣款並計算分潤。' })],
-      components: [row(btn('report:self', '我要報單', ButtonStyle.Primary, '📝'))]
+      embeds: [emb(msg.guild.id, { title: '📝 喚雨｜自主報單系統', desc: '成員您好！請點擊下方按鈕開始填寫你的名稱。' })],
+      components: [row(btn('report:self', '我要報單', ButtonStyle.Primary, '📄'))]
+    });
+  },
+
+  async 'setup-checkout'(msg) {
+    adminOnly(msg);
+    await post(msg, {
+      embeds: [emb(msg.guild.id, {
+        title: '🧾 喚雨｜客服結帳台',
+        desc: '客服完成服務後於此結帳：系統會扣老闆雨幣、發出結帳明細，並產生供陪玩報單的訂單編號。'
+      })],
+      components: [row(btn('checkout:start', '我要結帳', ButtonStyle.Success, '🧾'))]
     });
   },
 
@@ -126,8 +138,11 @@ const commands = {
   async 'setup-staff-suggestion'(msg) {
     adminOnly(msg);
     await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '🧑‍💼 員工輔導室', desc: '員工專屬管道，內容將直送專屬後台，保密處理。' })],
-      components: [row(btn('sug:staff', '員工投稿', ButtonStyle.Secondary, '🧑‍💼'))]
+      embeds: [emb(msg.guild.id, {
+        title: '🤝 喚雨｜員工輔導室',
+        desc: '接收任何關於喚雨員工的專屬建議、投訴與問題。\n\n我們會絕對保密內容，僅後台管理可見！'
+      })],
+      components: [row(btn('sug:staff', '填寫問題', ButtonStyle.Primary, '📝'))]
     });
   }
 };
@@ -167,15 +182,32 @@ async function createPrivateChannel(guild, member, { prefix, categoryKey, extraR
 
 const REPORT_LABEL = { self: '自主報單', cross: '跨服報單 1 號', cross2: '唱歌單跨服報單' };
 
+// 自主報單＝認領主群已結帳的訂單（金流已在結帳時完成，這裡只留服務紀錄與截圖）
 function reportModal(kind) {
-  return new ModalBuilder().setCustomId(`reportm:${kind}`).setTitle(REPORT_LABEL[kind])
-    .addComponents(
-      input('customer', '老闆 Discord ID', { ph: '例：123456789012345678' }),
-      input('staff', '陪玩代號／藝名', { ph: '例：小雨 或 R01' }),
-      input('item', '服務項目', { ph: '例：英雄聯盟 / 唱歌 / 聊天' }),
-      input('qty', '數量（時數或局數）', { ph: '例：2' }),
-      input('price', '單價（雨幣）', { ph: '例：300' })
+  const m = new ModalBuilder().setCustomId(`reportm:${kind}`).setTitle(REPORT_LABEL[kind]);
+  if (kind === 'self') {
+    return m.addComponents(
+      input('order_no', '訂單編號', { ph: '例：ORD-63876816（結帳時客服提供）' }),
+      input('boss_dc', '老闆 dc', { ph: '例：tsuki_.32' }),
+      input('customer', '老闆 id', { ph: '例：123456789012345678' }),
+      input('staff', '陪玩 id', { ph: '例：一坨羊毛毛#0712 或 R01' }),
+      input('slots', '報單場次／小時', { ph: '例：娛樂4場' })
     );
+  }
+  // 跨服單沒有主群結帳流程，報單當下才建帳
+  return m.addComponents(
+    input('boss_dc', '老闆 dc', { ph: '例：tsuki_.32' }),
+    input('customer', '老闆 id', { ph: '例：123456789012345678' }),
+    input('staff', '陪玩 id', { ph: '例：一坨羊毛毛#0712 或 R01' }),
+    input('slots', '報單場次／小時', { ph: '例：娛樂4場' }),
+    input('price', '單價（雨幣）', { ph: '例：300' })
+  );
+}
+
+// 「娛樂4場」→ { item: '娛樂', qty: 4 }；沒寫數字就當 1
+function parseSlots(text) {
+  const m = text.match(/(\d+(?:\.\d+)?)/);
+  return { item: text.replace(/\d+(?:\.\d+)?.*$/, '').trim() || text, qty: m ? Number(m[1]) : 1 };
 }
 
 async function handleInteraction(i) {
@@ -228,41 +260,124 @@ async function handleInteraction(i) {
   }
 
   // ---- 報單 ----
-  if (id.startsWith('report:')) {
+  const canReport = () => isCS(i.member) || getStaff(i.guildId, i.user.id);
+
+  // 自主報單：先問名稱 → 建立個人報單頻道 → 在頻道內填寫明細
+  if (id === 'report:self') {
+    if (!canReport()) return eph(i, err(i.guildId, '只有在職員工可以報單。'));
+    return i.showModal(new ModalBuilder().setCustomId('reportch').setTitle('自主報單系統')
+      .addComponents(input('name', '你的名稱', { ph: '例：羊毛毛' })));
+  }
+  if (id === 'reportch') {
+    await i.deferReply({ ephemeral: true });
+    const name = i.fields.getTextInputValue('name').trim();
+    const ch = await createPrivateChannel(i.guild, i.member,
+      { prefix: name, categoryKey: 'category_report', extraRoleKeys: ['role_cs', 'role_admin'] });
+    await ch.setName(`${name}報單`.slice(0, 90)).catch(() => {});
+    await ch.send({
+      content: mention(i.user.id),
+      embeds: [emb(i.guildId, { title: '📄 報單頻道', desc: '請點擊下方按鈕填寫報單明細，送出後於本頻道補上對局截圖。' })],
+      components: [row(btn('reportform:self', '填寫報單明細', ButtonStyle.Primary, '📄'))]
+    });
+    return i.editReply({ embeds: [ok(i.guildId, '報單頻道已建立', `請前往填寫詳細內容：${ch}`)] });
+  }
+
+  // 跨服報單／頻道內的填寫按鈕，都直接開表單
+  if (id.startsWith('report:') || id.startsWith('reportform:')) {
     const kind = id.split(':')[1];
-    if (!isCS(i.member) && !getStaff(i.guildId, i.user.id))
-      return eph(i, err(i.guildId, '只有在職員工可以報單。'));
+    if (!canReport()) return eph(i, err(i.guildId, '只有在職員工可以報單。'));
     return i.showModal(reportModal(kind));
   }
   if (id.startsWith('reportm:')) {
     const kind = id.split(':')[1];
     const f = k => i.fields.getTextInputValue(k).trim();
     const customerId = (f('customer').match(/\d{15,25}/) || [])[0];
-    if (!customerId) return eph(i, err(i.guildId, '老闆 Discord ID 格式不正確。'));
+    if (!customerId) return eph(i, err(i.guildId, '老闆 id 格式不正確（需為 Discord 數字 ID）。'));
     const staff = findStaff(i.guildId, f('staff'));
     if (!staff) return eph(i, err(i.guildId, `查無陪玩「${f('staff')}」`));
-    const qty = Number(f('qty')), price = Number(f('price'));
-    if (!Number.isFinite(qty) || !Number.isFinite(price)) return eph(i, err(i.guildId, '數量與單價必須是數字。'));
+    const { item, qty } = parseSlots(f('slots'));
+
+    let o;
+    try {
+      if (kind === 'self') {
+        // 認領主群結帳產生的訂單，不重複扣款
+        const exist = M.getOrder(i.guildId, f('order_no'));
+        if (exist && exist.staff_id !== staff.user_id)
+          return eph(i, err(i.guildId,
+            `訂單 ${exist.order_no} 的服務陪玩是 <@${exist.staff_id}>，與你填寫的「${f('staff')}」不符，請向客服確認。`));
+        if (exist && exist.customer_id !== customerId)
+          return eph(i, err(i.guildId,
+            `訂單 ${exist.order_no} 的消費金主是 <@${exist.customer_id}>，與你填寫的老闆 id 不符，請向客服確認。`));
+        o = M.reportOrder(i.guildId, f('order_no'), { reporterId: i.user.id, item, qty });
+      } else {
+        const price = Number(f('price'));
+        if (!Number.isFinite(qty) || !Number.isFinite(price))
+          return eph(i, err(i.guildId, '場次與單價必須含數字。'));
+        o = M.createOrder({
+          guildId: i.guildId, customerId, customerName: f('boss_dc'), staffId: staff.user_id,
+          csId: isCS(i.member) ? i.user.id : '', item, qty, unitPrice: price,
+          source: kind, operator: i.user.tag
+        });
+      }
+    } catch (e) { return eph(i, err(i.guildId, e.message)); }
+
+    const body = emb(i.guildId, {
+      title: '📄 報單明細',
+      desc: [
+        `訂單編號：\`${o.order_no}\``,
+        `老闆dc：${f('boss_dc')}`,
+        `老闆id：${customerId}`,
+        `陪玩id：${staff.name || staff.code}`,
+        `報單場次/小時：${f('slots')}`,
+        '',
+        '*(請在下方補充對局截圖)*'
+      ].join('\n')
+    });
+    const csRole = getSetting('role_cs', '', i.guildId);
+    const content = [mention(staff.user_id), csRole ? `<@&${csRole}>` : '', '您的報單已產生：']
+      .filter(Boolean).join(' ');
+    await sendToChannel(i.guild, 'channel_order_log', { content, embeds: [body] });
+    return i.reply({ content, embeds: [body] });
+  }
+
+  // ---- 客服結帳 ----
+  if (id === 'checkout:start') {
+    if (!isCS(i.member)) return eph(i, err(i.guildId, '只有客服／管理員可以結帳。'));
+    return i.showModal(new ModalBuilder().setCustomId('checkoutm').setTitle('本次結帳明細')
+      .addComponents(
+        input('customer', '老闆 id', { ph: '例：123456789012345678' }),
+        input('staff', '陪玩 id', { ph: '例：lumi 或 R01' }),
+        input('slots', '服務項目／場次·小時', { ph: '例：娛樂4場' }),
+        input('list', '訂單原價（雨幣）', { ph: '例：2000' }),
+        input('discount', '手動/背包券折抵', { required: false, ph: '沒有折抵請留空或填 0' })
+      ));
+  }
+  if (id === 'checkoutm') {
+    const f = k => i.fields.getTextInputValue(k).trim();
+    const customerId = (f('customer').match(/\d{15,25}/) || [])[0];
+    if (!customerId) return eph(i, err(i.guildId, '老闆 id 格式不正確（需為 Discord 數字 ID）。'));
+    const staff = findStaff(i.guildId, f('staff'));
+    if (!staff) return eph(i, err(i.guildId, `查無陪玩「${f('staff')}」`));
+    const list = Number(f('list'));
+    const discount = Number(f('discount') || 0);
+    if (!Number.isFinite(list) || !Number.isFinite(discount))
+      return eph(i, err(i.guildId, '訂單原價與折抵必須是數字。'));
+    if (discount > list) return eph(i, err(i.guildId, '折抵金額不可大於訂單原價。'));
+    const { item, qty } = parseSlots(f('slots'));
 
     let o;
     try {
       o = M.createOrder({
         guildId: i.guildId, customerId, staffId: staff.user_id,
-        csId: isCS(i.member) ? i.user.id : '', item: f('item'), qty, unitPrice: price,
-        source: kind, operator: i.user.tag
+        csId: i.user.id, csName: i.user.tag, item, qty,
+        unitPrice: qty ? Math.round((list - discount) / qty) : list - discount,
+        listPrice: list, amount: list - discount,
+        source: 'ticket', operator: i.user.tag, payMethod: '雨幣扣款'
       });
     } catch (e) { return eph(i, err(i.guildId, e.message)); }
 
-    const body = money(i.guildId, `🧾 ${REPORT_LABEL[kind]}成立`, `訂單編號 \`${o.order_no}\``, [
-      { name: '老闆', value: mention(customerId), inline: true },
-      { name: '陪玩', value: `${staff.name || staff.code}`, inline: true },
-      { name: '項目', value: `${o.item} ×${o.qty}`, inline: true },
-      { name: '金額', value: `${n(o.amount)} 雨幣`, inline: true },
-      { name: '陪玩分潤', value: `${n(o.staff_share)}（暫存）`, inline: true },
-      { name: '狀態', value: '🕗 待核銷', inline: true }
-    ]);
-    await sendToChannel(i.guild, 'channel_order_log', { embeds: [body] });
-    return eph(i, body);
+    await i.channel.send(checkoutMessage(i.guildId, o));
+    return eph(i, ok(i.guildId, '結帳完成', `訂單編號 \`${o.order_no}\`，已扣款並通知老闆。`));
   }
 
   // ---- 下單傳票 ----

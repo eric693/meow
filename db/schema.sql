@@ -110,6 +110,9 @@ CREATE TABLE IF NOT EXISTS orders (
   source       TEXT NOT NULL DEFAULT 'self',-- self 自主報單 / cross 跨服1 / cross2 唱歌跨服 / ticket 派單 / import 匯入
   status       TEXT NOT NULL DEFAULT 'pending', -- pending 暫存中 / settled 已核銷 / refunded 已退單撤銷
   note         TEXT NOT NULL DEFAULT '',
+  pay_method   TEXT NOT NULL DEFAULT '雨幣扣款', -- 結帳時的支付方式（雨幣扣款／現金／免費體驗…）
+  reporter_id  TEXT NOT NULL DEFAULT '',    -- 回報此單的員工 Discord ID
+  reported_at  TEXT,                        -- 陪玩在員工群報單的時間
   created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
   settled_at   TEXT
 );

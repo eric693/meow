@@ -430,9 +430,37 @@ Pages.settings = async view => {
       <div class="grid c2">
         <label class="f"><span>下單頻道分類</span><select name="category_ticket">${opts(res.categories, v.category_ticket)}</select></label>
         <label class="f"><span>考場分類</span><select name="category_exam">${opts(res.categories, v.category_exam)}</select></label>
+        <label class="f"><span>報單頻道分類</span><select name="category_report">${opts(res.categories, v.category_report)}</select></label>
         <label class="f"><span>訂單通知頻道</span><select name="channel_order_log">${opts(res.channels, v.channel_order_log)}</select></label>
         <label class="f"><span>意見箱接收頻道</span><select name="channel_suggestion">${opts(res.channels, v.channel_suggestion)}</select></label>
         <label class="f"><span>員工輔導室後台頻道</span><select name="channel_staff_box">${opts(res.channels, v.channel_staff_box)}</select></label>
+        <label class="f"><span>已結單分類</span><select name="category_order_done">${opts(res.categories, v.category_order_done)}</select></label>
+        <label class="f"><span>公開單分類</span><select name="category_order_public">${opts(res.categories, v.category_order_public)}</select></label>
+      </div>
+      <h4 style="margin:14px 0 6px">播報</h4>
+      <div class="grid c2">
+        <label class="f"><span>VIP 升級播報</span><select name="channel_vip_announce">${opts(res.channels, v.channel_vip_announce)}</select></label>
+        <label class="f"><span>甜蜜贈禮播報</span><select name="channel_gift_announce">${opts(res.channels, v.channel_gift_announce)}</select></label>
+        <label class="f"><span>專屬冠名播報</span><select name="channel_title_announce">${opts(res.channels, v.channel_title_announce)}</select></label>
+      </div>
+      <h4 style="margin:14px 0 6px">後台</h4>
+      <div class="grid c2">
+        <label class="f"><span>更新日誌</span><select name="channel_update_log">${opts(res.channels, v.channel_update_log)}</select></label>
+        <label class="f"><span>Bug 回報</span><select name="channel_bug_report">${opts(res.channels, v.channel_bug_report)}</select></label>
+        <label class="f"><span>後台結帳／財務</span><select name="channel_finance">${opts(res.channels, v.channel_finance)}</select></label>
+        <label class="f"><span>匯出區（機密）</span><select name="channel_export">${opts(res.channels, v.channel_export)}</select></label>
+      </div>
+      <h4 style="margin:14px 0 6px">會員售後</h4>
+      <div class="grid c2">
+        <label class="f"><span>會員系統</span><select name="channel_member_system">${opts(res.channels, v.channel_member_system)}</select></label>
+        <label class="f"><span>通報紀錄</span><select name="channel_notice_log">${opts(res.channels, v.channel_notice_log)}</select></label>
+        <label class="f"><span>客服接待區</span><select name="channel_cs_lobby">${opts(res.channels, v.channel_cs_lobby)}</select></label>
+      </div>
+      <h4 style="margin:14px 0 6px">入口</h4>
+      <div class="grid c2">
+        <label class="f"><span>點我下單頻道</span><select name="channel_order_entry">${opts(res.channels, v.channel_order_entry)}</select></label>
+        <label class="f"><span>點我入職頻道</span><select name="channel_exam_entry">${opts(res.channels, v.channel_exam_entry)}</select></label>
+        <label class="f"><span>陪陪介紹／評價頻道</span><select name="channel_intro">${opts(res.channels, v.channel_intro)}</select></label>
       </div>
       ${res.roles.length ? '' : '<div class="muted">機器人目前離線或尚未加入伺服器，因此無法列出身分組與頻道。</div>'}
     </div>

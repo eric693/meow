@@ -287,6 +287,7 @@ const LEDGER_COLUMNS = [
   { key: 'staff_name',    label: '陪玩名稱', width: 16 },
   { key: 'list_price',    label: '訂單原價', width: 11, num: true },
   { key: 'amount',        label: '實收金額', width: 11, num: true },
+  { key: 'pay_method',    label: '支付方式', width: 12 },
   { key: 'staff_share',   label: '陪玩抽成', width: 11, num: true },
   { key: 'net',           label: '伺服器淨利', width: 12, num: true },
   { key: 'status',        label: '狀態',     width: 12, map: v => STATUS[v] || v },
