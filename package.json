@@ -1,0 +1,22 @@
+{
+  "name": "meow",
+  "version": "1.0.0",
+  "description": "喚雨機器喵 — Discord 陪玩接單管理機器人 + 網頁後台",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node scripts/seed.js",
+    "register": "node scripts/register-commands.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.10.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "pdfkit": "^0.19.1"
+  }
+}

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>喚雨 玩家手冊</title>
+<meta name="theme-color" content="#9b6dd6">
+<meta name="description" content="喚雨陪玩伺服器玩家手冊：下單流程、雨幣、VIP 等級、親密度、地盤、指令一次看懂。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☔</text></svg>">
+<style>
+:root{
+  --bg:#f7f4fc; --panel:#fff; --panel-2:#faf7ff; --line:#e7e0f3;
+  --text:#2b2440; --muted:#7b7292; --brand:#8b5cd6; --brand-2:#c9a7eb; --soft:#f1e9fd;
+  --ok:#2ea36a; --warn:#c8880f; --err:#d94a4a; --radius:16px;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#15121d;--panel:#1e1a29;--panel-2:#251f34;--line:#332b46;--text:#ece8f5;
+        --muted:#9d94b5;--brand:#b389ea;--brand-2:#8e63c9;--soft:#2a2240;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:16px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--brand)}
+.hero{background:linear-gradient(160deg,var(--soft),var(--bg));padding:56px 20px 40px;text-align:center;
+  border-bottom:1px solid var(--line)}
+.hero h1{margin:0 0 8px;font-size:clamp(28px,6vw,44px);letter-spacing:1px}
+.hero p{margin:0;color:var(--muted)}
+.wrap{max-width:900px;margin:0 auto;padding:0 18px 80px}
+nav.toc{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);
+  padding:10px 0;margin-bottom:26px;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
+nav.toc a{display:inline-block;padding:6px 13px;margin-right:6px;border-radius:99px;font-size:14px;
+  text-decoration:none;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+nav.toc a:hover{background:var(--soft);color:var(--brand);border-color:var(--brand-2)}
+section{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:24px 22px;margin:0 0 20px;scroll-margin-top:66px}
+section h2{margin:0 0 14px;font-size:21px;display:flex;align-items:center;gap:9px}
+section h3{margin:20px 0 8px;font-size:16px;color:var(--brand)}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 12px;padding-left:22px}
+li{margin:5px 0}
+code{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:1px 7px;
+  font-size:.9em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}
+.steps{counter-reset:s;list-style:none;padding:0}
+.steps li{counter-increment:s;position:relative;padding:12px 12px 12px 52px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
+.steps li::before{content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;
+  border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:14.5px;min-width:420px}
+th,td{padding:9px 11px;border-bottom:1px solid var(--line);text-align:left}
+th{background:var(--panel-2);color:var(--muted);font-size:13px;font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.note{border-left:4px solid var(--brand);background:var(--soft);padding:12px 15px;border-radius:0 10px 10px 0;margin:12px 0}
+.warn{border-left-color:var(--err);background:rgba(217,74,74,.09)}
+.tip{border-left-color:var(--ok);background:rgba(46,163,106,.09)}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12.5px;font-weight:600;
+  background:var(--soft);color:var(--brand);margin-right:4px}
+footer{text-align:center;color:var(--muted);font-size:13.5px;padding:30px 20px 60px}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>☔ 喚雨 玩家手冊</h1>
+  <p>從第一次下單到成為天瀾金主，你需要知道的全部規則</p>
+</div>
+
+<div class="wrap">
+<nav class="toc">
+  <a href="#start">新手上路</a><a href="#coin">雨幣</a><a href="#order">下單流程</a>
+  <a href="#vip">VIP 等級</a><a href="#gift">送禮與親密度</a><a href="#pack">背包與地盤</a>
+  <a href="#cmd">常用指令</a><a href="#staff">想當陪玩</a><a href="#rule">站規</a>
+</nav>
+
+<section id="start">
+  <h2>🌱 新手上路</h2>
+  <ol class="steps">
+    <li><b>領身分組</b>：到身分組頻道點「我是老闆」，才看得到下單區與金主專區。想收開單通知就順手點「雨滴通知」。</li>
+    <li><b>儲值雨幣</b>：私訊客服完成儲值，雨幣會直接進你的「地下金庫」。隨時可用 <code>!消費查詢</code> 查餘額。</li>
+    <li><b>挑陪玩</b>：到陪玩名片區逛逛，每位陪玩都有專屬<b>代號</b>與影音名片，記下你喜歡的那位。</li>
+    <li><b>開單</b>：到「開始下單」面板點按鈕，系統會開一間只有你和客服看得到的專屬頻道。</li>
+    <li><b>開心玩</b>：服務結束後客服會核銷訂單，陪玩才會實際入帳。</li>
+  </ol>
+  <div class="note tip">看不到某些頻道？九成是身分組沒領，回第 1 步點一下就好。</div>
+</section>
+
+<section id="coin">
+  <h2>🪙 雨幣與地下金庫</h2>
+  <p><b>雨幣</b>是站內唯一的消費單位，所有下單、送禮都從雨幣餘額扣款。你的餘額存在「地下金庫」裡。</p>
+  <ul>
+    <li>查餘額：<code>!消費查詢</code>，或點「地下金庫」面板的查詢按鈕（只有你自己看得到）。</li>
+    <li>儲值：私訊客服，客服入帳後餘額立即更新。</li>
+    <li>雨幣不足時無法下單，系統會直接告訴你還差多少。</li>
+    <li>每一筆進出都有流水紀錄，帳目可查、不會消失。</li>
+  </ul>
+  <div class="note warn">雨幣僅供站內使用，恕不接受折現。請勿私下與陪玩交易，出事一律不受保障。</div>
+</section>
+
+<section id="order">
+  <h2>🧾 下單與核銷</h2>
+  <h3>一筆訂單會經過三個狀態</h3>
+  <div class="tablewrap"><table>
+    <tr><th>狀態</th><th>意思</th></tr>
+    <tr><td><span class="badge">暫存中</span></td><td>單子成立、你的雨幣已扣款，陪玩的錢先放在「暫存薪水」。</td></tr>
+    <tr><td><span class="badge">已核銷</span></td><td>服務完成，客服核銷後陪玩的錢才轉成「可提領」。</td></tr>
+    <tr><td><span class="badge">已退單／撤銷</span></td><td>訂單取消，雨幣全額退回你的金庫，陪玩抽成同步扣回。</td></tr>
+  </table></div>
+  <h3>下單時請提供</h3>
+  <ul>
+    <li>想指定的陪玩<b>代號</b>（或藝名）</li>
+    <li>服務項目（遊戲／唱歌／聊天…）與時數、局數</li>
+    <li>希望開始的時間</li>
+  </ul>
+  <div class="note warn">退單請在<b>服務開始前</b>提出。服務已開始或已完成恕不退費；惡意退單將列入黑名單。</div>
+</section>
+
+<section id="vip">
+  <h2>👑 VIP 等級</h2>
+  <p>VIP 依<b>歷史累計消費</b>自動升級，升上去就不會掉。等級越高，享有的專屬身分組、優先排單與活動資格越多。</p>
+  <div class="tablewrap"><table>
+    <tr><th>等級</th><th class="num">累計消費門檻</th></tr>
+    <tr><td>一般金主（未達 VIP）</td><td class="num">—</td></tr>
+    <tr><td>VIP 1</td><td class="num">1,000</td></tr>
+    <tr><td>VIP 2</td><td class="num">5,000</td></tr>
+    <tr><td>VIP 3</td><td class="num">20,000</td></tr>
+    <tr><td>VIP 4</td><td class="num">50,000</td></tr>
+    <tr><td>VIP 5</td><td class="num">100,000</td></tr>
+    <tr><td>VIP 6 玄霖</td><td class="num">300,000</td></tr>
+    <tr><td>SSVIP 天瀾</td><td class="num">1,000,000</td></tr>
+  </table></div>
+  <div class="note">門檻與名稱可由管理層調整，實際以站內公告為準。查自己的等級：<code>!消費查詢</code>。</div>
+</section>
+
+<section id="gift">
+  <h2>💞 送禮與愛戀藏館</h2>
+  <p>送禮除了讓陪玩開心，還會累積你與對方的<b>羈絆點數</b>——而且送禮的親密度一律<b>雙倍計算</b>。</p>
+  <h3>羈絆階級</h3>
+  <div class="tablewrap"><table>
+    <tr><th>階級</th><th class="num">所需羈絆點數</th></tr>
+    <tr><td>萍水相逢</td><td class="num">0</td></tr>
+    <tr><td>點頭之交</td><td class="num">500</td></tr>
+    <tr><td>暖心夥伴</td><td class="num">2,000</td></tr>
+    <tr><td>心動訊號</td><td class="num">6,000</td></tr>
+    <tr><td>甜蜜戀人</td><td class="num">15,000</td></tr>
+    <tr><td>生死相許</td><td class="num">40,000</td></tr>
+    <tr><td>此生唯一</td><td class="num">100,000</td></tr>
+  </table></div>
+  <ul>
+    <li>查羈絆：<code>/愛戀查詢 [陪玩]</code>，或點「愛戀藏館」面板。</li>
+    <li>禮物款式從小貓粽到銀河共 15 種以上，價格與加成都寫在面板上。</li>
+    <li>羈絆是「你 × 某位陪玩」一對一計算的，不會互相影響。</li>
+  </ul>
+  <div class="note warn">親密度若被管理員歸零，該組 CP 的歷史送禮紀錄會同步清除，無法復原。</div>
+</section>
+
+<section id="pack">
+  <h2>🎒 背包與地盤</h2>
+  <h3>背包</h3>
+  <p>活動獎勵、折價券都會放進你的專屬背包。用 <code>/背包查詢</code> 查看數量、面額與到期日。</p>
+  <h3>地盤</h3>
+  <p>地盤是一條 <b>21 格</b>的進度條，參加活動就能推進步數。<b>走超過 21 格會自動歸 0 並完成一圈</b>，完成整圈可向管理層領取該輪獎勵。</p>
+</section>
+
+<section id="cmd">
+  <h2>⌨️ 玩家常用指令</h2>
+  <div class="tablewrap"><table>
+    <tr><th>指令</th><th>用途</th></tr>
+    <tr><td><code>!消費查詢</code></td><td>查自己的本月消費、歷史累計、雨幣餘額與 VIP 等級</td></tr>
+    <tr><td><code>!查點單 @你</code></td><td>列出歷史點單明細</td></tr>
+    <tr><td><code>!消費榜</code></td><td>看全服 VIP 總榜與本月消費大戶</td></tr>
+    <tr><td><code>!全服雨幣</code></td><td>看全服流通的雨幣總額</td></tr>
+    <tr><td><code>/愛戀查詢 [陪玩]</code></td><td>查你與某位陪玩的羈絆點數與階級</td></tr>
+    <tr><td><code>/背包查詢</code></td><td>查背包道具與折價券</td></tr>
+    <tr><td><code>!指令</code></td><td>在 Discord 內顯示完整指令總覽</td></tr>
+  </table></div>
+  <div class="note tip">查詢類指令都可以直接打，不需要任何權限；查別人的資料則限客服與管理員。</div>
+</section>
+
+<section id="staff">
+  <h2>🎤 想加入我們當陪玩？</h2>
+  <ol class="steps">
+    <li>到考核頻道點「開始考核」，填寫報名表（藝名、年齡、擅長項目、可上線時段）。</li>
+    <li>系統會自動幫你開一間專屬考場，管理層會在裡面與你聯繫、進行測試。</li>
+    <li>通過後由管理員用 <code>/入職</code> 建檔，綁定你的代號與影音名片，就可以開始接單了。</li>
+  </ol>
+  <h3>陪玩薪資怎麼算</h3>
+  <ul>
+    <li>接單成立 → 抽成先進「<b>暫存薪水</b>」。</li>
+    <li>客服核銷 → 轉入「<b>可提領</b>」。</li>
+    <li>用 <code>!薪資查詢</code> 隨時看兩筆數字；<code>!提領 金額</code> 送出提領申請，管理員審核後撥款。</li>
+  </ul>
+</section>
+
+<section id="rule">
+  <h2>📜 站規</h2>
+  <ol>
+    <li><b>尊重彼此</b>：禁止辱罵、性騷擾、人身攻擊與任何形式的歧視。</li>
+    <li><b>禁止私下交易</b>：所有金錢往來一律走站內雨幣，私下交易出問題概不受理，並列入黑名單。</li>
+    <li><b>禁止挖角與拉人</b>：不得在站內招攬陪玩或客人到其他伺服器。</li>
+    <li><b>保護隱私</b>：未經同意不得外流任何聊天內容、語音、照片或個人資料。</li>
+    <li><b>誠實下單</b>：惡意退單、洗單、鑽漏洞刷取獎勵者，沒收餘額並永久停權。</li>
+    <li><b>有事說事</b>：任何糾紛請走「意見投訴與建議箱」，管理層會保密處理。</li>
+  </ol>
+  <div class="note warn">違規處置由管理層依情節輕重決定，最重可永久停權且不退還餘額。本手冊內容如有調整，以站內最新公告為準。</div>
+</section>
+
+<footer>
+  ☔ 喚雨 · 玩家手冊　|　有任何問題歡迎私訊客服，或到意見箱留言 💜
+</footer>
+</div>
+
+</body>
+</html>
