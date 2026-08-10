@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Partials, REST, Routes, Events } = require('d
 const { db, upsertGuild, activeGuildIds, getSetting, orgOf } = require('../db');
 const { commands } = require('./commands');
 const { err } = require('../util/embed');
+const { logAction, slashArgs, modalArgs } = require('../util/log');
 const G = require('../util/gifts');
 
 const PREFIX = process.env.CMD_PREFIX || '!';
@@ -63,19 +64,28 @@ async function start() {
 
   // ---- Slash / 元件互動 ----
   client.on(Events.InteractionCreate, async i => {
+    if (!i.guildId || i.isAutocomplete?.()) {
+      if (i.isAutocomplete?.()) return require('./slash').autocomplete(i).catch(() => {});
+      return;
+    }
+    // 每一次互動都留紀錄：斜線指令記指令名與參數，按鈕／表單記 customId
+    const isCmd = i.isChatInputCommand();
+    const source = isCmd ? 'slash' : i.isButton() ? 'button' : i.isModalSubmit() ? 'modal' : 'select';
+    const action = isCmd ? `/${i.commandName}` : (i.customId || '未知互動');
+    const detail = isCmd ? slashArgs(i) : i.isModalSubmit() ? modalArgs(i) : '';
+    const base = { guildId: i.guildId, source, action, user: i.user, channelId: i.channelId };
     try {
-      if (!i.guildId) return;
-      if (i.isAutocomplete()) return require('./slash').autocomplete(i);
-      if (i.isChatInputCommand()) {
+      if (isCmd) {
         const h = require('./slash').handlers[i.commandName];
         if (!h) return;
-        return await h(i);
-      }
-      if (i.isButton() || i.isModalSubmit() || i.isStringSelectMenu()) {
-        return await require('./panels').handleInteraction(i);
-      }
+        await h(i);
+      } else if (i.isButton() || i.isModalSubmit() || i.isStringSelectMenu()) {
+        await require('./panels').handleInteraction(i);
+      } else return;
+      logAction({ ...base, detail, status: i._denied ? 'deny' : 'ok' });
     } catch (e) {
       console.error('互動錯誤：', e);
+      logAction({ ...base, detail: `${detail}${detail ? ' | ' : ''}錯誤：${e.message}`, status: 'fail' });
       const payload = { embeds: [err(i.guildId, e.message || '發生未知錯誤')], ephemeral: true };
       if (i.deferred || i.replied) await i.followUp(payload).catch(() => {});
       else await i.reply(payload).catch(() => {});
@@ -90,10 +100,16 @@ async function start() {
     const args = body.slice(name.length).trim();
     const h = require('./prefix').handlers[name];
     if (!h) return;
+    const base = { guildId: msg.guild.id, source: 'prefix', action: `${PREFIX}${name}`,
+                   user: msg.author, channelId: msg.channelId };
     try {
       await h(msg, args);
+      logAction({ ...base, detail: args, status: 'ok' });
     } catch (e) {
       console.error(`指令 ${name} 失敗：`, e.message);
+      // 權限相關的錯誤另外標記，方便後台過濾誰在踩紅線
+      const denied = /權限|僅限|只有/.test(e.message || '');
+      logAction({ ...base, detail: `${args}${args ? ' | ' : ''}${e.message}`, status: denied ? 'deny' : 'fail' });
       await msg.reply({ embeds: [err(msg.guild.id, e.message || '指令執行失敗')] }).catch(() => {});
     }
   });

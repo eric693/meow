@@ -150,6 +150,8 @@ const commands = {
 
 // ---------------- 互動處理 ----------------
 const eph = (i, e) => i.reply({ embeds: [e], ephemeral: true });
+// 面板的權限阻擋同樣標記起來，讓 index.js 記成 deny
+const denyEph = (i, message) => { i._denied = true; return eph(i, err(i.guildId, message)); };
 
 async function sendToChannel(guild, settingKey, payload) {
   const id = getSetting(settingKey, '', guild.id);
@@ -259,7 +261,7 @@ async function handleInteraction(i) {
 
   // 自主報單：先問名稱 → 建立個人報單頻道 → 在頻道內填寫明細
   if (id === 'report:self') {
-    if (!canReport()) return eph(i, err(i.guildId, '只有在職員工可以報單。'));
+    if (!canReport()) return denyEph(i, '只有在職員工可以報單。');
     return i.showModal(new ModalBuilder().setCustomId('reportch').setTitle('自主報單系統')
       .addComponents(input('name', '你的名稱', { ph: '例：羊毛毛' })));
   }
@@ -280,7 +282,7 @@ async function handleInteraction(i) {
   // 跨服報單／頻道內的填寫按鈕，都直接開表單
   if (id.startsWith('report:') || id.startsWith('reportform:')) {
     const kind = id.split(':')[1];
-    if (!canReport()) return eph(i, err(i.guildId, '只有在職員工可以報單。'));
+    if (!canReport()) return denyEph(i, '只有在職員工可以報單。');
     return i.showModal(reportModal(kind));
   }
   if (id.startsWith('reportm:')) {
@@ -337,7 +339,7 @@ async function handleInteraction(i) {
 
   // ---- 客服結帳 ----
   if (id === 'checkout:start') {
-    if (!isCS(i.member)) return eph(i, err(i.guildId, '只有客服／管理員可以結帳。'));
+    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以結帳。');
     return i.showModal(new ModalBuilder().setCustomId('checkoutm').setTitle('本次結帳明細')
       .addComponents(
         input('customer', '老闆 id', { ph: '例：123456789012345678' }),
@@ -403,7 +405,7 @@ async function handleInteraction(i) {
   }
 
   if (id.startsWith('ticket:claim:')) {
-    if (!isCS(i.member)) return eph(i, err(i.guildId, '只有客服可以接單。'));
+    if (!isCS(i.member)) return denyEph(i, '只有客服可以接單。');
     const tid = Number(id.split(':')[2]);
     const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
     if (!t) return eph(i, err(i.guildId, '查無此傳票。'));
@@ -418,7 +420,7 @@ async function handleInteraction(i) {
     const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
     if (!t) return eph(i, err(i.guildId, '查無此傳票。'));
     if (t.customer_id !== i.user.id && !isCS(i.member))
-      return eph(i, err(i.guildId, '只有開單者或客服可以關閉。'));
+      return denyEph(i, '只有開單者或客服可以關閉。');
     db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
     await i.reply({ embeds: [ok(i.guildId, '頻道將於 5 秒後關閉', '感謝你的支持 💜')] });
     setTimeout(() => i.channel.delete().catch(() => {}), 5000);

@@ -9,7 +9,11 @@ const R = require('../util/reports');
 const { isAdmin, isCS } = require('./perm');
 const { helpEmbed } = require('../util/help');
 
-const deny = i => i.reply({ embeds: [err(i.guildId, '你沒有使用這個指令的權限。')], ephemeral: true });
+// 標記起來，讓 index.js 把這次互動記成 deny 而不是成功
+const deny = i => {
+  i._denied = true;
+  return i.reply({ embeds: [err(i.guildId, '你沒有使用這個指令的權限。')], ephemeral: true });
+};
 
 // 「陪玩」參數可填代號／藝名／@提及
 function resolveStaff(i, key = '陪玩') {

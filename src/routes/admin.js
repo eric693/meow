@@ -52,7 +52,8 @@ const GUILD_KEYS = [
   // 會員售後類
   'channel_member_system', 'channel_notice_log', 'channel_cs_lobby',
   // 入口類
-  'channel_order_entry', 'channel_exam_entry', 'channel_intro'
+  'channel_order_entry', 'channel_exam_entry', 'channel_intro',
+  'channel_command_log'
 ];
 const SETTING_KEYS = [...ORG_KEYS, ...GUILD_KEYS];
 
@@ -101,6 +102,26 @@ router.put('/org', guardModule('settings'), (req, res) => {
   const moved = migrate && before !== after ? migrateOrgData(before, after) : 0;
   audit(req.user.name, '集團綁定', `${guild_id} → ${after}（搬移 ${moved} 筆）`, after);
   res.json({ ok: true, org_id: after, moved });
+});
+
+// ---------------- 操作紀錄 ----------------
+router.get('/logs', guardModule('settings'), (req, res) => {
+  const q = req.query;
+  const cond = ["guild_id IN (?, '')"], args = [req.orgId];
+  if (q.source) { cond.push('source = ?'); args.push(q.source); }
+  if (q.status) { cond.push('status = ?'); args.push(q.status); }
+  if (q.actor)  { cond.push('(actor_id = ? OR actor LIKE ?)'); args.push(q.actor, `%${q.actor}%`); }
+  if (q.from)   { cond.push('date(created_at) >= date(?)'); args.push(q.from); }
+  if (q.to)     { cond.push('date(created_at) <= date(?)'); args.push(q.to); }
+  if (q.q)      { cond.push('(action LIKE ? OR detail LIKE ?)'); args.push(`%${q.q}%`, `%${q.q}%`); }
+  const where = cond.join(' AND ');
+  const limit = Math.min(500, Math.max(1, Number(q.limit) || 100));
+  const offset = Math.max(0, Number(q.offset) || 0);
+  res.json({
+    total: db.prepare(`SELECT COUNT(*) c FROM audit_logs WHERE ${where}`).get(...args).c,
+    rows: db.prepare(`SELECT * FROM audit_logs WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
+      .all(...args, limit, offset)
+  });
 });
 
 // ---------------- Discord 資源 ----------------

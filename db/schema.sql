@@ -49,11 +49,16 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   guild_id   TEXT NOT NULL DEFAULT '',
   actor      TEXT NOT NULL DEFAULT '',
+  actor_id   TEXT NOT NULL DEFAULT '',        -- Discord ID（後台操作為空）
   action     TEXT NOT NULL,
   detail     TEXT NOT NULL DEFAULT '',
+  source     TEXT NOT NULL DEFAULT 'system',   -- prefix / slash / button / modal / web / system
+  channel_id TEXT NOT NULL DEFAULT '',
+  status     TEXT NOT NULL DEFAULT 'ok',       -- ok 成功 / fail 失敗 / deny 權限不足
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs (guild_id, actor_id, created_at DESC);
 
 -- ---------- 人事：陪玩師 / 客服 ----------
 CREATE TABLE IF NOT EXISTS staff (

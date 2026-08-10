@@ -31,6 +31,12 @@ ensureColumns('orders', [
   ['reported_at',   'TEXT'],
   ['intimacy',      'INTEGER NOT NULL DEFAULT 0']
 ]);
+ensureColumns('audit_logs', [
+  ['actor_id',   "TEXT NOT NULL DEFAULT ''"],
+  ['source',     "TEXT NOT NULL DEFAULT 'system'"],
+  ['channel_id', "TEXT NOT NULL DEFAULT ''"],
+  ['status',     "TEXT NOT NULL DEFAULT 'ok'"]
+]);
 ensureColumns('gift_logs', [['order_no', "TEXT NOT NULL DEFAULT ''"]]);
 ensureColumns('tickets', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);
 ensureColumns('exams', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);
@@ -108,10 +114,14 @@ function getNum(key, def, guildId = '') {
   return v === '' || Number.isNaN(n) ? def : n;
 }
 
-function audit(actor, action, detail = '', guildId = '') {
+// 通用稽核紀錄。opts 供 Discord 端補上操作者 ID、來源、頻道與成敗狀態。
+function audit(actor, action, detail = '', guildId = '',
+               { actorId = '', source = 'system', channelId = '', status = 'ok' } = {}) {
   guildId = orgOf(guildId);
-  db.prepare('INSERT INTO audit_logs (guild_id, actor, action, detail) VALUES (?, ?, ?, ?)')
-    .run(guildId, String(actor || ''), action, String(detail || ''));
+  db.prepare(`INSERT INTO audit_logs (guild_id, actor, actor_id, action, detail, source, channel_id, status)
+              VALUES (?,?,?,?,?,?,?,?)`)
+    .run(guildId, String(actor || ''), String(actorId || ''), action,
+         String(detail || '').slice(0, 500), source, String(channelId || ''), status);
 }
 
 function activeGuildIds() {
