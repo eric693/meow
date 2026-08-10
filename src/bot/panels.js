@@ -11,6 +11,7 @@ const { checkoutMessage } = require('../util/checkout');
 const { parseSlots } = require('../util/slots');
 const S = require('../util/session');
 const CF = require('../util/checkout-flow');
+const GF = require('../util/gift-flow');
 const { isAdmin, isCS } = require('./perm');
 
 const btn = (id, label, style = ButtonStyle.Primary, emoji) => {
@@ -571,6 +572,20 @@ async function handleInteraction(i) {
     return eph(i, ok(i.guildId, '結帳完成', `訂單編號 \`${o.order_no}\`，已扣款並通知老闆。`));
   }
 
+  // ---- 互動式送禮（預覽 → 付款方式）----
+  if (id.startsWith('gf:')) {
+    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以送禮。');
+    const [, act, sid, pay] = id.split(':');
+    if (act === 'cancel') { S.drop(sid); return i.update({ content: '已取消送禮，沒有扣款。', embeds: [], components: [] }); }
+    if (act === 'pay') {
+      let r;
+      try { r = GF.finish(sid, pay); }
+      catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
+      await i.update({ content: r.detail, embeds: [], components: [] });
+      return i.channel.send(r.message);
+    }
+  }
+
   // ---- 互動式結帳（選券 → 預覽 → 付款方式）----
   if (id.startsWith('co:')) {
     if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以結帳。');
@@ -607,6 +622,7 @@ async function handleInteraction(i) {
         embeds: [r.detail], components: []
       });
       await i.channel.send(r.message);
+      await backupToFinance(i, r);
       return archiveTicketChannel(i, r.order);
     }
   }

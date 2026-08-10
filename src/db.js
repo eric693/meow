@@ -223,10 +223,10 @@ function findStaff(guildId, keyword) {
 
 // ---------- 訂單編號 ----------
 // 格式 ORD-12345678（8 碼隨機，避免外人從編號推算單量）
-function nextOrderNo() {
+function nextOrderNo(prefix = 'ORD') {
   const exists = db.prepare('SELECT 1 FROM orders WHERE order_no = ?');
   for (let i = 0; i < 50; i++) {
-    const no = `ORD-${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+    const no = `${prefix}-${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
     if (!exists.get(no)) return no;
   }
   throw new Error('訂單編號產生失敗，請稍後再試');

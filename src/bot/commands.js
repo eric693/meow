@@ -80,11 +80,11 @@ const commands = [
     .addUserOption(o => o.setName('客人').setDescription('老闆').setRequired(true))
     .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true)),
 
-  b('陪玩業績詳報', '查詢特定陪玩師的金主分布結構與總業績（Top 10）')
+  b('陪玩業績詳報', '【管理專屬】查詢某位陪玩師的金主分布與總業績')
     .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true)),
 
   // ---- 互動與福利 ----
-  b('送禮', '發送禮物，自動扣款並計算雙倍親密度')
+  b('送禮', '發送禮物，選擇付款方式並計算親密度')
     .addUserOption(o => o.setName('送禮人').setDescription('付款的老闆').setRequired(true))
     .addStringOption(o => o.setName('對象').setDescription('收禮的陪玩').setRequired(true))
     .addStringOption(o => o.setName('禮物款式').setDescription('禮物名稱或代號').setRequired(true).setAutocomplete(true))

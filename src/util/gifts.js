@@ -76,33 +76,35 @@ function rankOf(points) {
 
 /** 送禮：扣款、寫紀錄、親密度 ×2 */
 function sendGift({ guildId, customerId, customerName = '', staffId, giftKey, qty = 1,
-                    csId = '', csName = '', note = '', operator = '' }) {
+                    csId = '', csName = '', note = '', operator = '',
+                    discount = 0, payMethod = '雨幣扣款', skipWallet = false }) {
   guildId = orgOf(guildId);
   const staff = getStaff(guildId, staffId);
   if (!staff || !staff.active) throw new Error('查無此陪玩（或已離職）');
   const g = findGift(guildId, giftKey);
   if (!g) throw new Error(`查無禮物款式「${giftKey}」`);
   const n = Math.max(1, Math.round(Number(qty) || 1));
-  const amount = g.price * n;
-  const gain = g.intimacy * n * 2;   // 雙倍親密度
+  const list = g.price * n;
+  const amount = Math.max(0, list - Math.round(discount));
+  // 親密度依實付金額計算，與結帳同一套成數（預設 1 元 = 1 點）
+  const gain = Math.round(amount * require('./money').intimacyRate(guildId) / 100);
 
   // 送禮同樣是一筆營收，寫進 orders 流水帳（交易類型＝贈送禮物），才會進財務報表與匯出檔
   const order = require('./money').createOrder({
     guildId, customerId, customerName, staffId, staffName: staff.name || staff.code,
     csId, csName, kind: 'gift', item: `${g.emoji} ${g.name}`, qty: n, unitPrice: g.price,
-    amount, source: 'gift', operator, note: note || `送禮 ${g.name}×${n}`
+    listPrice: list, amount, source: 'gift', operator, orderPrefix: 'GFT',
+    payMethod, skipWallet, intimacy: gain, note: note || `送禮 ${g.name}×${n}`
   });
 
-  let points;
-  db.transaction(() => {
-    db.prepare(`INSERT INTO gift_logs (guild_id, order_no, customer_id, staff_id, gift_key, gift_name, qty, amount, intimacy)
-                VALUES (?,?,?,?,?,?,?,?,?)`)
-      .run(guildId, order.order_no, customerId, staffId, g.key, g.name, n, amount, gain);
-    points = addIntimacy(guildId, customerId, staffId, gain);
-  })();
+  // createOrder 已經依 intimacy 參數加過羈絆，這裡只補送禮紀錄
+  db.prepare(`INSERT INTO gift_logs (guild_id, order_no, customer_id, staff_id, gift_key, gift_name, qty, amount, intimacy)
+              VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(guildId, order.order_no, customerId, staffId, g.key, g.name, n, amount, gain);
+  const points = getIntimacy(guildId, customerId, staffId);
 
   audit(operator || customerId, '送禮', `${g.name}×${n} = ${amount}`, guildId);
-  return { gift: g, qty: n, amount, gain, points, rank: rankOf(points), order };
+  return { gift: g, qty: n, list, amount, discount: list - amount, gain, points, rank: rankOf(points), order };
 }
 
 // ---------- 背包 ----------

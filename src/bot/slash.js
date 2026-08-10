@@ -4,6 +4,7 @@ const M = require('../util/money');
 const { checkoutMessage, refundNotice } = require('../util/checkout');
 const { parseSlots } = require('../util/slots');
 const CF = require('../util/checkout-flow');
+const GF = require('../util/gift-flow');
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const G = require('../util/gifts');
 const R = require('../util/reports');
@@ -239,11 +240,13 @@ const handlers = {
     const staff = resolveStaff(i);
     const p = R.pairSpend(i.guildId, cust.id, staff.user_id);
     await i.reply({
-      embeds: [money(i.guildId, '📒 對帳單', `${mention(cust.id)} ➜ **${staff.name || staff.code}**`, [
-        { name: '點單消費', value: `${n(p.order_amount)} 雨幣 / ${p.order_count} 筆`, inline: true },
-        { name: '禮物消費', value: `${n(p.gift_amount)} 雨幣 / ${p.gift_count} 份`, inline: true },
-        { name: '合計', value: `**${n(p.total)}** 雨幣`, inline: false }
-      ])]
+      embeds: [emb(i.guildId, {
+        title: '🔍 專屬對帳紀錄',
+        color: COLOR.main,
+        desc: `老闆 ${mention(cust.id)} 在 ${mention(staff.user_id)} 身上總共點了 **${p.order_count + p.gift_count}** 次單！\n\n`
+            + `💸 **總累計消費 (實付)：** \`${n(p.total)}\` 元`
+      })],
+      ephemeral: true
     });
   },
 
@@ -252,41 +255,29 @@ const handlers = {
     const staff = resolveStaff(i);
     const d = R.staffDetail(i.guildId, staff.user_id, 10);
     const list = d.patrons.length
-      ? d.patrons.map((p, idx) => `\`${String(idx + 1).padStart(2)}\` ${mention(p.customer_id)} — **${n(p.amount)}**（${p.cnt} 次）`).join('\n')
+      ? d.patrons.map((p, idx) => `第 ${idx + 1} 名：${mention(p.customer_id)} ➜ \`${n(p.amount)}\` 元`).join('\n')
       : '目前還沒有金主紀錄。';
     await i.reply({
-      embeds: [money(i.guildId, `📊 ${staff.name || staff.code} 業績詳報`, list, [
-        { name: '本月業績', value: `${n(d.month)}（${d.month_count} 單）`, inline: true },
-        { name: '歷史總業績', value: `${n(d.total)}（${d.total_count} 單）`, inline: true },
-        { name: '禮物收入', value: n(d.gifts), inline: true },
-        { name: '可提領', value: n(staff.income), inline: true },
-        { name: '暫存薪水', value: n(staff.pending_income), inline: true }
-      ])]
+      embeds: [money(i.guildId, `📊 ${staff.name || staff.code} 的金主戰報 (Top 10)`, list)],
+      ephemeral: true
     });
   },
 
-  // ---------- 互動與福利 ----------
   async 送禮(i) {
     if (!isCS(i.member)) return deny(i);
     const from = i.options.getUser('送禮人');
     const staff = resolveStaff(i, '對象');
-    const r = G.sendGift({
+    const key = i.options.getString('禮物款式');
+    const gift = G.findGift(i.guildId, key);
+    if (!gift) return i.reply({ embeds: [err(i.guildId, `查無禮物款式「${key}」`)], ephemeral: true });
+    const qty = Math.max(1, i.options.getInteger('數量') || 1);
+    const { payload } = GF.start({
       guildId: i.guildId, customerId: from.id, customerName: from.username,
-      staffId: staff.user_id, giftKey: i.options.getString('禮物款式'),
-      qty: i.options.getInteger('數量') || 1, operator: i.user.tag
+      staffId: staff.user_id, staffName: staff.name || staff.code,
+      csId: i.user.id, csName: i.user.tag,
+      giftKey: gift.key, qty, list: gift.price * qty
     });
-    await i.reply({
-      embeds: [emb(i.guildId, {
-        title: `${r.gift.emoji} 送禮成功！`,
-        desc: `${mention(from.id)} 送給 **${staff.name || staff.code}** ${r.gift.name} ×${r.qty}`,
-        color: COLOR.main,
-        fields: [
-          { name: '花費', value: `${n(r.amount)} 雨幣`, inline: true },
-          { name: '親密度', value: `+${n(r.gain)}（雙倍）`, inline: true },
-          { name: '目前羈絆', value: `${n(r.points)}・${r.rank.name}`, inline: true }
-        ]
-      })]
-    });
+    await i.reply({ ...payload, ephemeral: true });
   },
 
   async 愛戀查詢(i) {

@@ -32,7 +32,7 @@ function createOrder({
   kind = 'order', item = '', qty = 1, unitPrice = 0, listPrice = null, amount = null,
   staffShare = null, source = 'self', note = '', operator = '', orderNo = null, createdAt = null,
   status = 'pending', skipWallet = false, payMethod = '雨幣扣款',
-  intimacy = null, allowNoStaff = false, allowZero = false
+  intimacy = null, allowNoStaff = false, allowZero = false, orderPrefix = 'ORD'
 }) {
   guildId = orgOf(guildId);
   // 伺服器冠名、財務調整這類收入沒有對應陪玩，staffId 允許留空
@@ -53,7 +53,7 @@ function createOrder({
   const bond = Math.round(intimacy == null
     ? (staffId && customerId && (kind === 'order' || kind === 'role') ? paid * intimacyRate(guildId) / 100 : 0)
     : Number(intimacy));
-  const no = orderNo || nextOrderNo();
+  const no = orderNo || nextOrderNo(orderPrefix);
 
   db.transaction(() => {
     // 匯入歷史資料時不動錢包（skipWallet），避免把過去的帳重算一次

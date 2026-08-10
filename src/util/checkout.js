@@ -117,4 +117,41 @@ function refundNotice(guildId, o, { reason = '', refundCoins = true, operator = 
   });
 }
 
-module.exports = { checkoutMessage, checkoutDetail, refundNotice };
+/** 送禮完成後發在頻道的明細 */
+function giftMessage(guildId, r) {
+  const o = r.order;
+  const content = [
+    `${mention(o.customer_id)} 老闆您好！`,
+    `您已成功送出 **${r.qty}** 份 ${r.gift.emoji} **${r.gift.name}** 給 ${mention(o.staff_id)}！`,
+    `🏷️ 本次訂單編號：\`${o.order_no}\`（禮物免報單）`
+  ].join('\n');
+
+  const body = emb(guildId, {
+    title: `🎁 ${brand(guildId)}｜送禮明細 (${o.order_no})`,
+    color: COLOR.main,
+    desc: [
+      LINE,
+      `👤 送禮金主：${mention(o.customer_id)}`,
+      `🎀 收禮陪玩：${mention(o.staff_id)}`,
+      '',
+      '📝 **禮物明細**',
+      `▫️ 禮物款式：${r.gift.emoji} ${r.gift.name}`,
+      `▫️ 贈送數量：${r.qty} 份`,
+      `▫️ 代金券：🎟️ \`${r.discount || 0}\` 元`,
+      `▫️ 支付方式：💸 ${o.pay_method || '雨幣扣款'}`,
+      `▫️ 實付總額：\`${o.amount}\` 元`,
+      '',
+      LINE,
+      `✅ 經辦客服：${csOf(o)}`
+    ].join('\n')
+  });
+  return { content, embeds: [body] };
+}
+
+/** 送禮的客服機密確認（ephemeral） */
+const giftDetail = (guildId, r) =>
+  `✅ **[客服專屬機密] 送禮已成功！**（實付: \`${r.order.amount}\` 元）\n`
+  + `📌 訂單編號：\`${r.order.order_no}\`\n`
+  + `❤️ 獲得 ${r.gain} 點親密度（目前總計: ${r.points} 點）`;
+
+module.exports = { checkoutMessage, checkoutDetail, refundNotice, giftMessage, giftDetail };
