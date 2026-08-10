@@ -101,11 +101,11 @@ const commands = [
 
   b('vip等級', '手動強制設定老闆的 VIP 等級（0~7）')
     .addUserOption(o => o.setName('老闆').setDescription('老闆').setRequired(true))
-    .addIntegerOption(o => o.setName('等級').setDescription('0~7，設 -1 解除鎖定改回自動')
+    .addIntegerOption(o => o.setName('等級').setDescription('輸入 0~7 的數字代表 VIP 等級')
       .setRequired(true).setMinValue(-1).setMaxValue(7)),
 
   b('背包查詢', '查詢老闆目前的專屬背包狀態與折價券明細')
-    .addUserOption(o => o.setName('客人').setDescription('不填則查自己')),
+    .addUserOption(o => o.setName('客人').setDescription('【管理專屬】想查詢哪位老闆的背包？(不填則查自己)')),
 
   b('新增地盤', '新增老闆的地盤步數進度（超過 21 會自動歸 0）')
     .addUserOption(o => o.setName('老闆').setDescription('老闆').setRequired(true))
@@ -117,10 +117,10 @@ const commands = [
 
   // ---- 人事 ----
   b('入職', '錄取陪玩並綁定對應的影音名片')
-    .addUserOption(o => o.setName('對象').setDescription('要錄取的成員').setRequired(true))
+    .addUserOption(o => o.setName('對象').setDescription('請選擇陪玩師的 Discord 帳號').setRequired(true))
     .addStringOption(o => o.setName('代號').setDescription('員工代號').setRequired(true))
     .addStringOption(o => o.setName('名稱').setDescription('藝名').setRequired(true))
-    .addStringOption(o => o.setName('網址').setDescription('影音名片網址'))
+    .addStringOption(o => o.setName('網址').setDescription('輸入影片或圖片的網址'))
     .addStringOption(o => o.setName('職務').setDescription('陪玩 或 客服')
       .addChoices({ name: '陪玩', value: 'player' }, { name: '客服', value: 'cs' }))
 ].map(c => c.toJSON());

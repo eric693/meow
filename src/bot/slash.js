@@ -6,6 +6,7 @@ const { parseSlots } = require('../util/slots');
 const CF = require('../util/checkout-flow');
 const GF = require('../util/gift-flow');
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
+const { vipName } = require('../util/reports');
 const G = require('../util/gifts');
 const R = require('../util/reports');
 const { isAdmin, isCS } = require('./perm');
@@ -321,35 +322,37 @@ const handlers = {
     const u = i.options.getUser('老闆');
     const lv = i.options.getInteger('等級');
     const c = getCustomer(i.guildId, u.id, u.username);
+    const before = vipName(i.guildId, c.vip_level);
     if (lv < 0) {
       db.prepare('UPDATE customers SET vip_locked = 0 WHERE id = ?').run(c.id);
       const auto = refreshVip(i.guildId, u.id);
-      return i.reply({ embeds: [ok(i.guildId, '已解除鎖定', `${mention(u.id)} 改回自動計算，目前 VIP **${auto}**`)] });
+      return i.reply({ content: `✅ 已解除 ${mention(u.id)} 的等級鎖定，改回自動計算，目前為 **${vipName(i.guildId, auto)}**。`,
+        ephemeral: true });
     }
     db.prepare('UPDATE customers SET vip_level = ?, vip_locked = 1 WHERE id = ?').run(lv, c.id);
     audit(i.user.tag, '設定 VIP', `${u.id} → ${lv}`, i.guildId);
-    await i.reply({ embeds: [ok(i.guildId, 'VIP 等級已設定', `${mention(u.id)} → **VIP ${lv}**（已鎖定，不再自動升降）`)] });
+    await i.reply({
+      content: `✅ **已成功為 ${mention(u.id)} 設定 VIP 等級！**\n`
+             + `原等級：**${before}**\n新等級：**${vipName(i.guildId, lv)}**（手動設定值: \`${lv}\`）`,
+      ephemeral: true
+    });
   },
 
   async 背包查詢(i) {
     const u = i.options.getUser('客人') || i.user;
     if (u.id !== i.user.id && !isCS(i.member)) return deny(i);
-    const c = getCustomer(i.guildId, u.id, u.username);
     const items = G.listBackpack(i.guildId, u.id);
-    const coupons = items.filter(x => x.value > 0);
-    const others = items.filter(x => !x.value);
+    const body = items.length
+      ? items.map(x => {
+          const off = x.percent > 0 ? `打 ${100 - x.percent} 折` : `折抵 ${n(x.value)} 元`;
+          const cond = x.min_spend ? `｜滿 ${n(x.min_spend)}` : '';
+          const exp = x.expires ? `｜期限 ${x.expires}` : '';
+          return `🎟️ **${x.name}**\n└ 優惠內容：\`${off}\`${cond} ｜ 數量：\`${x.qty}\` 張${exp}`;
+        }).join('\n\n')
+      : '背包裡目前沒有任何道具或折價券。';
     await i.reply({
-      embeds: [emb(i.guildId, {
-        title: '🎒 專屬背包',
-        desc: mention(u.id),
-        fields: [
-          { name: '雨幣餘額', value: n(c.coins), inline: true },
-          { name: 'VIP 等級', value: `Lv.${c.vip_level}`, inline: true },
-          { name: '地盤步數', value: `${c.territory} / 21`, inline: true },
-          { name: '折價券', value: coupons.length ? coupons.map(x => `${x.name}（面額 ${n(x.value)}）×${x.qty}${x.expires ? ` 期限 ${x.expires}` : ''}`).join('\n') : '無' },
-          { name: '其他道具', value: others.length ? others.map(x => `${x.name} ×${x.qty}`).join('、') : '無' }
-        ]
-      })]
+      embeds: [emb(i.guildId, { title: `🎒 ${u.username} 的專屬背包`, desc: body, color: COLOR.err })],
+      ephemeral: true
     });
   },
 
@@ -400,13 +403,12 @@ const handlers = {
       .run(orgOf(i.guildId), u.id, code, name, url, kind);
     audit(i.user.tag, '入職', `${name}(${code}) ${u.id}`, i.guildId);
     await i.reply({
-      embeds: [ok(i.guildId, '錄取成功 🎉',
-        `${mention(u.id)} 已加入公司名單`, [
-          { name: '代號', value: code, inline: true },
-          { name: '藝名', value: name, inline: true },
-          { name: '職務', value: kind === 'cs' ? '客服' : '陪玩', inline: true },
-          { name: '影音名片', value: url || '（未綁定）' }
-        ])]
+      embeds: [emb(i.guildId, {
+        title: '🎊 入職成功！',
+        color: COLOR.ok,
+        desc: `✅ 已成功將 **${name}** 加入公司的正式名單！\n`
+            + (url ? `名片網址已綁定：${url}` : '（尚未綁定名片網址，可再執行一次 /入職 補上）')
+      })]
     });
   }
 };

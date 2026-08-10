@@ -54,6 +54,7 @@ function createOrder({
     ? (staffId && customerId && (kind === 'order' || kind === 'role') ? paid * intimacyRate(guildId) / 100 : 0)
     : Number(intimacy));
   const no = orderNo || nextOrderNo(orderPrefix);
+  const vipBefore = customerId ? getCustomer(guildId, customerId).vip_level : 0;
 
   db.transaction(() => {
     // 匯入歷史資料時不動錢包（skipWallet），避免把過去的帳重算一次
@@ -89,7 +90,10 @@ function createOrder({
     }
   })();
 
-  if (customerId) refreshVip(guildId, customerId);
+  if (customerId) {
+    const vipAfter = refreshVip(guildId, customerId);
+    if (vipAfter > vipBefore) require('./announce').vipUpgraded(guildId, customerId, vipBefore, vipAfter);
+  }
   audit(operator || customerId, '建立交易', `${no} ${kindLabel(kind)} ${paid}`, guildId);
   return db.prepare('SELECT * FROM orders WHERE order_no = ?').get(no);
 }
