@@ -228,22 +228,7 @@ const handlers = {
 
   async 未銷(msg) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
-    const rows = R.unsettled(msg.guild.id, 30);
-    const total = db.prepare("SELECT COUNT(*) c FROM orders WHERE guild_id=? AND status='pending'")
-      .get(orgOf(msg.guild.id)).c;
-    const body = rows.length
-      ? rows.map(o => {
-          const t = o.created_at.slice(5, 16).replace('-', '/');
-          const note = o.note ? ` | 📝: ${o.note}` : '';
-          return `▫️ \`${o.order_no}\` | ${t} | 陪玩 ${mention(o.staff_id)} | 金額: \`${n(o.amount)}\`${note}`;
-        }).join('\n')
-      : '🎉 目前沒有未核銷的訂單。';
-    await msg.reply({ embeds: [emb(msg.guild.id, {
-      title: `📋 待核銷訂單總覽 (目前共 ${n(total)} 筆)`,
-      desc: `以下是系統中尚未被核銷發放的訂單列表：\n\n${body}`.slice(0, 3900)
-        + `\n\n*(第 1 頁 / 共 ${Math.max(1, Math.ceil(total / 30))} 頁)*`,
-      color: COLOR.warn
-    })] });
+    await msg.reply(panels.unsettledPage(msg.guild.id, 0));
   },
 
   async 結單(msg) {
@@ -268,8 +253,7 @@ const handlers = {
       db.prepare('DELETE FROM gift_logs WHERE guild_id=? AND staff_id=?').run(orgOf(msg.guild.id), s.user_id);
     })();
     audit(msg.author.tag, '離職', `${s.name}(${s.code}) ${s.user_id}`, msg.guild.id);
-    await msg.reply({ embeds: [ok(msg.guild.id, '已辦理離職',
-      `**${s.name || s.code}** 已從公司名單移除，相關資料庫紀錄已永久刪除。\n（訂單流水帳保留供對帳）`)] });
+    await msg.reply(`🗑️ 已將員工 **${s.name || s.code}** 從正式名單中除名！`);
   },
 
   async 刷新人事(msg) {

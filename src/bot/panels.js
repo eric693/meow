@@ -417,6 +417,119 @@ function recruitEmbed(guildId, t) {
 }
 
 
+
+// 自主報單＝認領主群已結帳的訂單（金流已在結帳時完成，這裡只留服務紀錄與截圖）
+function reportModal(kind) {
+  const m = new ModalBuilder().setCustomId(`reportm:${kind}`).setTitle('📄 報單填寫');
+  if (kind === 'self') {
+    return m.addComponents(
+      input('order_no', '訂單編號（ORD-XXXXXXXX）', { ph: '結帳時客服提供' }),
+      input('boss_dc', '老闆 DC_ID', { ph: '例：tsuki_.32' }),
+      input('customer', '老闆 遊戲ID', { ph: '例：123456789012345678' }),
+      input('staff', '陪玩 遊戲ID', { ph: '例：一坨羊毛毛#0712 或 R01' }),
+      input('slots', '報單類別及場次/小時', { ph: '例：娛樂4場' })
+    );
+  }
+  if (kind === 'cross2') {
+    return m.setTitle('🎤 唱歌單跨服報單').addComponents(
+      input('order_no', '訂單編號（ORD-XXXXXXXX）', { ph: '結帳時客服提供' }),
+      input('boss_dc', '老闆 DC_ID', { ph: '例：luvmao3' }),
+      input('songs', '幾首歌', { ph: '例：1' }),
+      input('song_names', '歌名', { style: TextInputStyle.Paragraph, ph: '一行一首' })
+    );
+  }
+  // 跨服單沒有主群結帳流程，報單當下才建帳
+  return m.addComponents(
+    input('boss_dc', '老闆 dc', { ph: '例：tsuki_.32' }),
+    input('customer', '老闆 id', { ph: '例：123456789012345678' }),
+    input('staff', '陪玩 id', { ph: '例：一坨羊毛毛#0712 或 R01' }),
+    input('slots', '報單場次／小時', { ph: '例：娛樂4場' }),
+    input('price', '單價（雨幣）', { ph: '例：300' })
+  );
+}
+
+const UNSETTLED_PER_PAGE = 20;
+
+/** 待核銷訂單的第 page 頁（0 起算），含上一頁／下一頁按鈕 */
+function unsettledPage(guildId, page = 0) {
+  const org = orgOf(guildId);
+  const total = db.prepare("SELECT COUNT(*) c FROM orders WHERE guild_id=? AND status='pending'").get(org).c;
+  const pages = Math.max(1, Math.ceil(total / UNSETTLED_PER_PAGE));
+  const p = Math.min(Math.max(0, page), pages - 1);
+  const rows = db.prepare(`SELECT * FROM orders WHERE guild_id=? AND status='pending'
+                           ORDER BY created_at LIMIT ? OFFSET ?`)
+    .all(org, UNSETTLED_PER_PAGE, p * UNSETTLED_PER_PAGE);
+  const body = rows.length
+    ? rows.map(o => {
+        const t = o.created_at.slice(5, 16).replace('-', '/');
+        const note = o.note ? ` | 📝: ${o.note}` : '';
+        return `▫️ \`${o.order_no}\` | ${t} | 陪玩 ${mention(o.staff_id)} | 金額: \`${n(o.amount)}\`${note}`;
+      }).join('\n')
+    : '🎉 目前沒有未核銷的訂單。';
+  return {
+    embeds: [emb(guildId, {
+      title: `📋 待核銷訂單總覽 (目前共 ${n(total)} 筆)`,
+      desc: `以下是系統中尚未被核銷發放的訂單列表：\n\n${body}`.slice(0, 3900)
+        + `\n\n*(第 ${p + 1} 頁 / 共 ${pages} 頁)*`,
+      color: COLOR.warn
+    })],
+    components: pages > 1 ? [row(
+      btn(`un:${p - 1}`, '上一頁', ButtonStyle.Secondary, '⬅️').setDisabled(p === 0),
+      btn(`un:${p + 1}`, '下一頁', ButtonStyle.Secondary, '➡️').setDisabled(p >= pages - 1)
+    )] : []
+  };
+}
+
+/** 這個人是否已經有進行中的下單頻道；有的話回傳頻道 ID */
+function openOrderTicket(i) {
+  const t = db.prepare("SELECT * FROM tickets WHERE guild_id=? AND customer_id=? AND kind='order' AND status!='closed'")
+    .get(orgOf(i.guildId), i.user.id);
+  if (!t || !t.channel_id) return null;
+  return i.guild.channels.cache.has(t.channel_id) ? t.channel_id : null;
+}
+
+/** 把結帳明細自動備份一份到財務頻道 */
+async function backupToFinance(i, r) {
+  const id = getSetting('channel_finance', '', i.guildId);
+  if (!id) return;
+  const ch = await i.client.channels.fetch(id).catch(() => null);
+  if (!ch || !ch.isTextBased()) return;
+  await ch.send({
+    content: `📦 **[系統自動備份]** 結帳方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}`,
+    embeds: [r.detail]
+  }).catch(() => {});
+}
+
+/** 結帳後：張貼完成卡片、改名為「已結帳」並搬到已結單分類，同時關掉名片專區 */
+async function archiveTicketChannel(i) {
+  const t = db.prepare("SELECT * FROM tickets WHERE guild_id=? AND channel_id=? AND kind='order'")
+    .get(orgOf(i.guildId), i.channelId);
+  if (!t) return;
+  db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), t.id);
+  if (t.card_channel_id) {
+    const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
+    if (cc) await cc.delete().catch(() => {});
+    db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(t.id);
+  }
+  await i.channel.send({
+    embeds: [emb(i.guildId, {
+      title: '🔴 此訂單已完成 🔴',
+      color: COLOR.err,
+      desc: [
+        '────────────────────',
+        '🚫 請勿在此線後發言及遞交名片',
+        '⚠️ 若老闆或陪玩對訂單有任何問題',
+        '請務必在 **24小時內** 包廂關閉前，聯繫管理員',
+        '────────────────────'
+      ].join('\n')
+    })],
+    components: [row(btn(`ticket:close:${t.id}`, '關閉訂單', ButtonStyle.Danger, '🔒'))]
+  }).catch(() => {});
+  await i.channel.setName(`🎫│${ticketLabel(i.guildId, t.service)}│${t.seq}│已結帳`.slice(0, 90)).catch(() => {});
+  const done = getSetting('category_order_done', '', i.guildId);
+  if (done) await i.channel.setParent(done, { lockPermissions: false }).catch(() => {});
+}
+
 async function handleInteraction(i) {
   if (i.isAutocomplete()) return;
   const id = i.customId || '';
@@ -432,6 +545,12 @@ async function handleInteraction(i) {
     const has = i.member.roles.cache.has(rid);
     await (has ? i.member.roles.remove(rid) : i.member.roles.add(rid));
     return eph(i, ok(i.guildId, has ? '已取消身分組' : '已領取身分組', `<@&${rid}>`));
+  }
+
+  // ---- 待核銷分頁 ----
+  if (id.startsWith('un:')) {
+    if (!isCS(i.member)) return denyEph(i, '僅限客服／管理員使用。');
+    return i.update(unsettledPage(i.guildId, Number(id.split(':')[1]) || 0));
   }
 
   // ---- 會員服務中心 ----
@@ -619,6 +738,91 @@ async function handleInteraction(i) {
     await i.reply({ embeds: [ok(i.guildId, '報單已成功發布！', null)], ephemeral: true });
     await sendToChannel(i.guild, 'channel_order_log', { content, embeds: [body] });
     return i.channel.send({ content, embeds: [body] });
+  }
+
+  // ---- 客服結帳台（面板按鈕 → 表單 → 互動式結帳）----
+  if (id === 'checkout:start') {
+    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以結帳。');
+    return i.showModal(new ModalBuilder().setCustomId('checkoutm').setTitle('本次結帳明細')
+      .addComponents(
+        input('customer', '老闆 id', { ph: '例：123456789012345678' }),
+        input('staff', '陪玩 id', { ph: '例：lumi 或 R01' }),
+        input('slots', '服務項目／場次·小時', { ph: '例：娛樂4場' }),
+        input('list', '訂單原價（雨幣）', { ph: '例：2000' }),
+        input('discount', '手動折扣（可留空）', { required: false, ph: '沒有折扣請留空或填 0' })
+      ));
+  }
+  if (id === 'checkoutm') {
+    const f = k => (i.fields.getTextInputValue(k) || '').trim();
+    const customerId = (f('customer').match(/\d{15,25}/) || [])[0];
+    if (!customerId) return eph(i, err(i.guildId, '老闆 id 格式不正確（需為 Discord 數字 ID）。'));
+    const staff = findStaff(i.guildId, f('staff'));
+    if (!staff) return eph(i, err(i.guildId, `查無陪玩「${f('staff')}」`));
+    const list = Number(f('list'));
+    const manual = Number(f('discount') || 0);
+    if (!Number.isFinite(list) || list <= 0) return eph(i, err(i.guildId, '訂單原價必須是大於 0 的數字。'));
+    if (!Number.isFinite(manual) || manual > list) return eph(i, err(i.guildId, '手動折扣不可大於訂單原價。'));
+    const { item, qty } = parseSlots(f('slots'));
+    const { payload } = CF.start({
+      guildId: i.guildId, customerId, staffId: staff.user_id, staffName: staff.name || staff.code,
+      csId: i.user.id, csName: i.user.tag, item, qty, list, manualDiscount: manual, note: ''
+    });
+    return i.reply({ ...payload, ephemeral: true });
+  }
+
+  // ---- 互動式送禮（預覽 → 付款方式）----
+  if (id.startsWith('gf:')) {
+    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以送禮。');
+    const [, act, sid, pay] = id.split(':');
+    if (act === 'cancel') { S.drop(sid); return i.update({ content: '已取消送禮，沒有扣款。', embeds: [], components: [] }); }
+    if (act === 'pay') {
+      let r;
+      try { r = GF.finish(sid, pay); }
+      catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
+      await i.update({ content: r.detail, embeds: [], components: [] });
+      return i.channel.send(r.message);
+    }
+  }
+
+  // ---- 互動式結帳（選券 → 預覽 → 付款方式）----
+  if (id.startsWith('co:')) {
+    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以結帳。');
+    const [, act, sid, pay] = id.split(':');
+    const sess = S.get(sid);
+    if (!sess) return eph(i, err(i.guildId, '這筆結帳已逾時（超過 15 分鐘），請重新執行 /結帳。'));
+
+    if (act === 'pick') {
+      const picked = i.values[0];
+      if (picked === 'manual') {
+        return i.showModal(new ModalBuilder().setCustomId(`co:manual:${sid}`).setTitle('額外折扣金額')
+          .addComponents(input('amount', '折扣金額（元）', { ph: '例：50', value: String(sess.manualDiscount || 0) })));
+      }
+      S.update(sid, { couponKey: picked === 'none' ? '' : picked });
+      return i.update(CF.preview(sid, S.get(sid)));
+    }
+    if (act === 'manual') {
+      const v = Math.max(0, Math.round(Number(i.fields.getTextInputValue('amount')) || 0));
+      if (v > sess.list) return eph(i, err(i.guildId, `折扣金額不可超過訂單原價 ${sess.list} 元。`));
+      S.update(sid, { manualDiscount: v });
+      return i.update(CF.couponPayload(sid, S.get(sid)));
+    }
+    if (act === 'cancel') {
+      S.drop(sid);
+      return i.update({ content: '', embeds: [ok(i.guildId, '已取消結帳', '沒有建立任何訂單，折價券也未扣除。')], components: [] });
+    }
+    if (act === 'pay') {
+      let r;
+      try { r = CF.finish(sid, pay); }
+      catch (e) { return i.update({ content: '', embeds: [err(i.guildId, e.message)], components: [] }); }
+      await i.update({
+        content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）\n`
+               + '**[客服專屬機密]** 帳務紀錄已同步至資料庫：',
+        embeds: [r.detail], components: []
+      });
+      await i.channel.send(r.message);
+      await backupToFinance(i, r);
+      return archiveTicketChannel(i);
+    }
   }
 
   // ---- 點單系統（服務類型 → 性別 → 需求單 → 專屬包廂 → 附加選項 → 發布）----
@@ -949,4 +1153,4 @@ async function handleInteraction(i) {
   }
 }
 
-module.exports = { commands, handleInteraction, PANELS };
+module.exports = { commands, handleInteraction, PANELS, unsettledPage };
