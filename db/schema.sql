@@ -231,6 +231,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   duration    TEXT NOT NULL DEFAULT '',       -- 預計時長
   addons      TEXT NOT NULL DEFAULT '',       -- 附加選項（逗號分隔）
   publish     TEXT NOT NULL DEFAULT 'draft',  -- draft 尚未發布 / public 公開單 / anon 匿名單
+  card_channel_id TEXT NOT NULL DEFAULT '',   -- 匿名單的名片專區頻道
   published_at TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
   claimed_at  TEXT,

@@ -142,12 +142,22 @@ function couponDiscount(coupon, amount) {
   return Math.max(0, Math.min(amount, Math.round(off)));
 }
 
-/** 券面說明，例如「折價 100 元券」「95 折（滿 1,000）」 */
-function couponLabel(c) {
-  const base = c.percent > 0 ? `${c.name}（折 ${c.percent}%）` : `${c.name}（折抵 ${c.value} 元）`;
-  const cond = c.min_spend ? `・滿 ${c.min_spend}` : '';
-  return `${base}${cond}・剩 ${c.qty} 張`;
+/** 券在選單上的顯示：主標題與說明兩行 */
+function couponOption(c, amount) {
+  const cond = c.min_spend ? `（滿 NT$${Number(c.min_spend).toLocaleString('en-US')}）` : '';
+  const off = couponDiscount(c, amount);
+  return {
+    label: `[背包] ${c.name}${cond} (剩 ${c.qty} 張)`,
+    description: c.percent > 0
+      ? `打 ${100 - c.percent} 折 (可折抵 ${off} 元)`
+      : `可折抵 ${c.value} 元`
+  };
 }
+/** 單行版本（後台列表用） */
+const couponLabel = c => {
+  const base = c.percent > 0 ? `${c.name}（折 ${c.percent}%）` : `${c.name}（折抵 ${c.value} 元）`;
+  return `${base}${c.min_spend ? `・滿 ${c.min_spend}` : ''}・剩 ${c.qty} 張`;
+};
 
 /** 使用一張券（扣 1 張，歸零就移除） */
 function useCoupon(guildId, userId, key) {
@@ -176,5 +186,5 @@ module.exports = {
   seedGifts, listGifts, findGift, sendGift,
   addIntimacy, getIntimacy, rankOf, RANKS,
   listBackpack, addItem, addTerritory,
-  usableCoupons, couponDiscount, couponLabel, useCoupon
+  usableCoupons, couponDiscount, couponLabel, couponOption, useCoupon
 };

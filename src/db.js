@@ -52,7 +52,8 @@ ensureColumns('tickets', [
   ['duration',  "TEXT NOT NULL DEFAULT ''"],
   ['addons',    "TEXT NOT NULL DEFAULT ''"],
   ['publish',   "TEXT NOT NULL DEFAULT 'draft'"],
-  ['published_at', 'TEXT']
+  ['published_at', 'TEXT'],
+  ['card_channel_id', "TEXT NOT NULL DEFAULT ''"]
 ]);
 ensureColumns('exams', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);
 // 舊資料補算原價與淨利

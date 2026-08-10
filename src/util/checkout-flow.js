@@ -10,20 +10,19 @@ const { checkoutMessage, checkoutDetail } = require('./checkout');
 const PAY_CASH = '現金 / 轉帳';
 const PAY_COIN = '雨幣扣款';
 
-/** 折價券選單（沒有可用券時回 null） */
+/** 折價券選單：手動折扣 + 不使用 + 背包裡可用的券 */
 function couponRow(sid, sess) {
-  const list = G.usableCoupons(sess.guildId, sess.customerId, sess.list).slice(0, 24);
-  if (!list.length) return null;
+  const list = G.usableCoupons(sess.guildId, sess.customerId, sess.list).slice(0, 23);
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`co:pick:${sid}`)
-    .setPlaceholder('請在此選單中選擇代金券或折價券')
+    .setPlaceholder('🎟️ 請在此選單中選擇代金券或折價券')
     .addOptions(
-      { label: '不使用折價券', value: 'none', description: `原價 ${sess.list} 元結帳` },
-      ...list.map(c => ({
-        label: `[背包] ${c.name}`.slice(0, 100),
-        value: c.item_key,
-        description: G.couponLabel(c).slice(0, 100)
-      }))
+      { label: '✍️ 手動輸入額外折扣金額', value: 'manual', description: '點擊後將彈出輸入框' },
+      { label: `💵 無使用額外代金券 (${sess.manualDiscount || 0})`, value: 'none' },
+      ...list.map(c => {
+        const o = G.couponOption(c, sess.list);
+        return { label: o.label.slice(0, 100), value: c.item_key, description: o.description.slice(0, 100) };
+      })
     );
   return new ActionRowBuilder().addComponents(menu);
 }
@@ -65,21 +64,20 @@ function preview(sid, sess) {
   };
 }
 
-/** /結帳 的第一步：有券就先選券，沒券直接進付款預覽 */
+/** /結帳 的第一步：先選券（含手動折扣），再進付款預覽 */
 function start(sess) {
   const sid = S.put(sess);
-  const row = couponRow(sid, sess);
-  if (!row) return { sid, payload: preview(sid, sess) };
+  return { sid, payload: couponPayload(sid, sess) };
+}
+
+/** 選券畫面 */
+function couponPayload(sid, sess) {
+  const coins = getCustomer(orgOf(sess.guildId), sess.customerId).coins;
   return {
-    sid,
-    payload: {
-      embeds: [emb(sess.guildId, {
-        title: '🎟️ 選擇折價券',
-        desc: `結帳對象：${mention(sess.customerId)}　服務陪玩：**${sess.staffName}**\n`
-            + `訂單原價：\`${sess.list}\` 元\n\n請在下方選單中選擇要使用的券，沒有要用就選「不使用折價券」。`
-      })],
-      components: [row]
-    }
+    content: `🧾 正在為 ${mention(sess.customerId)} 結帳，訂單原價：\`${sess.list}\` 元。\n`
+           + `💰 客戶目前雨幣餘額：\`${coins}\` 雨幣`,
+    embeds: [],
+    components: [couponRow(sid, sess)]
   };
 }
 
@@ -130,4 +128,4 @@ function finish(sid, pay) {
   };
 }
 
-module.exports = { start, preview, finish, PAY_CASH, PAY_COIN };
+module.exports = { start, preview, couponPayload, finish, PAY_CASH, PAY_COIN };

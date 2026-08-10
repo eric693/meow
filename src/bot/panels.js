@@ -355,18 +355,27 @@ function draftPayload(guildId, tid) {
   };
 }
 
-/** 發布後留在包廂的狀態卡（按鈕全部收掉） */
+/** 發布後留在包廂的狀態卡 */
 function publishedPayload(guildId, t) {
+  const anon = t.publish === 'anon';
   return {
+    content: '✅ 已經為您發布到接單專區！請耐心等候陪玩遞交名片。\n'
+           + '(若已徵滿，可點擊下方按鈕提早關閉名片專區)',
     embeds: [emb(guildId, {
-      title: t.publish === 'anon' ? '🏆 匿名訂單已發布' : '📢 公開訂單已發布',
-      desc: `單號 \`${t.seq}\`　${t.service}${t.gender}\n陪玩現在看得到這張單了，請等待接單。`,
-      color: COLOR.ok
+      title: '✅ 訂單已發布！',
+      desc: `老闆 ${mention(t.customer_id)} 您好！您的需求已送出，以下是這張單的內容：`,
+      color: COLOR.ok,
+      fields: [
+        { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
+        { name: '老闆段位', value: t.rank || '無', inline: true },
+        { name: '附加選項', value: addonText(guildId, t), inline: true },
+        { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` },
+        { name: '​', value: anon
+            ? '此為匿名頻道。陪玩的報名名片將會直接發送至此。'
+            : '這是公開單，陪玩可以直接在本頻道遞交名片。' }
+      ]
     })],
-    components: [row(
-      btn(`ticket:claim:${t.id}`, '客服接單', ButtonStyle.Success, '🙋'),
-      btn(`ticket:close:${t.id}`, '關閉頻道', ButtonStyle.Danger, '🔒')
-    )]
+    components: [row(btn(`tk:closecard:${t.id}`, '關閉名片專區', ButtonStyle.Danger, '🗑️'))]
   };
 }
 
@@ -374,20 +383,20 @@ function publishedPayload(guildId, t) {
 function recruitEmbed(guildId, t) {
   const anon = t.publish === 'anon';
   return emb(guildId, {
-    title: `${anon ? '🏆 匿名單' : '📢 公開單'}　#${t.seq}`,
-    color: anon ? COLOR.warn : COLOR.main,
+    title: '⚠️ 新訂單！',
+    color: COLOR.warn,
+    desc: anon
+      ? '⚠️ 有老闆發布了新任務！符合條件的陪玩們請火速遞交名片！'
+      : `老闆 ${mention(t.customer_id)} 發布了新任務！符合條件的陪玩們請火速遞交名片！`,
     fields: [
       { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
       { name: '老闆段位', value: t.rank || '無', inline: true },
       { name: '附加選項', value: addonText(guildId, t), inline: true },
-      { name: '希望時段', value: t.play_at || '—', inline: true },
-      { name: '預計時長', value: t.duration || '—', inline: true },
-      { name: '下單者', value: anon ? '🕶️ 匿名' : mention(t.customer_id), inline: true },
-      { name: '其他需求', value: t.content || '無' }
-    ],
-    footer: '有意接單請在本頻道回覆，實際安排以客服確認為準'
+      { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` }
+    ]
   });
 }
+
 
 async function handleInteraction(i) {
   if (i.isAutocomplete()) return;
@@ -571,8 +580,18 @@ async function handleInteraction(i) {
 
     if (act === 'pick') {
       const picked = i.values[0];
+      if (picked === 'manual') {
+        return i.showModal(new ModalBuilder().setCustomId(`co:manual:${sid}`).setTitle('額外折扣金額')
+          .addComponents(input('amount', '折扣金額（元）', { ph: '例：50', value: String(sess.manualDiscount || 0) })));
+      }
       S.update(sid, { couponKey: picked === 'none' ? '' : picked });
       return i.update(CF.preview(sid, S.get(sid)));
+    }
+    if (act === 'manual') {
+      const v = Math.max(0, Math.round(Number(i.fields.getTextInputValue('amount')) || 0));
+      if (v > sess.list) return eph(i, err(i.guildId, `折扣金額不可超過訂單原價 ${sess.list} 元。`));
+      S.update(sid, { manualDiscount: v });
+      return i.update(CF.couponPayload(sid, S.get(sid)));
     }
     if (act === 'cancel') {
       S.drop(sid);
@@ -587,7 +606,8 @@ async function handleInteraction(i) {
                + '**[客服專屬機密]** 帳務紀錄已同步至資料庫：',
         embeds: [r.detail], components: []
       });
-      return i.channel.send(r.message);
+      await i.channel.send(r.message);
+      return archiveTicketChannel(i, r.order);
     }
   }
 
@@ -686,24 +706,90 @@ async function handleInteraction(i) {
     }
     if (act === 'public' || act === 'anon') {
       if (t.publish !== 'draft') return eph(i, err(i.guildId, '這張單已經發布過了。'));
+      await i.deferUpdate();
+      const anon = act === 'anon';
       db.prepare('UPDATE tickets SET publish=?, published_at=? WHERE id=?').run(act, now(), tid);
 
-      // 發布＝讓陪玩看得到：把頻道搬到對應分類，並開放陪玩身分組檢視
-      const parent = getSetting(act === 'anon' ? 'category_order_anon' : 'category_order_public', '', i.guildId);
+      const parent = getSetting(anon ? 'category_order_anon' : 'category_order_public', '', i.guildId);
       if (parent) await i.channel.setParent(parent, { lockPermissions: false }).catch(() => {});
-      for (const rid of getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean)) {
-        await i.channel.permissionOverwrites.edit(rid, {
-          ViewChannel: true, SendMessages: true, ReadMessageHistory: true
-        }).catch(() => {});
+
+      const playerRoles = getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean);
+      const csRole = getSetting('role_cs', '', i.guildId);
+      let cardCh = null;
+
+      if (anon) {
+        // 匿名單：另開名片專區給陪玩，老闆的包廂維持隱密
+        cardCh = await createPrivateChannel(i.guild, i.member, {
+          name: `🎫│${ticketLabel(i.guildId, t.service)}│${t.seq}│名片專區`,
+          categoryKey: anon ? 'category_order_anon' : 'category_order_public',
+          extraRoleKeys: ['role_cs', 'role_admin', 'role_player']
+        });
+        db.prepare('UPDATE tickets SET card_channel_id=? WHERE id=?').run(cardCh.id, tid);
+      } else {
+        // 公開單：直接把包廂開放給陪玩
+        for (const rid of playerRoles) {
+          await i.channel.permissionOverwrites.edit(rid, {
+            ViewChannel: true, SendMessages: true, ReadMessageHistory: true
+          }).catch(() => {});
+        }
       }
+
       const fresh = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
-      await i.update(publishedPayload(i.guildId, fresh));
-      const playerRole = getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean)[0];
-      return i.channel.send({
-        content: playerRole ? `<@&${playerRole}> 有新的${act === 'anon' ? '匿名' : '公開'}單囉！` : '有新的單囉！',
-        embeds: [recruitEmbed(i.guildId, fresh)]
+      await i.editReply(publishedPayload(i.guildId, fresh));
+
+      const target = cardCh || i.channel;
+      await target.send({
+        content: [csRole ? `<@&${csRole}>` : '', ...playerRoles.map(r => `<@&${r}>`)].filter(Boolean).join(' '),
+        embeds: [recruitEmbed(i.guildId, fresh)],
+        components: [row(
+          btn(`tk:card:${tid}`, '遞交名片', ButtonStyle.Success, '📇'),
+          btn(`tk:end:${tid}`, '結束此訂單', ButtonStyle.Danger, '🔒')
+        )]
       });
+      return;
     }
+
+    // 陪玩遞交名片：把影音名片轉發到老闆的包廂
+    if (act === 'card') {
+      const staff = getStaff(i.guildId, i.user.id);
+      if (!staff || !staff.active || staff.kind !== 'player')
+        return denyEph(i, '只有在職陪玩可以遞交名片。');
+      if (t.publish === 'draft') return eph(i, err(i.guildId, '這張單還沒發布。'));
+      if (t.status === 'closed') return eph(i, err(i.guildId, '這張單已經結束了。'));
+      const name = staff.name || staff.code;
+      const boss = await i.guild.channels.fetch(t.channel_id).catch(() => null);
+      if (!boss) return eph(i, err(i.guildId, '找不到老闆的訂單頻道，請聯絡客服。'));
+
+      await boss.send({
+        content: staff.card_url || undefined,
+        embeds: [emb(i.guildId, {
+          title: `✨ 專屬名片：${name}`,
+          desc: `老闆您好，我是 **${name}**！請看看我的專屬音卡 👋`,
+          color: COLOR.ok,
+          footer: staff.card_url ? undefined : '這位陪玩還沒綁定影音名片，請管理用 /入職 補上'
+        })]
+      });
+      return eph(i, ok(i.guildId, '影片名片已成功遞交！', '老闆將在頻道收到您的名片！'));
+    }
+
+    // 關閉名片專區（徵滿了）／結束此訂單
+    if (act === 'closecard' || act === 'end') {
+      if (t.card_channel_id) {
+        const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
+        if (cc) await cc.delete().catch(() => {});
+        db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(tid);
+      } else {
+        // 公開單沒有獨立頻道，改成收回陪玩的檢視權限
+        for (const rid of getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean)) {
+          await i.channel.permissionOverwrites.edit(rid, { ViewChannel: false }).catch(() => {});
+        }
+      }
+      if (act === 'end') db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
+      const msg = act === 'end' ? '訂單已結束，名片專區已關閉。' : '名片專區已關閉，陪玩不會再看到這張單。';
+      if (i.channel.id === t.card_channel_id) return i.reply({ embeds: [ok(i.guildId, '已關閉', msg)] });
+      return eph(i, ok(i.guildId, '已關閉', msg));
+    }
+
   }
 
   // ---- 下單傳票 ----
