@@ -172,6 +172,38 @@ Pages.orders = async view => {
 
   // ---------- 版面 ----------
   view.innerHTML = `
+    <div class="card">
+      <h3>結帳台</h3>
+      <div class="muted" style="margin-bottom:10px">與 Discord 的 <code>/結帳</code> 同一套流程：可套用背包折價券、選擇付款方式，並把結帳明細發到指定頻道。</div>
+      <div class="grid c3">
+        <label class="f"><span>老闆 Discord ID</span><input id="ck_cust" placeholder="123456789012345678"></label>
+        <label class="f"><span>陪玩（代號／藝名／ID）</span><input id="ck_staff" placeholder="lumi"></label>
+        <label class="f"><span>服務項目</span><input id="ck_item" placeholder="娛樂4場"></label>
+        <label class="f"><span>訂單原價</span><input id="ck_list" type="number" min="1"></label>
+        <label class="f"><span>手動折讓</span><input id="ck_manual" type="number" value="0" min="0"></label>
+        <label class="f"><span>背包折價券</span><select id="ck_coupon"><option value="">先填原價與老闆 ID</option></select></label>
+        <label class="f"><span>結帳明細發到頻道</span><select id="ck_ch"><option value="">不發送，只建帳</option></select></label>
+        <label class="f"><span>經辦客服 Discord ID（選填）</span><input id="ck_cs"></label>
+        <label class="f"><span>備註</span><input id="ck_note"></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="fit"><button class="btn ok" id="ck_cash">💸 現金 / 轉帳結帳</button></div>
+        <div class="fit"><button class="btn" id="ck_coin">🪙 雨幣餘額扣款</button></div>
+        <div class="grow muted" id="ck_hint" style="align-self:center"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>特殊結帳與撤銷</h3>
+      <div class="row">
+        <div class="fit"><button class="btn secondary" data-sp="role">💳 身分組結帳</button></div>
+        <div class="fit"><button class="btn secondary" data-sp="naming">🏷️ 伺服器冠名結帳</button></div>
+        <div class="fit"><button class="btn secondary" data-sp="backfill">📒 補單</button></div>
+        <div class="fit"><button class="btn secondary" data-sp="adjust">⚙️ 財務調整</button></div>
+        <div class="fit"><button class="btn danger" id="ck_refund">🚫 退單／撤銷</button></div>
+      </div>
+    </div>
+
     <div class="card"><h3>篩選器</h3>
       <div class="row">
         <label class="f"><span>月份</span><input id="f_month" type="month" value="${S.f.month}"></label>
@@ -282,6 +314,97 @@ Pages.orders = async view => {
     .map(k => `<option value="${k.key}" ${k.key === S.f.kind ? 'selected' : ''}>${UI.esc(k.label)}</option>`).join('');
   sSel.innerHTML = '<option value="">全部</option>' + (S.meta.statuses || [])
     .map(k => `<option value="${k.key}" ${k.key === S.f.status ? 'selected' : ''}>${UI.esc(k.label)}</option>`).join('');
+
+  // ---------- 結帳台 ----------
+  const dcRes = await GET('/discord/resources').catch(() => ({ channels: [] }));
+  const chOpts = dcRes.channels.map(c => `<option value="${c.id}">#${UI.esc(c.name)}</option>`).join('');
+  document.getElementById('ck_ch').innerHTML = '<option value="">不發送，只建帳</option>' + chOpts;
+
+  const refreshCoupons = async () => {
+    const cust = document.getElementById('ck_cust').value.trim();
+    const amount = Number(document.getElementById('ck_list').value) || 0;
+    const sel = document.getElementById('ck_coupon');
+    if (!cust || !amount) { sel.innerHTML = '<option value="">先填原價與老闆 ID</option>'; return; }
+    const list = await GET('/checkout/coupons?' + new URLSearchParams({ customer_id: cust, amount }));
+    sel.innerHTML = list.length
+      ? '<option value="">不使用折價券</option>' +
+        list.map(c => `<option value="${UI.esc(c.key)}">${UI.esc(c.label)}｜本單可折 ${H.n(c.discount)}</option>`).join('')
+      : '<option value="">這位老闆沒有可用的券</option>';
+  };
+  document.getElementById('ck_cust').onchange = refreshCoupons;
+  document.getElementById('ck_list').onchange = refreshCoupons;
+
+  const doCheckout = async pay => {
+    const r = await POST('/checkout', {
+      customer_id: document.getElementById('ck_cust').value.trim(),
+      staff: document.getElementById('ck_staff').value.trim(),
+      item: document.getElementById('ck_item').value.trim(),
+      list_price: Number(document.getElementById('ck_list').value),
+      manual_discount: Number(document.getElementById('ck_manual').value) || 0,
+      coupon_key: document.getElementById('ck_coupon').value,
+      channel_id: document.getElementById('ck_ch').value,
+      cs_id: document.getElementById('ck_cs').value.trim(),
+      note: document.getElementById('ck_note').value.trim(),
+      pay
+    });
+    UI.ok(`結帳完成 ${r.order.order_no}｜實付 ${H.n(r.order.amount)}${r.posted ? '，明細已發到頻道' : ''}`);
+    document.getElementById('ck_hint').textContent =
+      `${r.order.order_no}｜折抵 ${r.discount}｜實付 ${r.order.amount}｜陪玩分潤 ${r.order.staff_share}`;
+    refreshCoupons(); S.page = 0; load();
+  };
+  document.getElementById('ck_cash').onclick = () => doCheckout('cash');
+  document.getElementById('ck_coin').onclick = () => doCheckout('coin');
+
+  // ---------- 特殊結帳 ----------
+  const SPECIAL = {
+    role:     { title: '身分組結帳', fields: ['customer_id', 'staff', 'item', 'amount'], hint: '完成後免核銷，分潤直接進可提領。' },
+    naming:   { title: '伺服器冠名結帳', fields: ['customer_id', 'item', 'amount'], hint: '抽成 0，100% 進伺服器淨利。' },
+    backfill: { title: '補單', fields: ['customer_id', 'staff', 'item', 'amount', 'created_at'], hint: '只補帳本，不動雨幣餘額與羈絆。' },
+    adjust:   { title: '財務調整', fields: ['amount', 'note'], hint: '金額可為負數，用於平帳。' }
+  };
+  const FIELD = {
+    customer_id: '<label class="f"><span>老闆 Discord ID</span><input name="customer_id"></label>',
+    staff: '<label class="f"><span>陪玩（代號／藝名／ID）</span><input name="staff"></label>',
+    item: '<label class="f"><span>項目</span><input name="item" placeholder="例：獨顯-週"></label>',
+    amount: '<label class="f"><span>金額</span><input name="amount" type="number"></label>',
+    created_at: '<label class="f"><span>日期（選填）</span><input name="created_at" type="date"></label>',
+    note: '<label class="f"><span>原因</span><input name="note"></label>'
+  };
+  document.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => {
+    const type = b.dataset.sp, cfg = SPECIAL[type];
+    const keys = cfg.fields.includes('note') ? cfg.fields : [...cfg.fields, 'note'];
+    UI.modal({
+      title: cfg.title,
+      bodyHTML: keys.map(k => FIELD[k]).join('') + `<div class="muted">${cfg.hint}</div>`,
+      onOk: async back => {
+        const body = { type };
+        keys.forEach(k => {
+          const v = UI.val(back, k);
+          if (v !== undefined && v !== '') body[k] = k === 'amount' ? Number(v) : v;
+        });
+        const r = await POST('/checkout/special', body);
+        UI.ok(`已建立 ${r.order.order_no}`); load();
+      }
+    });
+  });
+
+  // ---------- 退單 ----------
+  document.getElementById('ck_refund').onclick = () => UI.modal({
+    title: '退單／撤銷',
+    bodyHTML: `<label class="f"><span>訂單編號</span><input name="order_no" placeholder="ORD-12345678"></label>
+      <label class="f"><span>原因</span><input name="reason"></label>
+      <label class="f"><span>退還雨幣</span><select name="refund_coins">
+        <option value="1">是（退錢給老闆）</option><option value="0">否（只撤單不退錢）</option></select></label>
+      <label class="f"><span>撤銷通知發到頻道</span><select name="channel_id"><option value="">不發送</option>${chOpts}</select></label>`,
+    onOk: async back => {
+      await POST('/checkout/refund', {
+        order_no: UI.val(back, 'order_no'), reason: UI.val(back, 'reason'),
+        refund_coins: UI.val(back, 'refund_coins') === '1',
+        channel_id: UI.val(back, 'channel_id')
+      });
+      UI.ok('已撤銷'); load();
+    }
+  });
 };
 
 LedgerState.kindLabel = k => {

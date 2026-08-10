@@ -53,6 +53,7 @@ app.use('/api', require('./routes/core'));
 app.use('/api', require('./routes/ledger'));
 app.use('/api', require('./routes/extras'));
 app.use('/api', require('./routes/admin'));
+app.use('/api', require('./routes/discord-ops'));
 
 // ---- 前端（快取破壞）----
 const PUB = path.join(__dirname, '..', 'public');

@@ -477,11 +477,107 @@ const PANEL_DOC = [
 ];
 
 Pages.panels = async view => {
-  view.innerHTML = PANEL_DOC.map(([title, rows]) => `
-    <div class="card"><h3>${UI.esc(title)}</h3>
-      ${H.table(['指令', '說明'], rows.map(([c, d]) =>
-        `<tr><td><code>${UI.esc(c)}</code></td><td style="white-space:normal">${UI.esc(d)}</td></tr>`))}
-    </div>`).join('');
+  const [panels, res] = await Promise.all([GET('/panels/list'), GET('/discord/resources')]);
+  const chOptions = res.channels.map(c => `<option value="${c.id}">#${UI.esc(c.name)}</option>`).join('');
+
+  view.innerHTML = `
+    <div class="card">
+      <h3>一鍵發送面板</h3>
+      <div class="muted" style="margin-bottom:10px">選好頻道後按「發送」，機器人會立刻在該頻道張貼面板，效果與在 Discord 輸入對應指令完全相同。</div>
+      ${H.table(['面板', '對應指令', '發送到頻道', ''],
+        panels.map(p => `<tr>
+          <td>${UI.esc(p.label)}</td>
+          <td><code>${UI.esc(p.command)}</code></td>
+          <td><select data-ch="${p.key}" style="min-width:180px">${chOptions}</select></td>
+          <td><button class="btn sm" data-send="${p.key}">發送</button></td>
+        </tr>`))}
+    </div>
+
+    <div class="card">
+      <h3>公告與訊息</h3>
+      <div class="grid c2">
+        <label class="f"><span>發送到頻道</span><select id="anCh">${chOptions}</select></label>
+        <label class="f"><span>標題（純文字模式可留空）</span><input id="anTitle" placeholder="例：本週活動公告"></label>
+      </div>
+      <label class="f"><span>內容</span><textarea id="anBody" rows="5" placeholder="支援 Discord 的 **粗體** 與換行"></textarea></label>
+      <div class="row">
+        <label class="f"><span>樣式</span><select id="anColor">
+          <option value="main">一般（紫）</option><option value="ok">成功（綠）</option>
+          <option value="warn">提醒（黃）</option><option value="err">警告（紅）</option>
+        </select></label>
+        <label class="f"><span>格式</span><select id="anPlain">
+          <option value="0">嵌入訊息</option><option value="1">純文字</option>
+        </select></label>
+        <label class="f"><span>標記全體</span><select id="anAll">
+          <option value="0">否</option><option value="1">@everyone</option>
+        </select></label>
+      </div>
+      <div class="row">
+        <div class="fit"><button class="btn" id="anSend">發送公告</button></div>
+        <div class="fit"><button class="btn danger" id="anClose">發送「今日已結單」公告</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>發布投票</h3>
+      <div class="grid c2">
+        <label class="f"><span>發送到頻道</span><select id="poCh">${chOptions}</select></label>
+        <label class="f"><span>投票標題</span><input id="poTitle" placeholder="例：這週要開什麼活動？"></label>
+      </div>
+      <label class="f"><span>選項（用「、」或逗號分隔，最多 10 個）</span><input id="poOpts" placeholder="麻將大賽、歌回、電影夜"></label>
+      <div class="row"><div class="fit"><button class="btn" id="poSend">發布投票</button></div></div>
+    </div>
+
+    <div class="card">
+      <h3>私訊成員</h3>
+      <div class="grid c2">
+        <label class="f"><span>對象 Discord ID</span><input id="dmUser" placeholder="123456789012345678"></label>
+        <label class="f"><span></span><button class="btn" id="dmSend">送出私訊</button></label>
+      </div>
+      <label class="f"><span>內容</span><textarea id="dmBody" rows="3"></textarea></label>
+      <div class="muted">對方若關閉私訊會失敗，系統會告訴你。</div>
+    </div>`;
+
+  document.querySelectorAll('[data-send]').forEach(b => b.onclick = async () => {
+    const key = b.dataset.send;
+    const ch = document.querySelector(`[data-ch="${key}"]`).value;
+    if (!await UI.confirm('確定要在該頻道發送這個面板嗎？')) return;
+    b.disabled = true;
+    try { const r = await POST('/panels/send', { key, channel_id: ch }); UI.ok(`已發送到 #${r.channel}`); }
+    finally { b.disabled = false; }
+  });
+
+  document.getElementById('anSend').onclick = async () => {
+    await POST('/announce', {
+      channel_id: document.getElementById('anCh').value,
+      title: document.getElementById('anTitle').value.trim(),
+      content: document.getElementById('anBody').value,
+      color: document.getElementById('anColor').value,
+      plain: document.getElementById('anPlain').value === '1',
+      mention_everyone: document.getElementById('anAll').value === '1'
+    });
+    UI.ok('公告已發送');
+  };
+  document.getElementById('anClose').onclick = async () => {
+    if (!await UI.confirm('確定要發送「今日已結單」公告嗎？')) return;
+    await POST('/announce/close-orders', { channel_id: document.getElementById('anCh').value });
+    UI.ok('已發送結單公告');
+  };
+  document.getElementById('poSend').onclick = async () => {
+    await POST('/polls', {
+      channel_id: document.getElementById('poCh').value,
+      title: document.getElementById('poTitle').value.trim(),
+      options: document.getElementById('poOpts').value
+    });
+    UI.ok('投票已發布');
+  };
+  document.getElementById('dmSend').onclick = async () => {
+    await POST('/dm', {
+      user_id: document.getElementById('dmUser').value.trim(),
+      content: document.getElementById('dmBody').value
+    });
+    UI.ok('私訊已送出');
+  };
 };
 
 // ---------------- 系統設定 ----------------

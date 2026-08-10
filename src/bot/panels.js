@@ -30,11 +30,12 @@ const post = async (msg, payload) => {
 };
 
 // ---------------- 面板建置指令 ----------------
-const commands = {
-  async sendrole(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, {
+// 每個面板的訊息內容。抽成獨立定義，讓 ! 前綴指令與後台「一鍵發送面板」共用同一份。
+const PANELS = {
+  'sendrole': {
+    label: '身分組領取',
+    build: guildId => ({
+      embeds: [emb(guildId, {
         title: '🎭 身分組領取',
         desc: '點下方按鈕領取／取消你的身分組。\n\n**老闆**：可下單、看金主專區\n**雨滴**：接收開單與活動通知'
       })],
@@ -42,13 +43,13 @@ const commands = {
         btn('role:boss', '我是老闆', ButtonStyle.Success, '👑'),
         btn('role:drop', '雨滴通知', ButtonStyle.Secondary, '💧')
       )]
-    });
+    })
   },
 
-  async 'setup-identity'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, {
+  'setup-identity': {
+    label: '身份大廳',
+    build: guildId => ({
+      embeds: [emb(guildId, {
         title: '《喚雨電競》身份大廳 🏡☔',
         desc: [
           'ฅ^•ﻌ•^ฅ 歡迎來到喚雨！',
@@ -80,13 +81,13 @@ const commands = {
         btn('role:traveler', '旅人', ButtonStyle.Primary, '🧳'),
         btn('role:cat', '寄宿貓貓', ButtonStyle.Success, '🐈')
       )]
-    });
+    })
   },
 
-  async sendorder(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, {
+  'sendorder': {
+    label: '下單前提醒',
+    build: guildId => ({
+      embeds: [emb(guildId, {
         title: '☔ 喚雨下單前提醒',
         desc: [
           '**⚠️ 下單前請先確認**',
@@ -114,56 +115,56 @@ const commands = {
         ].join('\n')
       })],
       components: [row(btn('order:start', '我已閱讀，開始下單', ButtonStyle.Success, '🪄'))]
-    });
+    })
   },
 
-  async 'setup-ticket'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '🎫 派單接待大廳', desc: '點擊下方按鈕開啟你的專屬下單頻道，客服將盡快為你服務。' })],
+  'setup-ticket': {
+    label: '派單接待大廳',
+    build: guildId => ({
+      embeds: [emb(guildId, { title: '🎫 派單接待大廳', desc: '點擊下方按鈕開啟你的專屬下單頻道，客服將盡快為你服務。' })],
       components: [row(btn('ticket:order', '開始下單', ButtonStyle.Success, '🛒'))]
-    });
+    })
   },
 
-  async 'setup-report'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '📝 喚雨｜自主報單系統', desc: '成員您好！請點擊下方按鈕開始填寫你的名稱。' })],
+  'setup-report': {
+    label: '自主報單系統',
+    build: guildId => ({
+      embeds: [emb(guildId, { title: '📝 喚雨｜自主報單系統', desc: '成員您好！請點擊下方按鈕開始填寫你的名稱。' })],
       components: [row(btn('report:self', '我要報單', ButtonStyle.Primary, '📄'))]
-    });
+    })
   },
 
-  async 'setup-checkout'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, {
+  'setup-checkout': {
+    label: '客服結帳台',
+    build: guildId => ({
+      embeds: [emb(guildId, {
         title: '🧾 喚雨｜客服結帳台',
         desc: '客服完成服務後於此結帳：系統會扣老闆雨幣、發出結帳明細，並產生供陪玩報單的訂單編號。'
       })],
       components: [row(btn('checkout:start', '我要結帳', ButtonStyle.Success, '🧾'))]
-    });
+    })
   },
 
-  async 'setup-report-cross'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '🌐 跨伺服器報單系統 1 號', desc: '外服合作單請由此回報。' })],
+  'setup-report-cross': {
+    label: '跨伺服器報單 1 號',
+    build: guildId => ({
+      embeds: [emb(guildId, { title: '🌐 跨伺服器報單系統 1 號', desc: '外服合作單請由此回報。' })],
       components: [row(btn('report:cross', '跨服報單', ButtonStyle.Primary, '🌐'))]
-    });
+    })
   },
 
-  async 'setup-report-cross-2'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '🎤 唱歌單跨服報單', desc: '唱歌類跨服訂單請由此回報。' })],
+  'setup-report-cross-2': {
+    label: '唱歌單跨服報單',
+    build: guildId => ({
+      embeds: [emb(guildId, { title: '🎤 唱歌單跨服報單', desc: '唱歌類跨服訂單請由此回報。' })],
       components: [row(btn('report:cross2', '唱歌跨服報單', ButtonStyle.Primary, '🎤'))]
-    });
+    })
   },
 
-  async 'setup-exam'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, {
+  'setup-exam': {
+    label: '考核入職開單說明',
+    build: guildId => ({
+      embeds: [emb(guildId, {
         title: '📋 喚雨｜考核入職開單說明',
         desc: [
           '歡迎來到喚雨電競',
@@ -186,44 +187,48 @@ const commands = {
         ].join('\n')
       })],
       components: [row(btn('exam:start', '開啟考核入職單', ButtonStyle.Success, '📋'))]
-    });
+    })
   },
 
-  async 'setup-bank'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '🏦 地下金庫', desc: '點擊查詢你目前的雨幣餘額、VIP 等級與消費紀錄（僅你自己看得到）。' })],
+  'setup-bank': {
+    label: '地下金庫',
+    build: guildId => ({
+      embeds: [emb(guildId, { title: '🏦 地下金庫', desc: '點擊查詢你目前的雨幣餘額、VIP 等級與消費紀錄（僅你自己看得到）。' })],
       components: [row(btn('bank:me', '查詢餘額', ButtonStyle.Primary, '🪙'))]
-    });
+    })
   },
 
-  async 'setup-intimacy'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '💞 愛戀藏館', desc: '查詢你與陪玩師之間的羈絆點數與特權進度。' })],
+  'setup-intimacy': {
+    label: '愛戀藏館',
+    build: guildId => ({
+      embeds: [emb(guildId, { title: '💞 愛戀藏館', desc: '查詢你與陪玩師之間的羈絆點數與特權進度。' })],
       components: [row(btn('intimacy:query', '查詢羈絆', ButtonStyle.Primary, '💞'))]
-    });
+    })
   },
 
-  async 'setup-suggestion'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '📮 意見投訴與建議箱', desc: '任何建議或申訴都歡迎提出，內容只有管理層看得到。' })],
+  'setup-suggestion': {
+    label: '意見投訴與建議箱',
+    build: guildId => ({
+      embeds: [emb(guildId, { title: '📮 意見投訴與建議箱', desc: '任何建議或申訴都歡迎提出，內容只有管理層看得到。' })],
       components: [row(btn('sug:public', '我要投稿', ButtonStyle.Secondary, '📮'))]
-    });
+    })
   },
 
-  async 'setup-staff-suggestion'(msg) {
-    adminOnly(msg);
-    await post(msg, {
-      embeds: [emb(msg.guild.id, {
+  'setup-staff-suggestion': {
+    label: '員工輔導室',
+    build: guildId => ({
+      embeds: [emb(guildId, {
         title: '🤝 喚雨｜員工輔導室',
         desc: '接收任何關於喚雨員工的專屬建議、投訴與問題。\n\n我們會絕對保密內容，僅後台管理可見！'
       })],
       components: [row(btn('sug:staff', '填寫問題', ButtonStyle.Primary, '📝'))]
-    });
+    })
   }
 };
+
+// ! 前綴指令：在目前頻道發出面板並刪掉指令原文
+const commands = Object.fromEntries(Object.keys(PANELS).map(key => [key,
+  async msg => { adminOnly(msg); await post(msg, PANELS[key].build(msg.guild.id)); }]));
 
 // ---------------- 互動處理 ----------------
 const eph = (i, e) => i.reply({ embeds: [e], ephemeral: true });
@@ -714,4 +719,4 @@ async function handleInteraction(i) {
   }
 }
 
-module.exports = { commands, handleInteraction };
+module.exports = { commands, handleInteraction, PANELS };
