@@ -37,6 +37,10 @@ ensureColumns('audit_logs', [
   ['channel_id', "TEXT NOT NULL DEFAULT ''"],
   ['status',     "TEXT NOT NULL DEFAULT 'ok'"]
 ]);
+ensureColumns('backpack', [
+  ['percent',   'INTEGER NOT NULL DEFAULT 0'],
+  ['min_spend', 'INTEGER NOT NULL DEFAULT 0']
+]);
 ensureColumns('gift_logs', [['order_no', "TEXT NOT NULL DEFAULT ''"]]);
 ensureColumns('tickets', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);
 ensureColumns('exams', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);

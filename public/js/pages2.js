@@ -99,10 +99,13 @@ Pages.backpack = async view => {
   const load = async (uid = '') => {
     const rows = await GET('/backpack?' + new URLSearchParams(uid ? { user_id: uid } : {}));
     document.getElementById('kt').innerHTML = H.table(
-      ['對象', '道具代號', '名稱', { label: '數量', num: 1 }, { label: '折價券面額', num: 1 }, '到期', '操作'],
+      ['對象', '道具代號', '名稱', { label: '數量', num: 1 }, { label: '面額', num: 1 },
+       { label: '折扣', num: 1 }, { label: '門檻', num: 1 }, '到期', '操作'],
       rows.map(r => `<tr><td>${H.user(r.user_id)}</td><td><code>${UI.esc(r.item_key)}</code></td>
         <td>${UI.esc(r.name)}</td><td class="num">${r.qty}</td>
-        <td class="num">${r.value ? H.n(r.value) : '—'}</td><td>${UI.esc(r.expires || '—')}</td>
+        <td class="num">${r.value ? H.n(r.value) : '—'}</td>
+        <td class="num">${r.percent ? r.percent + '%' : '—'}</td>
+        <td class="num">${r.min_spend ? H.n(r.min_spend) : '—'}</td><td>${UI.esc(r.expires || '—')}</td>
         <td><button class="btn danger sm" data-kd="${r.id}">刪除</button></td></tr>`));
     document.querySelectorAll('[data-kd]').forEach(b => b.onclick = async () => {
       await DEL('/backpack/' + b.dataset.kd); UI.ok('已刪除'); load(document.getElementById('ku').value.trim());
@@ -124,11 +127,16 @@ Pages.backpack = async view => {
         <label class="f"><span>數量</span><input name="qty" type="number" value="1"></label>
         <label class="f"><span>折價券面額（非折價券填 0）</span><input name="value" type="number" value="0"></label>
       </div>
+      <div class="row">
+        <label class="f"><span>折扣百分比（95 折填 5，非折扣券填 0）</span><input name="percent" type="number" value="0"></label>
+        <label class="f"><span>最低消費門檻（無門檻填 0）</span><input name="min_spend" type="number" value="0"></label>
+      </div>
       <label class="f"><span>到期日（選填）</span><input name="expires" type="date"></label>`,
     onOk: async back => {
       await POST('/backpack', {
         user_id: UI.val(back, 'user_id'), key: UI.val(back, 'key'), name: UI.val(back, 'name'),
         qty: Number(UI.val(back, 'qty')), value: Number(UI.val(back, 'value')),
+        percent: Number(UI.val(back, 'percent')), min_spend: Number(UI.val(back, 'min_spend')),
         expires: UI.val(back, 'expires') || null
       });
       UI.ok('已發放'); load(document.getElementById('ku').value.trim());
@@ -542,6 +550,13 @@ Pages.settings = async view => {
         <label class="f"><span>點我下單頻道</span><select name="channel_order_entry">${opts(res.channels, v.channel_order_entry)}</select></label>
         <label class="f"><span>點我入職頻道</span><select name="channel_exam_entry">${opts(res.channels, v.channel_exam_entry)}</select></label>
         <label class="f"><span>陪陪介紹／評價頻道</span><select name="channel_intro">${opts(res.channels, v.channel_intro)}</select></label>
+      </div>
+      <h4 style="margin:14px 0 6px">下單選單選項（逗號分隔，留空用預設）</h4>
+      <div class="grid c2">
+        <label class="f"><span>偏好性別</span><input name="order_genders" value="${UI.esc(v.order_genders || '')}" placeholder="女生陪玩,男生陪玩,都可以"></label>
+        <label class="f"><span>服務類型</span><input name="order_services" value="${UI.esc(v.order_services || '')}" placeholder="英雄聯盟,傳說對決,VALORANT,唱歌,聊天,其他"></label>
+        <label class="f"><span>加購選項</span><input name="order_addons" value="${UI.esc(v.order_addons || '')}" placeholder="指定稱呼,甜蜜單,聲優"></label>
+        <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '10')}"></label>
       </div>
       ${res.roles.length ? '' : '<div class="muted">機器人目前離線或尚未加入伺服器，因此無法列出身分組與頻道。</div>'}
     </div>

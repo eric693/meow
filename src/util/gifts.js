@@ -109,14 +109,55 @@ function sendGift({ guildId, customerId, customerName = '', staffId, giftKey, qt
 const listBackpack = (guildId, userId) =>
   db.prepare('SELECT * FROM backpack WHERE guild_id=? AND user_id=? AND qty > 0 ORDER BY id').all(orgOf(guildId), userId);
 
-function addItem(guildId, userId, { key, name, qty = 1, value = 0, expires = null }) {
+function addItem(guildId, userId, { key, name, qty = 1, value = 0, percent = 0, minSpend = 0, expires = null }) {
   guildId = orgOf(guildId);
-  db.prepare(`INSERT INTO backpack (guild_id, user_id, item_key, name, qty, value, expires) VALUES (?,?,?,?,?,?,?)
+  db.prepare(`INSERT INTO backpack (guild_id, user_id, item_key, name, qty, value, percent, min_spend, expires)
+              VALUES (?,?,?,?,?,?,?,?,?)
               ON CONFLICT(guild_id, user_id, item_key)
               DO UPDATE SET qty = qty + excluded.qty, name = excluded.name,
-                            value = excluded.value, expires = excluded.expires`)
-    .run(guildId, userId, key, name, Math.round(qty), Math.round(value), expires);
+                            value = excluded.value, percent = excluded.percent,
+                            min_spend = excluded.min_spend, expires = excluded.expires`)
+    .run(guildId, userId, key, name, Math.round(qty), Math.round(value),
+         Math.round(percent), Math.round(minSpend), expires);
   return listBackpack(guildId, userId);
+}
+
+// ---------- 折價券 ----------
+const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+
+/** 這筆金額可用的折價券（面額或折扣、未過期、達門檻） */
+function usableCoupons(guildId, userId, amount) {
+  return listBackpack(guildId, userId)
+    .filter(x => (x.value > 0 || x.percent > 0)
+              && (!x.expires || x.expires >= today())
+              && amount >= (x.min_spend || 0));
+}
+
+/** 這張券對這筆金額實際能折多少（不會超過訂單金額） */
+function couponDiscount(coupon, amount) {
+  if (!coupon) return 0;
+  const off = coupon.percent > 0
+    ? Math.floor(amount * coupon.percent / 100)
+    : coupon.value;
+  return Math.max(0, Math.min(amount, Math.round(off)));
+}
+
+/** 券面說明，例如「折價 100 元券」「95 折（滿 1,000）」 */
+function couponLabel(c) {
+  const base = c.percent > 0 ? `${c.name}（折 ${c.percent}%）` : `${c.name}（折抵 ${c.value} 元）`;
+  const cond = c.min_spend ? `・滿 ${c.min_spend}` : '';
+  return `${base}${cond}・剩 ${c.qty} 張`;
+}
+
+/** 使用一張券（扣 1 張，歸零就移除） */
+function useCoupon(guildId, userId, key) {
+  guildId = orgOf(guildId);
+  const c = db.prepare('SELECT * FROM backpack WHERE guild_id=? AND user_id=? AND item_key=?')
+    .get(guildId, userId, key);
+  if (!c || c.qty < 1) throw new Error('這張折價券已經不在背包裡了');
+  if (c.qty === 1) db.prepare('DELETE FROM backpack WHERE id=?').run(c.id);
+  else db.prepare('UPDATE backpack SET qty = qty - 1 WHERE id=?').run(c.id);
+  return c;
 }
 
 // ---------- 地盤（步數超過 21 自動歸 0）----------
@@ -134,5 +175,6 @@ function addTerritory(guildId, userId, delta) {
 module.exports = {
   seedGifts, listGifts, findGift, sendGift,
   addIntimacy, getIntimacy, rankOf, RANKS,
-  listBackpack, addItem, addTerritory
+  listBackpack, addItem, addTerritory,
+  usableCoupons, couponDiscount, couponLabel, useCoupon
 };

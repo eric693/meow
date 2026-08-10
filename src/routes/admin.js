@@ -37,7 +37,7 @@ router.get('/reports/export/withdrawals', (req, res) =>
 
 // ---------------- 系統設定 ----------------
 // 集團層設定：整個集團共用一份（品牌、分潤、VIP 門檻）
-const ORG_KEYS = ['brand_name', 'staff_share_rate', 'vip_thresholds', 'vip_names'];
+const ORG_KEYS = ['brand_name', 'staff_share_rate', 'vip_thresholds', 'vip_names', 'order_intimacy_rate'];
 // 單一伺服器設定：每台群組各自不同（身分組、頻道、分類、機器人狀態）
 const GUILD_KEYS = [
   'bot_activity',
@@ -53,7 +53,9 @@ const GUILD_KEYS = [
   'channel_member_system', 'channel_notice_log', 'channel_cs_lobby',
   // 入口類
   'channel_order_entry', 'channel_exam_entry', 'channel_intro',
-  'channel_command_log'
+  'channel_command_log',
+  // 下單選單選項（逗號分隔）
+  'order_genders', 'order_services', 'order_addons'
 ];
 const SETTING_KEYS = [...ORG_KEYS, ...GUILD_KEYS];
 

@@ -1,7 +1,7 @@
 // 面板建置（!sendrole / !sendorder / !setup-*）與其按鈕、表單互動
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField,
-  ModalBuilder, TextInputBuilder, TextInputStyle
+  ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder
 } = require('discord.js');
 const { db, getSetting, getCustomer, findStaff, getStaff, now, audit, orgOf } = require('../db');
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
@@ -9,6 +9,8 @@ const M = require('../util/money');
 const G = require('../util/gifts');
 const { checkoutMessage } = require('../util/checkout');
 const { parseSlots } = require('../util/slots');
+const S = require('../util/session');
+const CF = require('../util/checkout-flow');
 const { isAdmin, isCS } = require('./perm');
 
 const btn = (id, label, style = ButtonStyle.Primary, emoji) => {
@@ -200,6 +202,21 @@ async function createPrivateChannel(guild, member, { prefix, categoryKey, extraR
 }
 
 const REPORT_LABEL = { self: '自主報單', cross: '跨服報單 1 號', cross2: '唱歌單跨服報單' };
+
+// 下單選單的選項，皆可用後台設定覆蓋（逗號分隔）
+const DEFAULT_GENDERS = ['女生陪玩', '男生陪玩', '都可以'];
+const DEFAULT_SERVICES = ['英雄聯盟', '傳說對決', 'VALORANT', '唱歌', '聊天', '其他'];
+const DEFAULT_ADDONS = ['指定稱呼', '甜蜜單', '聲優'];
+
+const optionList = (guildId, key, fallback) => {
+  const arr = getSetting(key, '', guildId).split(',').map(x => x.trim()).filter(Boolean);
+  return (arr.length ? arr : fallback).slice(0, 25);
+};
+const selectRow = (customId, placeholder, values, maxValues = 1) =>
+  new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(placeholder)
+      .setMinValues(1).setMaxValues(Math.min(maxValues, values.length))
+      .addOptions(values.map(v => ({ label: v.slice(0, 100), value: v.slice(0, 100) }))));
 
 // 自主報單＝認領主群已結帳的訂單（金流已在結帳時完成，這裡只留服務紀錄與截圖）
 function reportModal(kind) {
@@ -401,51 +418,110 @@ async function handleInteraction(i) {
     return eph(i, ok(i.guildId, '結帳完成', `訂單編號 \`${o.order_no}\`，已扣款並通知老闆。`));
   }
 
-  // ---- 點單系統（下單前提醒面板 → 填單 → 專屬頻道）----
-  if (id === 'order:start') {
-    const exist = openOrderTicket(i);
-    if (exist) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${exist}>`));
-    return i.showModal(new ModalBuilder().setCustomId('orderm').setTitle('喚雨下單資料')
-      .addComponents(
-        input('service', '服務類型', { ph: '例：英雄聯盟 / 傳說對決 / 唱歌 / 聊天' }),
-        input('prefer', '性別與指定陪玩', { ph: '例：女陪、指定 lumi；沒有指定就填「不指定」' }),
-        input('when', '需求時段與時數', { ph: '例：今晚 21:00 起 2 小時' }),
-        input('addon', '加購選項（可留空）', { required: false, ph: '稱呼 / 甜蜜單 / 聲優' }),
-        input('note', '備註（可留空）', { required: false, style: TextInputStyle.Paragraph,
-          ph: '特殊需求請在這裡補充，實際安排以客服確認為準' })
-      ));
+  // ---- 互動式結帳（選券 → 預覽 → 付款方式）----
+  if (id.startsWith('co:')) {
+    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以結帳。');
+    const [, act, sid, pay] = id.split(':');
+    const sess = S.get(sid);
+    if (!sess) return eph(i, err(i.guildId, '這筆結帳已逾時（超過 15 分鐘），請重新執行 /結帳。'));
+
+    if (act === 'pick') {
+      const picked = i.values[0];
+      S.update(sid, { couponKey: picked === 'none' ? '' : picked });
+      return i.update(CF.preview(sid, S.get(sid)));
+    }
+    if (act === 'cancel') {
+      S.drop(sid);
+      return i.update({ embeds: [ok(i.guildId, '已取消結帳', '沒有建立任何訂單，折價券也未扣除。')], components: [] });
+    }
+    if (act === 'pay') {
+      let r;
+      try { r = CF.finish(sid, pay); }
+      catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
+      await i.update({ embeds: [ok(i.guildId, '結帳完成',
+        `訂單編號 \`${r.order.order_no}\`　實付 **${r.order.amount}** 元　`
+        + `${r.cash ? '現金／轉帳（未扣雨幣）' : '雨幣扣款'}`
+        + `${r.coupon ? `\n已使用折價券：${r.coupon.name}（折抵 ${r.discount} 元）` : ''}`)],
+        components: [] });
+      return i.channel.send(r.message);
+    }
   }
-  if (id === 'orderm') {
-    const exist = openOrderTicket(i);
-    if (exist) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${exist}>`));
-    await i.deferReply({ ephemeral: true });
-    const f = k => (i.fields.getTextInputValue(k) || '').trim();
-    const ch = await createPrivateChannel(i.guild, i.member,
-      { prefix: '下單', categoryKey: 'category_ticket', extraRoleKeys: ['role_cs', 'role_admin'] });
-    const info = db.prepare("INSERT INTO tickets (guild_id, src_guild, channel_id, customer_id, kind, subject) VALUES (?,?,?,?,'order',?)")
-      .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, f('service'));
-    const csRole = getSetting('role_cs', '', i.guildId);
-    await ch.send({
-      content: [mention(i.user.id), csRole ? `<@&${csRole}>` : ''].filter(Boolean).join(' ') + ' 新的下單需求！',
-      embeds: [emb(i.guildId, {
-        title: '🪄 下單資料',
-        fields: [
-          { name: '下單者', value: mention(i.user.id), inline: true },
-          { name: '服務類型', value: f('service'), inline: true },
-          { name: '性別／指定陪玩', value: f('prefer'), inline: true },
-          { name: '需求時段與時數', value: f('when') },
-          { name: '加購選項', value: f('addon') || '（無）', inline: true },
-          { name: '備註', value: f('note') || '（無）' }
-        ],
-        footer: '本表單僅建立下單資料，尚未完成付款或排單。客服通知後 15 分鐘內未回覆將視同棄單。'
-      })],
-      components: [row(
-        btn(`ticket:claim:${info.lastInsertRowid}`, '客服接單', ButtonStyle.Success, '🙋'),
-        btn(`ticket:close:${info.lastInsertRowid}`, '關閉頻道', ButtonStyle.Danger, '🔒')
-      )]
+
+  // ---- 點單系統（面板 → 性別 → 服務類型 → 加購 → 備註 → 專屬頻道）----
+  if (id === 'order:start') {
+    const open = openOrderTicket(i);
+    if (open) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${open}>`));
+    const sid = S.put({ guildId: i.guildId, userId: i.user.id });
+    return i.reply({
+      embeds: [emb(i.guildId, { title: '🪄 開始下單（1/4）', desc: '請選擇您偏好的性別：' })],
+      components: [selectRow(`ord:gender:${sid}`, '請選擇您偏好的性別', optionList(i.guildId, 'order_genders', DEFAULT_GENDERS))],
+      ephemeral: true
     });
-    return i.editReply({ embeds: [ok(i.guildId, '下單資料已送出',
-      `請前往你的專屬頻道等待客服確認：${ch}`)] });
+  }
+  if (id.startsWith('ord:')) {
+    const [, step, sid] = id.split(':');
+    const sess = S.get(sid);
+    if (!sess) return eph(i, err(i.guildId, '這次下單已逾時（超過 15 分鐘），請重新點一次按鈕。'));
+
+    if (step === 'gender') {
+      S.update(sid, { gender: i.values[0] });
+      return i.update({
+        embeds: [emb(i.guildId, { title: '🪄 開始下單（2/4）', desc: `偏好性別：**${i.values[0]}**\n\n請選擇服務類型：` })],
+        components: [selectRow(`ord:service:${sid}`, '請選擇服務類型', optionList(i.guildId, 'order_services', DEFAULT_SERVICES))]
+      });
+    }
+    if (step === 'service') {
+      S.update(sid, { service: i.values[0] });
+      const addons = optionList(i.guildId, 'order_addons', DEFAULT_ADDONS);
+      return i.update({
+        embeds: [emb(i.guildId, { title: '🪄 開始下單（3/4）', desc: `服務類型：**${i.values[0]}**\n\n請選擇加購選項（可複選，沒有就選「不加購」）：` })],
+        components: [selectRow(`ord:addon:${sid}`, '請選擇加購選項', ['不加購', ...addons], addons.length + 1)]
+      });
+    }
+    if (step === 'addon') {
+      S.update(sid, { addons: i.values.filter(v => v !== '不加購') });
+      return i.showModal(new ModalBuilder().setCustomId(`ord:final:${sid}`).setTitle('下單資料（4/4）')
+        .addComponents(
+          input('when', '需求時段與時數', { ph: '例：今晚 21:00 起 2 小時' }),
+          input('prefer', '指定陪玩（可留空）', { required: false, ph: '例：指定 lumi；沒有就留空' }),
+          input('note', '備註（可留空）', { required: false, style: TextInputStyle.Paragraph,
+            ph: '特殊需求請在這裡補充，實際安排以客服確認為準' })
+        ));
+    }
+    if (step === 'final') {
+      const open = openOrderTicket(i);
+      if (open) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${open}>`));
+      await i.deferReply({ ephemeral: true });
+      const f = k => (i.fields.getTextInputValue(k) || '').trim();
+      const ch = await createPrivateChannel(i.guild, i.member,
+        { prefix: '下單', categoryKey: 'category_ticket', extraRoleKeys: ['role_cs', 'role_admin'] });
+      const info = db.prepare("INSERT INTO tickets (guild_id, src_guild, channel_id, customer_id, kind, subject) VALUES (?,?,?,?,'order',?)")
+        .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, sess.service || '下單');
+      const csRole = getSetting('role_cs', '', i.guildId);
+      await ch.send({
+        content: [mention(i.user.id), csRole ? `<@&${csRole}>` : ''].filter(Boolean).join(' ') + ' 新的下單需求！',
+        embeds: [emb(i.guildId, {
+          title: '🪄 下單資料',
+          fields: [
+            { name: '下單者', value: mention(i.user.id), inline: true },
+            { name: '偏好性別', value: sess.gender || '不指定', inline: true },
+            { name: '服務類型', value: sess.service || '—', inline: true },
+            { name: '需求時段與時數', value: f('when') },
+            { name: '加購選項', value: sess.addons?.length ? sess.addons.join('、') : '（無）', inline: true },
+            { name: '指定陪玩', value: f('prefer') || '（不指定）', inline: true },
+            { name: '備註', value: f('note') || '（無）' }
+          ],
+          footer: '本表單僅建立下單資料，尚未完成付款或排單。客服通知後 15 分鐘內未回覆將視同棄單。'
+        })],
+        components: [row(
+          btn(`ticket:claim:${info.lastInsertRowid}`, '客服接單', ButtonStyle.Success, '🙋'),
+          btn(`ticket:close:${info.lastInsertRowid}`, '關閉頻道', ButtonStyle.Danger, '🔒')
+        )]
+      });
+      S.drop(sid);
+      return i.editReply({ embeds: [ok(i.guildId, '下單資料已送出',
+        `請前往你的專屬頻道等待客服確認：${ch}`)] });
+    }
   }
 
   // ---- 下單傳票 ----

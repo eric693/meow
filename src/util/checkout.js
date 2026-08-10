@@ -1,12 +1,13 @@
 // 主群「結帳明細」訊息：客服結完帳後通知老闆，並附上供陪玩報單用的訂單編號
 const { getSetting, getCustomer, orgOf } = require('../db');
 const { emb, mention, brand, COLOR } = require('./embed');
+const { vipName } = require('./reports');
 
 const LINE = '━━━━━━━━━━━━━━━━━━';
 
 /** 產生 { content, embeds }，可直接丟給 channel.send() */
 function checkoutMessage(guildId, o) {
-  const vip = getCustomer(orgOf(guildId), o.customer_id).vip_level;
+  const vip = vipName(guildId, getCustomer(orgOf(guildId), o.customer_id).vip_level);
   const discount = Math.max(0, o.list_price - o.amount);
   const introId = getSetting('channel_intro', '', guildId);
   const intro = introId ? `<#${introId}>` : '〈陪陪介紹〉';
@@ -25,7 +26,7 @@ function checkoutMessage(guildId, o) {
     desc: [
       LINE,
       `👤 消費金主：${mention(o.customer_id)}`,
-      `👑 金主等級：VIP ${vip}`,
+      `👑 金主等級：${vip}`,
       `🎀 服務陪玩：${mention(o.staff_id)}`,
       '',
       '📝 **訂單折帳明細**',

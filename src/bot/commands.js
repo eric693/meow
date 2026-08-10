@@ -9,15 +9,12 @@ const commands = [
     .addBooleanOption(o => o.setName('公開').setDescription('讓整個頻道都看得到，預設只有你看得到')),
 
   // ---- 財務與結帳 ----
-  b('結帳', '一般結帳：扣款、計算拆帳與親密度並發布結帳明細')
+  b('結帳', '一般結帳：選折價券與付款方式，計算拆帳與親密度並發布結帳明細')
     .addUserOption(o => o.setName('客人').setDescription('付款的老闆').setRequired(true))
     .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
     .addIntegerOption(o => o.setName('金額').setDescription('客人實付金額').setRequired(true).setMinValue(1))
     .addIntegerOption(o => o.setName('原價').setDescription('未折扣前的訂單原價，不填視為與實付相同').setMinValue(0))
     .addStringOption(o => o.setName('項目').setDescription('例：娛樂4場、唱歌2小時'))
-    .addStringOption(o => o.setName('支付方式').setDescription('預設「雨幣扣款」')
-      .addChoices({ name: '雨幣扣款', value: '雨幣扣款' }, { name: '現金匯款', value: '現金匯款' },
-                  { name: '免費體驗', value: '免費體驗' }))
     .addStringOption(o => o.setName('備註').setDescription('寫進流水帳的備註')),
 
   b('身分組結帳', '身分組專屬結帳（如獨顯-週／獨顯-月），完成後免核銷')

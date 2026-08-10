@@ -204,7 +204,9 @@ CREATE TABLE IF NOT EXISTS backpack (
   item_key TEXT NOT NULL,
   name     TEXT NOT NULL DEFAULT '',
   qty      INTEGER NOT NULL DEFAULT 1,
-  value    INTEGER NOT NULL DEFAULT 0,   -- 折價券面額
+  value    INTEGER NOT NULL DEFAULT 0,   -- 折價券面額（固定折抵金額）
+  percent  INTEGER NOT NULL DEFAULT 0,   -- 折扣百分比（95 折填 5，代表折抵 5%）
+  min_spend INTEGER NOT NULL DEFAULT 0,  -- 最低消費門檻（滿額才能用）
   expires  TEXT,
   UNIQUE (guild_id, user_id, item_key)
 );

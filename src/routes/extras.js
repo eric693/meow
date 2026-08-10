@@ -55,9 +55,9 @@ router.get('/backpack', (req, res) => {
   res.json(db.prepare(`SELECT * FROM backpack WHERE ${cond.join(' AND ')} ORDER BY user_id, id`).all(...args));
 });
 router.post('/backpack', (req, res) => {
-  const { user_id, key, name, qty = 1, value = 0, expires = null } = req.body || {};
+  const { user_id, key, name, qty = 1, value = 0, percent = 0, min_spend = 0, expires = null } = req.body || {};
   if (!user_id || !key || !name) return res.status(400).json({ error: '請填寫對象、道具代號與名稱' });
-  G.addItem(req.orgId, String(user_id), { key, name, qty, value, expires });
+  G.addItem(req.orgId, String(user_id), { key, name, qty, value, percent, minSpend: min_spend, expires });
   audit(req.user.name, '發放道具', `${name}×${qty} → ${user_id}`, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });

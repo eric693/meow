@@ -3,6 +3,7 @@ const { db, getCustomer, findStaff, getStaff, addCoins, refreshVip, audit, orgOf
 const M = require('../util/money');
 const { checkoutMessage } = require('../util/checkout');
 const { parseSlots } = require('../util/slots');
+const CF = require('../util/checkout-flow');
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const G = require('../util/gifts');
 const R = require('../util/reports');
@@ -34,21 +35,22 @@ const handlers = {
   async 結帳(i) {
     if (!isCS(i.member)) return deny(i);
     const u = i.options.getUser('客人');
-    const s = resolveStaff(i);
+    const st = resolveStaff(i);
     const paid = i.options.getInteger('金額');
     const list = i.options.getInteger('原價') ?? paid;
     if (list < paid) return i.reply({ embeds: [err(i.guildId, '訂單原價不可小於客人實付金額。')], ephemeral: true });
     const item = i.options.getString('項目') || '陪玩服務';
     const { qty } = parseSlots(item);
-    const o = M.createOrder({
-      guildId: i.guildId, customerId: u.id, customerName: u.username,
-      staffId: s.user_id, csId: i.user.id, csName: i.user.tag,
-      item, qty, unitPrice: Math.round(paid / (qty || 1)),
-      listPrice: list, amount: paid, source: 'ticket', operator: i.user.tag,
-      payMethod: i.options.getString('支付方式') || '雨幣扣款',
+    // 指令帶的「金額」若低於原價，差額視為客服手動折讓，之後再疊加背包券
+    const { payload } = CF.start({
+      guildId: i.guildId,
+      customerId: u.id, customerName: u.username,
+      staffId: st.user_id, staffName: st.name || st.code,
+      csId: i.user.id, csName: i.user.tag,
+      item, qty, list, manualDiscount: list - paid,
       note: i.options.getString('備註') || ''
     });
-    await i.reply(checkoutMessage(i.guildId, o));
+    await i.reply({ ...payload, ephemeral: true });
   },
 
   async 身分組結帳(i) {
