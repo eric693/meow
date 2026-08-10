@@ -45,6 +45,44 @@ const commands = {
     });
   },
 
+  async 'setup-identity'(msg) {
+    adminOnly(msg);
+    await post(msg, {
+      embeds: [emb(msg.guild.id, {
+        title: '《喚雨電競》身份大廳 🏡☔',
+        desc: [
+          'ฅ^•ﻌ•^ฅ 歡迎來到喚雨！',
+          '',
+          '這裡不是普通的陪玩店，',
+          '而是一間能讓旅人暫時歇息的 **小小民宿** 🏡💙',
+          '',
+          '🐾 民宿裡住著一群可愛的貓貓，',
+          '等待與每位旅人相遇 ( ˶ˆ꒳ˆ˵ )♡',
+          '',
+          '**請先選擇你的身份** ✨',
+          '',
+          '🧳 **旅人**',
+          '帶著故事而來，希望遇見陪伴自己的貓貓 ☔',
+          '',
+          '🐈 **寄宿貓貓**',
+          '用溫暖、陪伴與歡笑，迎接每一位旅人 ♡',
+          '',
+          '🌧️ 點擊下方按鈕完成入住吧！',
+          '',
+          '╭────────────╮',
+          '☔ 願所有相遇，都剛剛好。',
+          '🏡 願每位旅人，都有貓貓陪伴。',
+          '🐈 願每隻貓貓，都能找到自己的旅人。',
+          '╰────────────╯'
+        ].join('\n')
+      })],
+      components: [row(
+        btn('role:traveler', '旅人', ButtonStyle.Primary, '🧳'),
+        btn('role:cat', '寄宿貓貓', ButtonStyle.Success, '🐈')
+      )]
+    });
+  },
+
   async sendorder(msg) {
     adminOnly(msg);
     await post(msg, {
@@ -254,7 +292,10 @@ async function handleInteraction(i) {
 
   // ---- 身分組領取 ----
   if (id.startsWith('role:')) {
-    const key = id === 'role:boss' ? 'role_boss' : 'role_drop';
+    // 身分大廳的「旅人／寄宿貓貓」與舊的「老闆／雨滴」共用同一套領取邏輯
+    const ROLE_KEY = { 'role:boss': 'role_boss', 'role:traveler': 'role_boss',
+                       'role:cat': 'role_player', 'role:drop': 'role_drop' };
+    const key = ROLE_KEY[id] || 'role_drop';
     const rid = getSetting(key, '', i.guildId);
     if (!rid) return eph(i, err(i.guildId, '管理員尚未在後台設定這個身分組。'));
     const has = i.member.roles.cache.has(rid);

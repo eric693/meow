@@ -41,7 +41,7 @@ const SECTIONS = [
          + '`!setup-report` 自主報單　`!setup-report-cross` `!setup-report-cross-2` 跨服報單\n'
          + '`!setup-exam` 考核報名　`!setup-bank` 地下金庫　`!setup-intimacy` 愛戀藏館\n'
          + '`!setup-suggestion` 意見箱　`!setup-staff-suggestion` 員工輔導室\n'
-         + '`!sendrole` 身分組領取　`!sendorder` 下單前提醒' },
+         + '`!setup-identity` 身份大廳　`!sendrole` 身分組領取　`!sendorder` 下單前提醒' },
 
   { name: '🧾 結帳流程',
     value: '**1.** 客服在主群 `!結帳` → 扣款並產生 `ORD-` 編號\n'
