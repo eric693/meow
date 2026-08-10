@@ -4,6 +4,10 @@ const { SlashCommandBuilder } = require('discord.js');
 const b = (name, desc) => new SlashCommandBuilder().setName(name).setDescription(desc);
 
 const commands = [
+  // ---- 說明 ----
+  b('help', '顯示喚雨機器喵的全部指令與權限說明')
+    .addBooleanOption(o => o.setName('公開').setDescription('讓整個頻道都看得到，預設只有你看得到')),
+
   // ---- 查詢與報表 ----
   b('對帳', '查詢特定老闆在特定陪玩身上的累計消費金額與次數')
     .addUserOption(o => o.setName('客人').setDescription('老闆').setRequired(true))

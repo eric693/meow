@@ -6,6 +6,7 @@ const M = require('../util/money');
 const R = require('../util/reports');
 const { isAdmin, isCS } = require('./perm');
 const { checkoutMessage } = require('../util/checkout');
+const { helpEmbed } = require('../util/help');
 const panels = require('./panels');
 
 const firstId = (msg, argStr) => {
@@ -266,18 +267,7 @@ const handlers = {
   },
 
   async 指令(msg) {
-    await msg.reply({ embeds: [emb(msg.guild.id, {
-      title: '📖 喚雨機器喵 指令總覽',
-      desc: '完整說明與後台管理：https://meow.crownai.ink',
-      fields: [
-        { name: '📊 查詢與統計', value: '`!消費查詢` `!查點單` `!消費榜` `!薪資查詢` `!全服雨幣` `!雨幣查詢` `!業績查詢` `!客服業績`' },
-        { name: '📤 匯出', value: '`!匯出消費總表` `!匯出報表` `!匯出提領報表` `!財務報表`' },
-        { name: '🔧 日常操作', value: '`!結帳 @老闆 陪玩 原價 [折抵] [支付方式]` `!核銷 編號` `!未銷` `!結單` `!退單` `!儲值` `!扣款` `!提領` `!離職` `!刷新人事`' },
-        { name: '⚙️ 面板建置', value: '`!sendrole` `!sendorder` `!setup-ticket` `!setup-checkout` `!setup-report` `!setup-report-cross` `!setup-report-cross-2` `!setup-exam` `!setup-bank` `!setup-intimacy` `!setup-suggestion` `!setup-staff-suggestion`' },
-        { name: '📖 玩家手冊', value: '`!手冊`　https://meow.crownai.ink/rules' },
-        { name: '⌨️ 斜線指令', value: '`/對帳` `/陪玩業績詳報` `/送禮` `/愛戀查詢` `/親密調整` `/vip等級` `/背包查詢` `/新增地盤` `/發布投票` `/入職`' }
-      ]
-    })] });
+    await msg.reply({ embeds: [helpEmbed(msg.guild.id)] });
   }
 };
 

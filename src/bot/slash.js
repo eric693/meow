@@ -4,6 +4,7 @@ const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const G = require('../util/gifts');
 const R = require('../util/reports');
 const { isAdmin, isCS } = require('./perm');
+const { helpEmbed } = require('../util/help');
 
 const deny = i => i.reply({ embeds: [err(i.guildId, '你沒有使用這個指令的權限。')], ephemeral: true });
 
@@ -16,6 +17,12 @@ function resolveStaff(i, key = '陪玩') {
 }
 
 const handlers = {
+  // ---------- 說明 ----------
+  async help(i) {
+    const pub = i.options.getBoolean('公開') || false;
+    await i.reply({ embeds: [helpEmbed(i.guildId)], ephemeral: !pub });
+  },
+
   // ---------- 查詢與報表 ----------
   async 對帳(i) {
     if (!isCS(i.member)) return deny(i);
