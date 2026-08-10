@@ -189,7 +189,7 @@ function settleOrder(guildId, orderNo, operator = '') {
   guildId = orgOf(guildId);
   const o = db.prepare('SELECT * FROM orders WHERE guild_id = ? AND order_no = ?').get(guildId, orderNo);
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
-  if (o.status === 'settled') throw new Error(`訂單 ${orderNo} 已核銷過`);
+  if (o.status === 'settled') throw new Error(`這筆訂單（${o.order_no}）已經核銷過了！`);
   if (o.status === 'refunded') throw new Error(`訂單 ${orderNo} 已退單，無法核銷`);
 
   db.transaction(() => {

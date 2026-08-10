@@ -457,20 +457,32 @@ async function handleInteraction(i) {
   // 自主報單：先問名稱 → 建立個人報單頻道 → 在頻道內填寫明細
   if (id === 'report:self') {
     if (!canReport()) return denyEph(i, '只有在職員工可以報單。');
-    return i.showModal(new ModalBuilder().setCustomId('reportch').setTitle('自主報單系統')
-      .addComponents(input('name', '你的名稱', { ph: '例：羊毛毛' })));
+    return i.showModal(new ModalBuilder().setCustomId('reportch').setTitle('📄 自主報單系統')
+      .addComponents(input('name', '請輸入此份報單的名稱', { ph: '例：羊毛毛' })));
   }
   if (id === 'reportch') {
     await i.deferReply({ ephemeral: true });
     const name = i.fields.getTextInputValue('name').trim();
-    const ch = await createPrivateChannel(i.guild, i.member,
-      { prefix: name, categoryKey: 'category_report', extraRoleKeys: ['role_cs', 'role_admin'] });
-    await ch.setName(`${name}報單`.slice(0, 90)).catch(() => {});
-    await ch.send({
-      content: mention(i.user.id),
-      embeds: [emb(i.guildId, { title: '📄 報單頻道', desc: '請點擊下方按鈕填寫報單明細，送出後於本頻道補上對局截圖。' })],
-      components: [row(btn('reportform:self', '填寫報單明細', ButtonStyle.Primary, '📄'))]
+    const ch = await createPrivateChannel(i.guild, i.member, {
+      name: `📄│${name}報單`,
+      categoryKey: 'category_report',
+      extraRoleKeys: ['role_cs', 'role_admin']
     });
+    await ch.send({
+      content: `${mention(i.user.id)} 您的專屬報單通道已建立！`,
+      embeds: [emb(i.guildId, {
+        title: '📝 報單內容提交',
+        desc: `**報單人：** ${mention(i.user.id)}\n\n請在下方提供詳細的報單數據或截圖，管理團隊將會儘速為您處理。`
+      })]
+    });
+    const panel = await ch.send({
+      embeds: [emb(i.guildId, {
+        title: '📄 跨伺服器報單中心',
+        desc: '陪玩專用：請點擊下方按鈕填寫報單資料！'
+      })],
+      components: [row(btn('reportform:self', '填寫報單', ButtonStyle.Primary, '📄'))]
+    });
+    await panel.pin().catch(() => {});
     return i.editReply({ embeds: [ok(i.guildId, '報單頻道已建立', `請前往填寫詳細內容：${ch}`)] });
   }
 
@@ -528,8 +540,9 @@ async function handleInteraction(i) {
     const csRole = getSetting('role_cs', '', i.guildId);
     const content = [mention(staff.user_id), csRole ? `<@&${csRole}>` : '', '您的報單已產生：']
       .filter(Boolean).join(' ');
+    await i.reply({ embeds: [ok(i.guildId, '報單已成功發布！', null)], ephemeral: true });
     await sendToChannel(i.guild, 'channel_order_log', { content, embeds: [body] });
-    return i.reply({ content, embeds: [body] });
+    return i.channel.send({ content, embeds: [body] });
   }
 
   // ---- 客服結帳 ----
