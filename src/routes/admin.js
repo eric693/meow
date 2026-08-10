@@ -23,7 +23,7 @@ router.get('/reports/summary', (req, res) => {
 });
 router.delete('/reports/cs', (req, res) => {
   const c = db.prepare('DELETE FROM cs_stats WHERE guild_id=?').run(req.orgId).changes;
-  audit(req.user.name, '清空客服業績', `${c} 筆`, req.orgId);
+  audit(req.user.name, '清空客服業績', `${c} 筆`, req.orgId, { source: 'web' });
   res.json({ ok: true, deleted: c });
 });
 
@@ -71,7 +71,7 @@ router.put('/config', (req, res) => {
   const b = req.body || {};
   for (const k of ORG_KEYS) if (k in b) setSetting(k, b[k], req.orgId);
   for (const k of GUILD_KEYS) if (k in b) setSetting(k, b[k], req.guildId);
-  audit(req.user.name, '更新系統設定', '', req.orgId);
+  audit(req.user.name, '更新系統設定', '', req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
 
@@ -100,12 +100,12 @@ router.put('/org', guardModule('settings'), (req, res) => {
   const after = orgOf(guild_id);
   // 把這台伺服器原本自己那份營運資料搬進新集團，避免舊帳失聯
   const moved = migrate && before !== after ? migrateOrgData(before, after) : 0;
-  audit(req.user.name, '集團綁定', `${guild_id} → ${after}（搬移 ${moved} 筆）`, after);
+  audit(req.user.name, '集團綁定', `${guild_id} → ${after}（搬移 ${moved} 筆）`, after, { source: 'web' });
   res.json({ ok: true, org_id: after, moved });
 });
 
 // ---------------- 操作紀錄 ----------------
-router.get('/logs', guardModule('settings'), (req, res) => {
+router.get('/logs', guardModule('logs'), (req, res) => {
   const q = req.query;
   const cond = ["guild_id IN (?, '')"], args = [req.orgId];
   if (q.source) { cond.push('source = ?'); args.push(q.source); }
@@ -169,7 +169,7 @@ router.post('/users', (req, res) => {
       .run(username, bcrypt.hashSync(password, 10), name, role === 'admin' ? 'admin' : 'staff', perms,
            (Array.isArray(guild_ids) ? guild_ids : []).join(','));
   } catch { return res.status(400).json({ error: '帳號已存在' }); }
-  audit(req.user.name, '新增後台帳號', username);
+  audit(req.user.name, '新增後台帳號', username, '', { source: 'web' });
   res.json({ ok: true });
 });
 router.put('/users/:id', (req, res) => {
@@ -188,7 +188,7 @@ router.put('/users/:id', (req, res) => {
     if (String(b.password).length < 8) return res.status(400).json({ error: '密碼至少 8 碼' });
     db.prepare('UPDATE admin_users SET password_hash=? WHERE id=?').run(bcrypt.hashSync(b.password, 10), u.id);
   }
-  audit(req.user.name, '編輯後台帳號', u.username);
+  audit(req.user.name, '編輯後台帳號', u.username, '', { source: 'web' });
   res.json({ ok: true });
 });
 router.delete('/users/:id', (req, res) => {

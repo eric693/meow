@@ -38,6 +38,7 @@ const NAV = [
   { key: 'reports',   label: '報表與匯出' },
   { key: 'panels',    label: '面板指令表' },
   { key: 'settings',  label: '系統設定' },
+  { key: 'logs',      label: '操作紀錄' },
   { key: 'users',     label: '帳號權限' }
 ].map(n => ({ ...n, icon: ICONS[n.key] }));
 

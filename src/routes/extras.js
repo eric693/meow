@@ -22,7 +22,7 @@ router.post('/gifts', (req, res) => {
               ON CONFLICT(guild_id, key) DO UPDATE SET name=excluded.name, emoji=excluded.emoji,
                 price=excluded.price, intimacy=excluded.intimacy, sort=excluded.sort, active=1`)
     .run(req.orgId, key, name, emoji, Math.round(price), Math.round(intimacy), Math.round(sort));
-  audit(req.user.name, '設定禮物款式', name, req.orgId);
+  audit(req.user.name, '設定禮物款式', name, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
 router.delete('/gifts/:key', (req, res) => {
@@ -43,7 +43,7 @@ router.get('/intimacy', (req, res) => {
 router.post('/intimacy/adjust', (req, res) => {
   const { customer_id, staff_id, delta } = req.body || {};
   const pts = G.addIntimacy(req.orgId, String(customer_id), String(staff_id), Number(delta));
-  audit(req.user.name, '親密度調整', `${customer_id}×${staff_id} ${delta}`, req.orgId);
+  audit(req.user.name, '親密度調整', `${customer_id}×${staff_id} ${delta}`, req.orgId, { source: 'web' });
   res.json({ points: pts, rank: G.rankOf(pts) });
 });
 
@@ -58,7 +58,7 @@ router.post('/backpack', (req, res) => {
   const { user_id, key, name, qty = 1, value = 0, expires = null } = req.body || {};
   if (!user_id || !key || !name) return res.status(400).json({ error: '請填寫對象、道具代號與名稱' });
   G.addItem(req.orgId, String(user_id), { key, name, qty, value, expires });
-  audit(req.user.name, '發放道具', `${name}×${qty} → ${user_id}`, req.orgId);
+  audit(req.user.name, '發放道具', `${name}×${qty} → ${user_id}`, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
 router.delete('/backpack/:id', (req, res) => {
@@ -84,7 +84,7 @@ router.get('/exams', (req, res) =>
 router.put('/exams/:id', (req, res) => {
   const st = ['pending', 'passed', 'failed'].includes(req.body?.status) ? req.body.status : 'pending';
   db.prepare('UPDATE exams SET status=? WHERE id=? AND guild_id=?').run(st, req.params.id, req.orgId);
-  audit(req.user.name, '考核審核', `#${req.params.id} ${st}`, req.orgId);
+  audit(req.user.name, '考核審核', `#${req.params.id} ${st}`, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
 router.get('/suggestions', (req, res) => {

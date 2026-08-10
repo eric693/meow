@@ -47,17 +47,33 @@ const commands = {
     adminOnly(msg);
     await post(msg, {
       embeds: [emb(msg.guild.id, {
-        title: '☔ 喚雨下單前提醒',
+        title: '☂️ 喚雨下單前提醒',
         desc: [
-          '**1. 儲值** — 先向客服儲值雨幣，餘額可用 `!消費查詢` 查看。',
-          '**2. 選人** — 到陪玩名片區挑選喜歡的陪玩師，記下代號。',
-          '**3. 下單** — 到「開始下單」面板開單，客服會為你安排。',
-          '**4. 核銷** — 服務結束後由客服核銷，陪玩才會入帳。',
+          '**⚠️ 下單前請先確認**',
           '',
-          '⚠️ 禁止私下交易、辱罵、騷擾陪玩，違者永久黑名單且不退款。',
-          '⚠️ 退單需在服務開始前提出，服務中恕不退費。'
+          '・請依照選單完成服務類型、性別、需求與加購選項',
+          '・本店服務預設為 1 陪 1',
+          '・若需要 1 陪多，請務必提前告知客服，並由客服確認是否可安排',
+          '・若需指定稱呼、甜蜜單、聲優，請在加購選項中勾選',
+          '・若有特殊需求，請在備註欄補充，實際安排以客服確認為準',
+          '',
+          '**⚠️ 訂單流程提醒**',
+          '',
+          '送出訂單後，請依照客服指示完成確認與後續流程。',
+          '若客服通知後 15 分鐘內未回覆、未補資料或未完成指定流程，將視同棄單。',
+          '',
+          '本表單僅作為下單資料建立，不代表訂單已完成付款或排單。',
+          '送出訂單後，請等待客服確認價格、時段與可接單人員。',
+          '',
+          '**🤍 喚雨提醒**',
+          '',
+          '請勿重複送單、惡意測試表單或使用不實資料。',
+          '若因資料錯誤、未即時回覆或未完成流程導致安排延誤，需由下單者自行負責。',
+          '',
+          '**點擊下方按鈕開始下單。**'
         ].join('\n')
-      })]
+      })],
+      components: [row(btn('order:start', '我已閱讀，開始下單', ButtonStyle.Success, '🪄'))]
     });
   },
 
@@ -205,6 +221,14 @@ function reportModal(kind) {
     input('slots', '報單場次／小時', { ph: '例：娛樂4場' }),
     input('price', '單價（雨幣）', { ph: '例：300' })
   );
+}
+
+/** 這個人是否已經有進行中的下單頻道；有的話回傳頻道 ID */
+function openOrderTicket(i) {
+  const t = db.prepare("SELECT * FROM tickets WHERE guild_id=? AND customer_id=? AND kind='order' AND status!='closed'")
+    .get(orgOf(i.guildId), i.user.id);
+  if (!t || !t.channel_id) return null;
+  return i.guild.channels.cache.has(t.channel_id) ? t.channel_id : null;
 }
 
 async function handleInteraction(i) {
@@ -375,6 +399,53 @@ async function handleInteraction(i) {
 
     await i.channel.send(checkoutMessage(i.guildId, o));
     return eph(i, ok(i.guildId, '結帳完成', `訂單編號 \`${o.order_no}\`，已扣款並通知老闆。`));
+  }
+
+  // ---- 點單系統（下單前提醒面板 → 填單 → 專屬頻道）----
+  if (id === 'order:start') {
+    const exist = openOrderTicket(i);
+    if (exist) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${exist}>`));
+    return i.showModal(new ModalBuilder().setCustomId('orderm').setTitle('喚雨下單資料')
+      .addComponents(
+        input('service', '服務類型', { ph: '例：英雄聯盟 / 傳說對決 / 唱歌 / 聊天' }),
+        input('prefer', '性別與指定陪玩', { ph: '例：女陪、指定 lumi；沒有指定就填「不指定」' }),
+        input('when', '需求時段與時數', { ph: '例：今晚 21:00 起 2 小時' }),
+        input('addon', '加購選項（可留空）', { required: false, ph: '稱呼 / 甜蜜單 / 聲優' }),
+        input('note', '備註（可留空）', { required: false, style: TextInputStyle.Paragraph,
+          ph: '特殊需求請在這裡補充，實際安排以客服確認為準' })
+      ));
+  }
+  if (id === 'orderm') {
+    const exist = openOrderTicket(i);
+    if (exist) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${exist}>`));
+    await i.deferReply({ ephemeral: true });
+    const f = k => (i.fields.getTextInputValue(k) || '').trim();
+    const ch = await createPrivateChannel(i.guild, i.member,
+      { prefix: '下單', categoryKey: 'category_ticket', extraRoleKeys: ['role_cs', 'role_admin'] });
+    const info = db.prepare("INSERT INTO tickets (guild_id, src_guild, channel_id, customer_id, kind, subject) VALUES (?,?,?,?,'order',?)")
+      .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, f('service'));
+    const csRole = getSetting('role_cs', '', i.guildId);
+    await ch.send({
+      content: [mention(i.user.id), csRole ? `<@&${csRole}>` : ''].filter(Boolean).join(' ') + ' 新的下單需求！',
+      embeds: [emb(i.guildId, {
+        title: '🪄 下單資料',
+        fields: [
+          { name: '下單者', value: mention(i.user.id), inline: true },
+          { name: '服務類型', value: f('service'), inline: true },
+          { name: '性別／指定陪玩', value: f('prefer'), inline: true },
+          { name: '需求時段與時數', value: f('when') },
+          { name: '加購選項', value: f('addon') || '（無）', inline: true },
+          { name: '備註', value: f('note') || '（無）' }
+        ],
+        footer: '本表單僅建立下單資料，尚未完成付款或排單。客服通知後 15 分鐘內未回覆將視同棄單。'
+      })],
+      components: [row(
+        btn(`ticket:claim:${info.lastInsertRowid}`, '客服接單', ButtonStyle.Success, '🙋'),
+        btn(`ticket:close:${info.lastInsertRowid}`, '關閉頻道', ButtonStyle.Danger, '🔒')
+      )]
+    });
+    return i.editReply({ embeds: [ok(i.guildId, '下單資料已送出',
+      `請前往你的專屬頻道等待客服確認：${ch}`)] });
   }
 
   // ---- 下單傳票 ----

@@ -147,7 +147,7 @@ router.put('/customers/:id', (req, res) => {
     .run(name ?? c.name, vip_level ?? c.vip_level, vip_locked ? 1 : 0,
          Math.max(0, Math.min(21, territory ?? c.territory)), c.id);
   if (!vip_locked) refreshVip(req.orgId, req.params.id);
-  audit(req.user.name, '更新老闆資料', req.params.id, req.orgId);
+  audit(req.user.name, '更新老闆資料', req.params.id, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
 
@@ -163,7 +163,7 @@ router.post('/staff', (req, res) => {
               ON CONFLICT(guild_id, user_id) DO UPDATE SET code=excluded.code, name=excluded.name,
                 card_url=excluded.card_url, kind=excluded.kind, active=1`)
     .run(req.orgId, String(user_id), code, name, card_url, kind === 'cs' ? 'cs' : 'player');
-  audit(req.user.name, '新增／更新員工', `${name}(${code})`, req.orgId);
+  audit(req.user.name, '新增／更新員工', `${name}(${code})`, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
 router.put('/staff/:id', (req, res) => {
@@ -173,7 +173,7 @@ router.put('/staff/:id', (req, res) => {
   db.prepare('UPDATE staff SET code=?, name=?, card_url=?, kind=?, active=? WHERE id=?')
     .run(b.code ?? s.code, b.name ?? s.name, b.card_url ?? s.card_url,
          b.kind ?? s.kind, b.active == null ? s.active : (b.active ? 1 : 0), s.id);
-  audit(req.user.name, '編輯員工', s.name, req.orgId);
+  audit(req.user.name, '編輯員工', s.name, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
 router.delete('/staff/:id', (req, res) => {
@@ -184,7 +184,7 @@ router.delete('/staff/:id', (req, res) => {
     db.prepare('DELETE FROM intimacy WHERE guild_id=? AND staff_id=?').run(req.orgId, s.user_id);
     db.prepare('DELETE FROM gift_logs WHERE guild_id=? AND staff_id=?').run(req.orgId, s.user_id);
   })();
-  audit(req.user.name, '員工離職', `${s.name}(${s.code})`, req.orgId);
+  audit(req.user.name, '員工離職', `${s.name}(${s.code})`, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
 router.get('/staff/:id/detail', (req, res) => {

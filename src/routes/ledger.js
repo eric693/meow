@@ -267,7 +267,7 @@ router.post('/ledger/import', express.text({ type: '*/*', limit: '32mb' }), (req
   });
   run();
 
-  if (!dryRun) audit(who(req), '匯入流水帳', `成功 ${ok} 筆、略過 ${skipped} 筆`, orgId);
+  if (!dryRun) audit(who(req), '匯入流水帳', `成功 ${ok} 筆、略過 ${skipped} 筆`, orgId, { source: 'web' });
   res.json({ ok, skipped, dry_run: dryRun, total: rows.length - 1, errors: errors.slice(0, 20) });
 });
 

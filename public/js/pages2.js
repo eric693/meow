@@ -169,6 +169,86 @@ Pages.tickets = async view => {
   load();
 };
 
+// ---------------- 操作紀錄 ----------------
+Pages.logs = async view => {
+  const SOURCE = { prefix: '前綴指令', slash: '斜線指令', button: '按鈕', modal: '表單',
+                   select: '選單', web: '後台', system: '系統' };
+  const STATUS = { ok: ['ok', '✅ 成功'], fail: ['err', '⚠️ 失敗'], deny: ['warn', '⛔ 權限不足'] };
+  const state = { offset: 0, limit: 100 };
+
+  const filters = () => ({
+    source: document.getElementById('lgSource').value,
+    status: document.getElementById('lgStatus').value,
+    actor: document.getElementById('lgActor').value.trim(),
+    from: document.getElementById('lgFrom').value,
+    to: document.getElementById('lgTo').value,
+    q: document.getElementById('lgQ').value.trim()
+  });
+
+  const load = async () => {
+    const p = { ...filters(), limit: state.limit, offset: state.offset };
+    Object.keys(p).forEach(k => p[k] === '' && delete p[k]);
+    const d = await GET('/logs?' + new URLSearchParams(p));
+    const shown = Math.min(state.offset + d.rows.length, d.total);
+    document.getElementById('lgCount').textContent =
+      d.total ? `第 ${state.offset + 1}–${shown} 筆，共 ${H.n(d.total)} 筆` : '沒有符合條件的紀錄';
+    document.getElementById('lgPrev').disabled = state.offset <= 0;
+    document.getElementById('lgNext').disabled = state.offset + state.limit >= d.total;
+    document.getElementById('lgTable').innerHTML = H.table(
+      ['時間', '操作者', '來源', '動作', '狀態', '頻道', '內容'],
+      d.rows.map(r => {
+        const [cls, label] = STATUS[r.status] || ['', r.status];
+        return `<tr>
+          <td style="white-space:nowrap">${H.date(r.created_at)}</td>
+          <td>${UI.esc(r.actor || '—')}${r.actor_id ? `<div class="muted" style="font-size:11px">${UI.esc(r.actor_id)}</div>` : ''}</td>
+          <td>${UI.esc(SOURCE[r.source] || r.source)}</td>
+          <td><code>${UI.esc(r.action)}</code></td>
+          <td><span class="tag ${cls}">${UI.esc(label)}</span></td>
+          <td class="muted">${r.channel_id ? UI.esc(r.channel_id) : '—'}</td>
+          <td style="max-width:420px;word-break:break-all">${UI.esc(r.detail || '')}</td>
+        </tr>`;
+      }), '沒有符合條件的紀錄');
+  };
+
+  view.innerHTML = `
+    <div class="card">
+      <div class="grid c3">
+        <label class="f"><span>來源</span><select id="lgSource">
+          <option value="">全部</option>
+          ${Object.entries(SOURCE).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
+        </select></label>
+        <label class="f"><span>狀態</span><select id="lgStatus">
+          <option value="">全部</option>
+          <option value="ok">成功</option><option value="fail">失敗</option><option value="deny">權限不足</option>
+        </select></label>
+        <label class="f"><span>操作者（名稱或 Discord ID）</span><input id="lgActor" placeholder="例：yu 或 123456789012345678"></label>
+        <label class="f"><span>起始日</span><input id="lgFrom" type="date"></label>
+        <label class="f"><span>結束日</span><input id="lgTo" type="date"></label>
+        <label class="f"><span>關鍵字（動作或內容）</span><input id="lgQ" placeholder="例：核銷、ORD-"></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="fit"><button class="btn" id="lgGo">查詢</button></div>
+        <div class="fit"><button class="btn secondary" id="lgReset">清除條件</button></div>
+        <div class="grow muted" id="lgCount" style="align-self:center"></div>
+        <div class="fit"><button class="btn secondary sm" id="lgPrev">上一頁</button></div>
+        <div class="fit"><button class="btn secondary sm" id="lgNext">下一頁</button></div>
+      </div>
+    </div>
+    <div class="card"><div id="lgTable"><div class="empty">載入中…</div></div></div>`;
+
+  const go = () => { state.offset = 0; load(); };
+  document.getElementById('lgGo').onclick = go;
+  document.getElementById('lgReset').onclick = () => {
+    ['lgSource', 'lgStatus', 'lgActor', 'lgFrom', 'lgTo', 'lgQ'].forEach(id => document.getElementById(id).value = '');
+    go();
+  };
+  document.getElementById('lgQ').onkeydown = e => { if (e.key === 'Enter') go(); };
+  document.getElementById('lgActor').onkeydown = e => { if (e.key === 'Enter') go(); };
+  document.getElementById('lgPrev').onclick = () => { state.offset = Math.max(0, state.offset - state.limit); load(); };
+  document.getElementById('lgNext').onclick = () => { state.offset += state.limit; load(); };
+  load();
+};
+
 // ---------------- 投票與意見箱 ----------------
 Pages.polls = async view => {
   const load = async () => {

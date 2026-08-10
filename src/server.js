@@ -31,7 +31,7 @@ app.post('/api/login', rateLimit({ windowMs: 5 * 60 * 1000, max: 30, prefix: 'lo
   }
   loginSucceeded(lockKey);
   setAuthCookie(res, signToken({ id: user.id }));
-  audit(user.name || user.username, '登入後台');
+  audit(user.name || user.username, '登入後台', '', '', { source: 'web' });
   res.json({ ok: true });
 });
 
