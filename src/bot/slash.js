@@ -1,7 +1,7 @@
 // Slash 指令處理
 const { db, getCustomer, findStaff, getStaff, addCoins, refreshVip, audit, orgOf } = require('../db');
 const M = require('../util/money');
-const { checkoutMessage } = require('../util/checkout');
+const { checkoutMessage, refundNotice } = require('../util/checkout');
 const { parseSlots } = require('../util/slots');
 const CF = require('../util/checkout-flow');
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
@@ -136,12 +136,7 @@ const handlers = {
     const refundCoins = i.options.getBoolean('退還雨幣') ?? true;
     const reason = i.options.getString('原因') || '';
     const o = M.refundOrder(i.guildId, no, i.user.tag, reason, { refundCoins });
-    await i.reply({ embeds: [ok(i.guildId, `訂單 ${o.order_no} 已撤銷`, null, [
-      { name: '退還老闆', value: refundCoins ? `${n(o.amount)} 雨幣` : '未退幣', inline: true },
-      { name: '扣回陪玩分潤', value: n(o.staff_share), inline: true },
-      { name: '扣回羈絆', value: o.intimacy ? `-${n(o.intimacy)}` : '無', inline: true },
-      { name: '原因', value: reason || '無註記' }
-    ])] });
+    await i.reply({ embeds: [refundNotice(i.guildId, o, { reason, refundCoins, operator: i.user.tag })] });
   },
 
   async 補單(i) {

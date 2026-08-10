@@ -556,7 +556,7 @@ Pages.settings = async view => {
         <label class="f"><span>偏好性別</span><input name="order_genders" value="${UI.esc(v.order_genders || '')}" placeholder="女生陪玩,男生陪玩,都可以"></label>
         <label class="f"><span>服務類型</span><input name="order_services" value="${UI.esc(v.order_services || '')}" placeholder="英雄聯盟,傳說對決,VALORANT,唱歌,聊天,其他"></label>
         <label class="f"><span>加購選項</span><input name="order_addons" value="${UI.esc(v.order_addons || '')}" placeholder="指定稱呼,甜蜜單,聲優"></label>
-        <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '10')}"></label>
+        <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '100')}"></label>
       </div>
       ${res.roles.length ? '' : '<div class="muted">機器人目前離線或尚未加入伺服器，因此無法列出身分組與頻道。</div>'}
     </div>

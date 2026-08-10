@@ -46,7 +46,7 @@ const commands = [
     .addIntegerOption(o => o.setName('金額').setDescription('發放金額').setRequired(true).setMinValue(1))
     .addStringOption(o => o.setName('備註').setDescription('例：匯款帳號末五碼')),
 
-  b('退單', '撤銷訂單，回溯陪玩薪水與親密度')
+  b('退單', '撤銷訂單或禮物，只要輸入編號即可自動回溯！')
     .addStringOption(o => o.setName('訂單編號').setDescription('例：ORD-63876816').setRequired(true))
     .addBooleanOption(o => o.setName('退還雨幣').setDescription('預設「是」；選「否」則不退錢給老闆'))
     .addStringOption(o => o.setName('原因').setDescription('退單原因')),

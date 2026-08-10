@@ -20,7 +20,7 @@ const STATUS = { pending: '暫存中', settled: '已核銷', refunded: '已退�
 // 陪玩分潤成數（%），可在後台「系統設定」調整
 const shareRate = guildId => getNum('staff_share_rate', 80, orgOf(guildId));
 // 結帳親密度成數（%）：實收金額 × 此比例 = 本單增加的羈絆點數
-const intimacyRate = guildId => getNum('order_intimacy_rate', 10, orgOf(guildId));
+const intimacyRate = guildId => getNum('order_intimacy_rate', 100, orgOf(guildId));
 
 /**
  * 建立一筆交易（報單／送禮／身分組結帳）。

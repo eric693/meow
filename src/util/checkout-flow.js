@@ -5,7 +5,7 @@ const { emb, COLOR, mention } = require('./embed');
 const G = require('./gifts');
 const M = require('./money');
 const S = require('./session');
-const { checkoutMessage } = require('./checkout');
+const { checkoutMessage, checkoutDetail } = require('./checkout');
 
 const PAY_CASH = '現金 / 轉帳';
 const PAY_COIN = '雨幣扣款';
@@ -123,7 +123,11 @@ function finish(sid, pay) {
   });
 
   S.drop(sid);
-  return { order, message: checkoutMessage(sess.guildId, order), discount, coupon, cash };
+  return {
+    order, discount, coupon, cash,
+    message: checkoutMessage(sess.guildId, order),
+    detail: checkoutDetail(sess.guildId, order)
+  };
 }
 
 module.exports = { start, preview, finish, PAY_CASH, PAY_COIN };

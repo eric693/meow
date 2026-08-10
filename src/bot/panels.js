@@ -438,11 +438,11 @@ async function handleInteraction(i) {
       let r;
       try { r = CF.finish(sid, pay); }
       catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
-      await i.update({ embeds: [ok(i.guildId, '結帳完成',
-        `訂單編號 \`${r.order.order_no}\`　實付 **${r.order.amount}** 元　`
-        + `${r.cash ? '現金／轉帳（未扣雨幣）' : '雨幣扣款'}`
-        + `${r.coupon ? `\n已使用折價券：${r.coupon.name}（折抵 ${r.discount} 元）` : ''}`)],
-        components: [] });
+      await i.update({
+        content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）\n`
+               + '**[客服專屬機密]** 帳務紀錄已同步至資料庫：',
+        embeds: [r.detail], components: []
+      });
       return i.channel.send(r.message);
     }
   }
