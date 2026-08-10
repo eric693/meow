@@ -85,9 +85,16 @@ const handlers = {
   async 雨幣查詢(msg, args) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const target = firstId(msg, args);
-    if (!target) throw new Error('請標記要查詢的老闆。');
+    if (!target) {
+      await msg.reply('❌ 請標記要查詢的老闆！例如： `!雨幣查詢 @老闆`');
+      return;
+    }
     const c = getCustomer(msg.guild.id, target);
-    await msg.reply({ embeds: [money(msg.guild.id, '🪙 雨幣餘額', `${mention(target)}\n\n**${n(c.coins)}** 雨幣`)] });
+    const G = require('../util/gifts');
+    const coupons = G.listBackpack(msg.guild.id, target).filter(x => x.value > 0 || x.percent > 0);
+    await msg.reply({ embeds: [money(msg.guild.id, '💳 餘額與背包查詢',
+      `老闆 ${mention(target)} 的雨幣餘額：\`${n(c.coins)}\`\n\n**🎒 背包折價券：**\n`
+      + (coupons.length ? coupons.map(x => '・' + G.couponLabel(x)).join('\n') : '無'))] });
   },
 
   async 業績查詢(msg) {

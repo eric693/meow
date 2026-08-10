@@ -102,9 +102,9 @@ const handlers = {
     const u = i.options.getUser('對象');
     const amt = i.options.getInteger('金額');
     const reason = i.options.getString('原因') || '人工儲值';
-    const bal = addCoins(i.guildId, u.id, amt, reason, { operator: i.user.tag, name: u.username });
-    await i.reply({ embeds: [ok(i.guildId, '儲值完成',
-      `${mention(u.id)} +${n(amt)} 雨幣\n目前餘額：**${n(bal)}**\n原因：${reason}`)] });
+    addCoins(i.guildId, u.id, amt, reason, { operator: i.user.tag, name: u.username });
+    await i.reply({ content: `✅ **儲值成功！** 已將 \`${n(amt)}\` 雨幣 放入 ${mention(u.id)} 的金庫。`,
+      ephemeral: true });
   },
 
   async 扣款(i) {
@@ -113,8 +113,8 @@ const handlers = {
     const amt = i.options.getInteger('金額');
     const reason = i.options.getString('原因') || '人工扣款';
     const bal = addCoins(i.guildId, u.id, -amt, reason, { operator: i.user.tag, name: u.username });
-    await i.reply({ embeds: [ok(i.guildId, '扣款完成',
-      `${mention(u.id)} -${n(amt)} 雨幣\n目前餘額：**${n(bal)}**\n原因：${reason}`)] });
+    await i.reply({ content: `✅ **扣款成功！** 已從 ${mention(u.id)} 的金庫扣除 \`${n(amt)}\` 雨幣，餘額 \`${n(bal)}\`。`,
+      ephemeral: true });
   },
 
   async 提領(i) {
@@ -136,7 +136,7 @@ const handlers = {
     const refundCoins = i.options.getBoolean('退還雨幣') ?? true;
     const reason = i.options.getString('原因') || '';
     const o = M.refundOrder(i.guildId, no, i.user.tag, reason, { refundCoins });
-    await i.reply({ embeds: [refundNotice(i.guildId, o, { reason, refundCoins, operator: i.user.tag })] });
+    await i.reply({ embeds: [refundNotice(i.guildId, o, { reason, refundCoins, operator: i.user.tag })], ephemeral: true });
   },
 
   async 補單(i) {

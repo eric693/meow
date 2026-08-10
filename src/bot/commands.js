@@ -10,8 +10,8 @@ const commands = [
 
   // ---- 財務與結帳 ----
   b('結帳', '一般結帳：選折價券與付款方式，計算拆帳與親密度並發布結帳明細')
-    .addUserOption(o => o.setName('客人').setDescription('付款的老闆').setRequired(true))
-    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addUserOption(o => o.setName('客人').setDescription('請標記金主').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('請標記服務陪玩').setRequired(true))
     .addIntegerOption(o => o.setName('金額').setDescription('客人實付金額').setRequired(true).setMinValue(1))
     .addIntegerOption(o => o.setName('原價').setDescription('未折扣前的訂單原價，不填視為與實付相同').setMinValue(0))
     .addStringOption(o => o.setName('項目').setDescription('例：娛樂4場、唱歌2小時'))
@@ -32,13 +32,13 @@ const commands = [
     .addStringOption(o => o.setName('備註').setDescription('寫進流水帳的備註')),
 
   b('儲值', '為金主手動增加雨幣餘額')
-    .addUserOption(o => o.setName('對象').setDescription('老闆').setRequired(true))
-    .addIntegerOption(o => o.setName('金額').setDescription('增加的雨幣').setRequired(true).setMinValue(1))
+    .addUserOption(o => o.setName('對象').setDescription('請選擇要儲值的金主').setRequired(true))
+    .addIntegerOption(o => o.setName('金額').setDescription('輸入儲值數量 (純數字)').setRequired(true).setMinValue(1))
     .addStringOption(o => o.setName('原因').setDescription('例：轉帳儲值、活動補償')),
 
   b('扣款', '手動扣除金主帳戶的雨幣餘額')
-    .addUserOption(o => o.setName('對象').setDescription('老闆').setRequired(true))
-    .addIntegerOption(o => o.setName('金額').setDescription('扣除的雨幣').setRequired(true).setMinValue(1))
+    .addUserOption(o => o.setName('對象').setDescription('請選擇要扣款的金主').setRequired(true))
+    .addIntegerOption(o => o.setName('金額').setDescription('輸入扣除數量 (純數字)').setRequired(true).setMinValue(1))
     .addStringOption(o => o.setName('原因').setDescription('例：重複儲值更正')),
 
   b('提領', '發放薪資給陪玩，並從其可提領帳戶中扣除')
@@ -48,7 +48,7 @@ const commands = [
 
   b('退單', '撤銷訂單或禮物，只要輸入編號即可自動回溯！')
     .addStringOption(o => o.setName('訂單編號').setDescription('例：ORD-63876816').setRequired(true))
-    .addBooleanOption(o => o.setName('退還雨幣').setDescription('預設「是」；選「否」則不退錢給老闆'))
+    .addBooleanOption(o => o.setName('退還雨幣').setDescription('是否將「客人實付」金額退還至金主雨幣帳戶？'))
     .addStringOption(o => o.setName('原因').setDescription('退單原因')),
 
   b('補單', '於底層帳本補登歷史紀錄（不影響實際雨幣餘額）')
