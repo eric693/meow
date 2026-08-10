@@ -223,6 +223,15 @@ CREATE TABLE IF NOT EXISTS tickets (
   status      TEXT NOT NULL DEFAULT 'open',   -- open / claimed / closed
   subject     TEXT NOT NULL DEFAULT '',
   content     TEXT NOT NULL DEFAULT '',
+  seq         INTEGER NOT NULL DEFAULT 0,     -- 全店連號的單號（頻道名稱用）
+  service     TEXT NOT NULL DEFAULT '',       -- 服務類型（特戰英豪／唱歌單曲…）
+  gender      TEXT NOT NULL DEFAULT '',       -- 偏好性別
+  rank        TEXT NOT NULL DEFAULT '',       -- 老闆目前段位
+  play_at     TEXT NOT NULL DEFAULT '',       -- 希望時段
+  duration    TEXT NOT NULL DEFAULT '',       -- 預計時長
+  addons      TEXT NOT NULL DEFAULT '',       -- 附加選項（逗號分隔）
+  publish     TEXT NOT NULL DEFAULT 'draft',  -- draft 尚未發布 / public 公開單 / anon 匿名單
+  published_at TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
   claimed_at  TEXT,
   closed_at   TEXT

@@ -3,7 +3,7 @@ const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField,
   ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder
 } = require('discord.js');
-const { db, getSetting, getCustomer, findStaff, getStaff, now, audit, orgOf } = require('../db');
+const { db, getSetting, getNum, getCustomer, findStaff, getStaff, now, audit, orgOf } = require('../db');
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const M = require('../util/money');
 const G = require('../util/gifts');
@@ -244,7 +244,7 @@ async function sendToChannel(guild, settingKey, payload) {
   return true;
 }
 
-async function createPrivateChannel(guild, member, { prefix, categoryKey, extraRoleKeys = [] }) {
+async function createPrivateChannel(guild, member, { prefix, name, categoryKey, extraRoleKeys = [] }) {
   const parent = getSetting(categoryKey, '', guild.id) || null;
   const overwrites = [
     { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
@@ -258,7 +258,7 @@ async function createPrivateChannel(guild, member, { prefix, categoryKey, extraR
     }
   }
   return guild.channels.create({
-    name: `${prefix}-${member.user.username}`.slice(0, 90).toLowerCase(),
+    name: (name || `${prefix}-${member.user.username}`.toLowerCase()).slice(0, 90),
     type: ChannelType.GuildText,
     parent: parent || undefined,
     permissionOverwrites: overwrites
@@ -268,9 +268,15 @@ async function createPrivateChannel(guild, member, { prefix, categoryKey, extraR
 const REPORT_LABEL = { self: '自主報單', cross: '跨服報單 1 號', cross2: '唱歌單跨服報單' };
 
 // 下單選單的選項，皆可用後台設定覆蓋（逗號分隔）
-const DEFAULT_GENDERS = ['女生陪玩', '男生陪玩', '都可以'];
-const DEFAULT_SERVICES = ['英雄聯盟', '傳說對決', 'VALORANT', '唱歌', '聊天', '其他'];
-const DEFAULT_ADDONS = ['指定稱呼', '甜蜜單', '聲優'];
+const DEFAULT_GENDERS = ['男女都可', '女生陪玩', '男生陪玩'];
+const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '唱歌單曲', '語聊'];
+// 加購選項可標價，格式「名稱=每局加價」
+const DEFAULT_ADDONS = ['甜蜜/指定稱呼=50', '聲優陪=50'];
+// 服務類型 → 頻道名稱用的單別，可用設定 order_type_labels 覆蓋（格式：服務=單別,服務=單別）
+const DEFAULT_TYPE_LABELS = {
+  '雨幣儲值': '儲值單', '特戰英豪': '娛樂單', 'Steam 小遊戲': 'steam單',
+  '唱歌單曲': '唱歌單', '語聊': '語聊單'
+};
 
 const optionList = (guildId, key, fallback) => {
   const arr = getSetting(key, '', guildId).split(',').map(x => x.trim()).filter(Boolean);
@@ -278,38 +284,109 @@ const optionList = (guildId, key, fallback) => {
 };
 const selectRow = (customId, placeholder, values, maxValues = 1) =>
   new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(placeholder)
+    new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(placeholder.slice(0, 150))
       .setMinValues(1).setMaxValues(Math.min(maxValues, values.length))
       .addOptions(values.map(v => ({ label: v.slice(0, 100), value: v.slice(0, 100) }))));
 
-// 自主報單＝認領主群已結帳的訂單（金流已在結帳時完成，這裡只留服務紀錄與截圖）
-function reportModal(kind) {
-  const m = new ModalBuilder().setCustomId(`reportm:${kind}`).setTitle(REPORT_LABEL[kind]);
-  if (kind === 'self') {
-    return m.addComponents(
-      input('order_no', '訂單編號', { ph: '例：ORD-63876816（結帳時客服提供）' }),
-      input('boss_dc', '老闆 dc', { ph: '例：tsuki_.32' }),
-      input('customer', '老闆 id', { ph: '例：123456789012345678' }),
-      input('staff', '陪玩 id', { ph: '例：一坨羊毛毛#0712 或 R01' }),
-      input('slots', '報單場次／小時', { ph: '例：娛樂4場' })
-    );
+/** 服務類型對應的單別名稱（頻道名稱用） */
+function ticketLabel(guildId, service) {
+  const raw = getSetting('order_type_labels', '', guildId);
+  const map = { ...DEFAULT_TYPE_LABELS };
+  for (const pair of raw.split(',')) {
+    const [k, v] = pair.split('=').map(x => (x || '').trim());
+    if (k && v) map[k] = v;
   }
-  // 跨服單沒有主群結帳流程，報單當下才建帳
-  return m.addComponents(
-    input('boss_dc', '老闆 dc', { ph: '例：tsuki_.32' }),
-    input('customer', '老闆 id', { ph: '例：123456789012345678' }),
-    input('staff', '陪玩 id', { ph: '例：一坨羊毛毛#0712 或 R01' }),
-    input('slots', '報單場次／小時', { ph: '例：娛樂4場' }),
-    input('price', '單價（雨幣）', { ph: '例：300' })
-  );
+  return map[service] || '娛樂單';
 }
 
-/** 這個人是否已經有進行中的下單頻道；有的話回傳頻道 ID */
-function openOrderTicket(i) {
-  const t = db.prepare("SELECT * FROM tickets WHERE guild_id=? AND customer_id=? AND kind='order' AND status!='closed'")
-    .get(orgOf(i.guildId), i.user.id);
-  if (!t || !t.channel_id) return null;
-  return i.guild.channels.cache.has(t.channel_id) ? t.channel_id : null;
+/** 全店連號的單號 */
+function nextTicketSeq(guildId) {
+  const org = orgOf(guildId);
+  const start = getNum('ticket_seq_start', 1001, org);
+  const max = db.prepare('SELECT COALESCE(MAX(seq),0) m FROM tickets WHERE guild_id=?').get(org).m;
+  return Math.max(start, max + 1);
+}
+
+/** 解析加購選項設定：「甜蜜/指定稱呼=50」→ { name, price, label } */
+function addonOptions(guildId) {
+  return optionList(guildId, 'order_addons', DEFAULT_ADDONS).map(raw => {
+    const [name, price] = raw.split('=').map(x => (x || '').trim());
+    const p = Number(price) || 0;
+    return { name, price: p, label: p ? `${name} (+${p}元/局)` : name };
+  });
+}
+const addonText = (guildId, t) => {
+  if (!t.addons) return '無';
+  const map = Object.fromEntries(addonOptions(guildId).map(a => [a.name, a]));
+  return t.addons.split(',').filter(Boolean).map(k => map[k]?.label || k).join('、');
+};
+
+/** 包廂內「訂單建立中」的卡片（含附加選項選單與四顆按鈕） */
+function draftPayload(guildId, tid) {
+  const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
+  const addons = addonOptions(guildId);
+  return {
+    embeds: [emb(guildId, {
+      title: '⏳ 訂單建立中...(請選擇附加選項)',
+      desc: `老闆 ${mention(t.customer_id)} 您好！您的基礎需求已記錄，請在下方下拉選單選擇附加服務：`,
+      fields: [
+        { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
+        { name: '老闆段位', value: t.rank || '無', inline: true },
+        { name: '附加選項', value: addonText(guildId, t), inline: true },
+        { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` },
+        { name: '​', value: '⚠️ 尚未發布，陪玩目前還看不到這張單喔！' }
+      ]
+    })],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId(`tk:addon:${tid}`)
+          .setPlaceholder('＋ 選擇附加選項 (選完請點選下方發布訂單)')
+          .setMinValues(1).setMaxValues(addons.length + 1)
+          .addOptions(
+            { label: '不加購', value: '不加購' },
+            ...addons.map(a => ({ label: a.label.slice(0, 100), value: a.name.slice(0, 100) })))),
+      row(
+        btn(`tk:public:${tid}`, '公開訂單', ButtonStyle.Primary, '📢'),
+        btn(`tk:anon:${tid}`, '匿名訂單', ButtonStyle.Success, '🏆'),
+        btn(`tk:clear:${tid}`, '清空選項', ButtonStyle.Secondary, '🧹'),
+        btn(`tk:cancel:${tid}`, '取消訂單', ButtonStyle.Danger, '❌')
+      )
+    ]
+  };
+}
+
+/** 發布後留在包廂的狀態卡（按鈕全部收掉） */
+function publishedPayload(guildId, t) {
+  return {
+    embeds: [emb(guildId, {
+      title: t.publish === 'anon' ? '🏆 匿名訂單已發布' : '📢 公開訂單已發布',
+      desc: `單號 \`${t.seq}\`　${t.service}${t.gender}\n陪玩現在看得到這張單了，請等待接單。`,
+      color: COLOR.ok
+    })],
+    components: [row(
+      btn(`ticket:claim:${t.id}`, '客服接單', ButtonStyle.Success, '🙋'),
+      btn(`ticket:close:${t.id}`, '關閉頻道', ButtonStyle.Danger, '🔒')
+    )]
+  };
+}
+
+/** 給陪玩看的招募卡；匿名單不顯示老闆是誰 */
+function recruitEmbed(guildId, t) {
+  const anon = t.publish === 'anon';
+  return emb(guildId, {
+    title: `${anon ? '🏆 匿名單' : '📢 公開單'}　#${t.seq}`,
+    color: anon ? COLOR.warn : COLOR.main,
+    fields: [
+      { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
+      { name: '老闆段位', value: t.rank || '無', inline: true },
+      { name: '附加選項', value: addonText(guildId, t), inline: true },
+      { name: '希望時段', value: t.play_at || '—', inline: true },
+      { name: '預計時長', value: t.duration || '—', inline: true },
+      { name: '下單者', value: anon ? '🕶️ 匿名' : mention(t.customer_id), inline: true },
+      { name: '其他需求', value: t.content || '無' }
+    ],
+    footer: '有意接單請在本頻道回覆，實際安排以客服確認為準'
+  });
 }
 
 async function handleInteraction(i) {
@@ -514,80 +591,118 @@ async function handleInteraction(i) {
     }
   }
 
-  // ---- 點單系統（面板 → 性別 → 服務類型 → 加購 → 備註 → 專屬頻道）----
+  // ---- 點單系統（服務類型 → 性別 → 需求單 → 專屬包廂 → 附加選項 → 發布）----
   if (id === 'order:start') {
     const open = openOrderTicket(i);
     if (open) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${open}>`));
     const sid = S.put({ guildId: i.guildId, userId: i.user.id });
     return i.reply({
-      embeds: [emb(i.guildId, { title: '🪄 開始下單（1/4）', desc: '請選擇您偏好的性別：' })],
-      components: [selectRow(`ord:gender:${sid}`, '請選擇您偏好的性別', optionList(i.guildId, 'order_genders', DEFAULT_GENDERS))],
+      components: [selectRow(`ord:service:${sid}`, '🔍 請選擇服務類型...',
+        optionList(i.guildId, 'order_services', DEFAULT_SERVICES))],
       ephemeral: true
     });
   }
+
   if (id.startsWith('ord:')) {
     const [, step, sid] = id.split(':');
     const sess = S.get(sid);
     if (!sess) return eph(i, err(i.guildId, '這次下單已逾時（超過 15 分鐘），請重新點一次按鈕。'));
 
-    if (step === 'gender') {
-      S.update(sid, { gender: i.values[0] });
-      return i.update({
-        embeds: [emb(i.guildId, { title: '🪄 開始下單（2/4）', desc: `偏好性別：**${i.values[0]}**\n\n請選擇服務類型：` })],
-        components: [selectRow(`ord:service:${sid}`, '請選擇服務類型', optionList(i.guildId, 'order_services', DEFAULT_SERVICES))]
-      });
-    }
     if (step === 'service') {
       S.update(sid, { service: i.values[0] });
-      const addons = optionList(i.guildId, 'order_addons', DEFAULT_ADDONS);
       return i.update({
-        embeds: [emb(i.guildId, { title: '🪄 開始下單（3/4）', desc: `服務類型：**${i.values[0]}**\n\n請選擇加購選項（可複選，沒有就選「不加購」）：` })],
-        components: [selectRow(`ord:addon:${sid}`, '請選擇加購選項', ['不加購', ...addons], addons.length + 1)]
+        content: '請選擇您偏好的性別：',
+        components: [selectRow(`ord:gender:${sid}`, '請選擇您偏好的性別',
+          optionList(i.guildId, 'order_genders', DEFAULT_GENDERS))]
       });
     }
-    if (step === 'addon') {
-      S.update(sid, { addons: i.values.filter(v => v !== '不加購') });
-      return i.showModal(new ModalBuilder().setCustomId(`ord:final:${sid}`).setTitle('下單資料（4/4）')
+
+    if (step === 'gender') {
+      S.update(sid, { gender: i.values[0] });
+      const d = S.get(sid);
+      return i.showModal(new ModalBuilder().setCustomId(`ord:final:${sid}`)
+        .setTitle(`📝 ${d.service}${d.gender} - 需求單`.slice(0, 45))
         .addComponents(
-          input('when', '需求時段與時數', { ph: '例：今晚 21:00 起 2 小時' }),
-          input('prefer', '指定陪玩（可留空）', { required: false, ph: '例：指定 lumi；沒有就留空' }),
-          input('note', '備註（可留空）', { required: false, style: TextInputStyle.Paragraph,
-            ph: '特殊需求請在這裡補充，實際安排以客服確認為準' })
+          input('rank', '您的目前段位？(無則填無)', { value: '無' }),
+          input('play_at', '希望時段 (例如: 今晚 20:00 後 / 現在)'),
+          input('duration', '預計時長 (例如: 1小時 / 2小時)'),
+          input('note', '其他需求或備註', { required: false, style: TextInputStyle.Paragraph, ph: '填寫於此' })
         ));
     }
+
     if (step === 'final') {
       const open = openOrderTicket(i);
       if (open) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${open}>`));
       await i.deferReply({ ephemeral: true });
       const f = k => (i.fields.getTextInputValue(k) || '').trim();
-      const ch = await createPrivateChannel(i.guild, i.member,
-        { prefix: '下單', categoryKey: 'category_ticket', extraRoleKeys: ['role_cs', 'role_admin'] });
-      const info = db.prepare("INSERT INTO tickets (guild_id, src_guild, channel_id, customer_id, kind, subject) VALUES (?,?,?,?,'order',?)")
-        .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, sess.service || '下單');
+      const seq = nextTicketSeq(i.guildId);
+      const label = ticketLabel(i.guildId, sess.service);
+
+      const ch = await createPrivateChannel(i.guild, i.member, {
+        name: `🎫│${label}│${seq}`,
+        categoryKey: 'category_ticket',
+        extraRoleKeys: ['role_cs', 'role_admin']
+      });
+      const info = db.prepare(`INSERT INTO tickets
+          (guild_id, src_guild, channel_id, customer_id, kind, subject, seq, service, gender,
+           rank, play_at, duration, publish)
+          VALUES (?,?,?,?,'order',?,?,?,?,?,?,?,'draft')`)
+        .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, sess.service, seq,
+             sess.service, sess.gender, f('rank'), f('play_at'), f('duration'));
+      if (f('note')) db.prepare('UPDATE tickets SET content=? WHERE id=?').run(f('note'), info.lastInsertRowid);
+
       const csRole = getSetting('role_cs', '', i.guildId);
       await ch.send({
-        content: [mention(i.user.id), csRole ? `<@&${csRole}>` : ''].filter(Boolean).join(' ') + ' 新的下單需求！',
-        embeds: [emb(i.guildId, {
-          title: '🪄 下單資料',
-          fields: [
-            { name: '下單者', value: mention(i.user.id), inline: true },
-            { name: '偏好性別', value: sess.gender || '不指定', inline: true },
-            { name: '服務類型', value: sess.service || '—', inline: true },
-            { name: '需求時段與時數', value: f('when') },
-            { name: '加購選項', value: sess.addons?.length ? sess.addons.join('、') : '（無）', inline: true },
-            { name: '指定陪玩', value: f('prefer') || '（不指定）', inline: true },
-            { name: '備註', value: f('note') || '（無）' }
-          ],
-          footer: '本表單僅建立下單資料，尚未完成付款或排單。客服通知後 15 分鐘內未回覆將視同棄單。'
-        })],
-        components: [row(
-          btn(`ticket:claim:${info.lastInsertRowid}`, '客服接單', ButtonStyle.Success, '🙋'),
-          btn(`ticket:close:${info.lastInsertRowid}`, '關閉頻道', ButtonStyle.Danger, '🔒')
-        )]
+        content: [mention(i.user.id), csRole ? `<@&${csRole}>` : ''].filter(Boolean).join(' '),
+        ...draftPayload(i.guildId, info.lastInsertRowid)
       });
       S.drop(sid);
-      return i.editReply({ embeds: [ok(i.guildId, '下單資料已送出',
-        `請前往你的專屬頻道等待客服確認：${ch}`)] });
+      return i.editReply({ embeds: [ok(i.guildId, '派單初步建立！', `請移步至專屬包廂完成選項設定：${ch}`)] });
+    }
+  }
+
+  // ---- 包廂內：附加選項與發布 ----
+  if (id.startsWith('tk:')) {
+    const [, act, tidRaw] = id.split(':');
+    const tid = Number(tidRaw);
+    const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
+    if (!t) return eph(i, err(i.guildId, '查無這張訂單。'));
+    const mine = t.customer_id === i.user.id;
+    if (!mine && !isCS(i.member)) return denyEph(i, '只有開單者或客服可以操作這張單。');
+
+    if (act === 'addon') {
+      const picked = i.values.filter(v => v !== '不加購');
+      db.prepare('UPDATE tickets SET addons=? WHERE id=?').run(picked.join(','), tid);
+      return i.update(draftPayload(i.guildId, tid));
+    }
+    if (act === 'clear') {
+      db.prepare("UPDATE tickets SET addons='' WHERE id=?").run(tid);
+      return i.update(draftPayload(i.guildId, tid));
+    }
+    if (act === 'cancel') {
+      db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
+      await i.update({ embeds: [ok(i.guildId, '訂單已取消', '頻道將於 5 秒後關閉。')], components: [] });
+      return setTimeout(() => i.channel.delete().catch(() => {}), 5000);
+    }
+    if (act === 'public' || act === 'anon') {
+      if (t.publish !== 'draft') return eph(i, err(i.guildId, '這張單已經發布過了。'));
+      db.prepare('UPDATE tickets SET publish=?, published_at=? WHERE id=?').run(act, now(), tid);
+
+      // 發布＝讓陪玩看得到：把頻道搬到對應分類，並開放陪玩身分組檢視
+      const parent = getSetting(act === 'anon' ? 'category_order_anon' : 'category_order_public', '', i.guildId);
+      if (parent) await i.channel.setParent(parent, { lockPermissions: false }).catch(() => {});
+      for (const rid of getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean)) {
+        await i.channel.permissionOverwrites.edit(rid, {
+          ViewChannel: true, SendMessages: true, ReadMessageHistory: true
+        }).catch(() => {});
+      }
+      const fresh = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
+      await i.update(publishedPayload(i.guildId, fresh));
+      const playerRole = getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean)[0];
+      return i.channel.send({
+        content: playerRole ? `<@&${playerRole}> 有新的${act === 'anon' ? '匿名' : '公開'}單囉！` : '有新的單囉！',
+        embeds: [recruitEmbed(i.guildId, fresh)]
+      });
     }
   }
 

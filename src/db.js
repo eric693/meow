@@ -42,7 +42,18 @@ ensureColumns('backpack', [
   ['min_spend', 'INTEGER NOT NULL DEFAULT 0']
 ]);
 ensureColumns('gift_logs', [['order_no', "TEXT NOT NULL DEFAULT ''"]]);
-ensureColumns('tickets', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);
+ensureColumns('tickets', [
+  ['src_guild', "TEXT NOT NULL DEFAULT ''"],
+  ['seq',       'INTEGER NOT NULL DEFAULT 0'],
+  ['service',   "TEXT NOT NULL DEFAULT ''"],
+  ['gender',    "TEXT NOT NULL DEFAULT ''"],
+  ['rank',      "TEXT NOT NULL DEFAULT ''"],
+  ['play_at',   "TEXT NOT NULL DEFAULT ''"],
+  ['duration',  "TEXT NOT NULL DEFAULT ''"],
+  ['addons',    "TEXT NOT NULL DEFAULT ''"],
+  ['publish',   "TEXT NOT NULL DEFAULT 'draft'"],
+  ['published_at', 'TEXT']
+]);
 ensureColumns('exams', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);
 // 舊資料補算原價與淨利
 db.exec("UPDATE orders SET list_price = amount WHERE list_price = 0 AND amount <> 0");

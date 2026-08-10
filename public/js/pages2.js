@@ -620,6 +620,7 @@ Pages.settings = async view => {
         <label class="f"><span>員工輔導室後台頻道</span><select name="channel_staff_box">${opts(res.channels, v.channel_staff_box)}</select></label>
         <label class="f"><span>已結單分類</span><select name="category_order_done">${opts(res.categories, v.category_order_done)}</select></label>
         <label class="f"><span>公開單分類</span><select name="category_order_public">${opts(res.categories, v.category_order_public)}</select></label>
+        <label class="f"><span>匿名單分類</span><select name="category_order_anon">${opts(res.categories, v.category_order_anon)}</select></label>
       </div>
       <h4 style="margin:14px 0 6px">播報</h4>
       <div class="grid c2">
@@ -649,9 +650,11 @@ Pages.settings = async view => {
       </div>
       <h4 style="margin:14px 0 6px">下單選單選項（逗號分隔，留空用預設）</h4>
       <div class="grid c2">
-        <label class="f"><span>偏好性別</span><input name="order_genders" value="${UI.esc(v.order_genders || '')}" placeholder="女生陪玩,男生陪玩,都可以"></label>
-        <label class="f"><span>服務類型</span><input name="order_services" value="${UI.esc(v.order_services || '')}" placeholder="英雄聯盟,傳說對決,VALORANT,唱歌,聊天,其他"></label>
-        <label class="f"><span>加購選項</span><input name="order_addons" value="${UI.esc(v.order_addons || '')}" placeholder="指定稱呼,甜蜜單,聲優"></label>
+        <label class="f"><span>偏好性別</span><input name="order_genders" value="${UI.esc(v.order_genders || '')}" placeholder="男女都可,女生陪玩,男生陪玩"></label>
+        <label class="f"><span>服務類型</span><input name="order_services" value="${UI.esc(v.order_services || '')}" placeholder="雨幣儲值,特戰英豪,Steam 小遊戲,唱歌單曲,語聊"></label>
+        <label class="f"><span>加購選項（名稱=加價）</span><input name="order_addons" value="${UI.esc(v.order_addons || '')}" placeholder="甜蜜/指定稱呼=50,聲優陪=50"></label>
+        <label class="f"><span>單別名稱（服務=單別）</span><input name="order_type_labels" value="${UI.esc(v.order_type_labels || '')}" placeholder="特戰英豪=娛樂單,Steam 小遊戲=steam單"></label>
+        <label class="f"><span>單號起始值</span><input name="ticket_seq_start" type="number" value="${UI.esc(v.ticket_seq_start || '1001')}"></label>
         <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '100')}"></label>
       </div>
       ${res.roles.length ? '' : '<div class="muted">機器人目前離線或尚未加入伺服器，因此無法列出身分組與頻道。</div>'}

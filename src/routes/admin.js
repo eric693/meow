@@ -43,7 +43,7 @@ const GUILD_KEYS = [
   'bot_activity',
   'role_admin', 'role_cs', 'role_player', 'role_boss', 'role_drop',
   'category_ticket', 'category_exam', 'category_report',
-  'category_order_done', 'category_order_public',
+  'category_order_done', 'category_order_public', 'category_order_anon',
   'channel_order_log', 'channel_suggestion', 'channel_staff_box',
   // 播報類
   'channel_vip_announce', 'channel_gift_announce', 'channel_title_announce',
@@ -55,7 +55,7 @@ const GUILD_KEYS = [
   'channel_order_entry', 'channel_exam_entry', 'channel_intro',
   'channel_command_log',
   // 下單選單選項（逗號分隔）
-  'order_genders', 'order_services', 'order_addons'
+  'order_genders', 'order_services', 'order_addons', 'order_type_labels', 'ticket_seq_start'
 ];
 const SETTING_KEYS = [...ORG_KEYS, ...GUILD_KEYS];
 
