@@ -260,6 +260,7 @@ CREATE TABLE IF NOT EXISTS poll_votes (
 
 -- ---------- 考核 ----------
 CREATE TABLE IF NOT EXISTS exams (
+  -- subject 考試項目 / grade 分級 / gender 性別 由 ensureColumns 補上
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   guild_id   TEXT NOT NULL,
   user_id    TEXT NOT NULL,

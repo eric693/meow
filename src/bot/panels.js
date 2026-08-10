@@ -149,16 +149,16 @@ const PANELS = {
   'setup-report-cross': {
     label: '跨伺服器報單 1 號',
     build: guildId => ({
-      embeds: [emb(guildId, { title: '🌐 跨伺服器報單系統 1 號', desc: '外服合作單請由此回報。' })],
-      components: [row(btn('report:cross', '跨服報單', ButtonStyle.Primary, '🌐'))]
+      embeds: [emb(guildId, { title: '📄 跨伺服器報單中心', desc: '陪玩專用：請點擊下方按鈕填寫報單資料！' })],
+      components: [row(btn('report:cross', '填寫報單', ButtonStyle.Primary, '📄'))]
     })
   },
 
   'setup-report-cross-2': {
     label: '唱歌單跨服報單',
     build: guildId => ({
-      embeds: [emb(guildId, { title: '🎤 唱歌單跨服報單', desc: '唱歌類跨服訂單請由此回報。' })],
-      components: [row(btn('report:cross2', '唱歌跨服報單', ButtonStyle.Primary, '🎤'))]
+      embeds: [emb(guildId, { title: '🎤 唱歌單跨服報單中心', desc: '歌手專用：請點擊下方按鈕填寫唱歌報單！' })],
+      components: [row(btn('report:cross2', '填寫唱歌報單', ButtonStyle.Primary, '🎤'))]
     })
   },
 
@@ -187,7 +187,22 @@ const PANELS = {
           '請等待考官或管理通知後，再進行下一步流程'
         ].join('\n')
       })],
-      components: [row(btn('exam:start', '開啟考核入職單', ButtonStyle.Success, '📋'))]
+      components: [row(btn('exam:start', '我要入職', ButtonStyle.Success, '📋'))]
+    })
+  },
+
+  'setup-member': {
+    label: '會員服務中心',
+    build: guildId => ({
+      embeds: [emb(guildId, {
+        title: '💎 會員服務中心',
+        desc: '點擊下方按鈕，即可查詢您的雨幣餘額、背包優惠券與歷史點單紀錄。'
+      })],
+      components: [row(
+        btn('mb:coins', '查詢雨幣餘額', ButtonStyle.Primary, '💳'),
+        btn('mb:bag', '查看背包優惠券', ButtonStyle.Primary, '🎒'),
+        btn('mb:orders', '查詢我的點單紀錄', ButtonStyle.Primary, '📋')
+      )]
     })
   },
 
@@ -416,6 +431,40 @@ async function handleInteraction(i) {
     return eph(i, ok(i.guildId, has ? '已取消身分組' : '已領取身分組', `<@&${rid}>`));
   }
 
+  // ---- 會員服務中心 ----
+  if (id.startsWith('mb:')) {
+    const act = id.split(':')[1];
+    const c = getCustomer(i.guildId, i.user.id, i.user.username);
+    if (act === 'coins') {
+      return eph(i, emb(i.guildId, {
+        title: '💳 餘額查詢', color: COLOR.money,
+        desc: `💰 雨幣：\`${n(c.coins)}\``
+      }));
+    }
+    if (act === 'bag') {
+      const items = G.listBackpack(i.guildId, i.user.id);
+      const body = items.length
+        ? items.map(x => {
+            const off = x.percent > 0 ? `打 ${100 - x.percent} 折` : `折抵 ${n(x.value)} 元`;
+            return `🎟️ **${x.name}**\n└ 優惠內容：\`${off}\` ｜ 數量：\`${x.qty}\` 張`;
+          }).join('\n\n')
+        : '背包裡目前沒有任何優惠券。';
+      return eph(i, emb(i.guildId, { title: '🎒 我的專屬背包', desc: body, color: COLOR.err }));
+    }
+    if (act === 'orders') {
+      const rows = db.prepare(`SELECT staff_id, SUM(amount) amt FROM orders
+                               WHERE guild_id=? AND customer_id=? AND status!='refunded'
+                               GROUP BY staff_id ORDER BY amt DESC LIMIT 25`)
+        .all(orgOf(i.guildId), i.user.id);
+      const total = rows.reduce((a, r) => a + r.amt, 0);
+      const body = rows.length
+        ? rows.map(r => `・${mention(r.staff_id)}：共消費 \`${n(r.amt)}\` 元`).join('\n')
+          + `\n\n────────────────\n💰 **歷史總計消費：** \`${n(total)}\` 元`
+        : '你還沒有任何點單紀錄。';
+      return eph(i, emb(i.guildId, { title: '📋 您的專屬點單紀錄', desc: body }));
+    }
+  }
+
   // ---- 地下金庫 ----
   if (id === 'bank:me') {
     const R = require('../util/reports');
@@ -494,7 +543,32 @@ async function handleInteraction(i) {
   }
   if (id.startsWith('reportm:')) {
     const kind = id.split(':')[1];
-    const f = k => i.fields.getTextInputValue(k).trim();
+    const f = k => (i.fields.getTextInputValue(k) || '').trim();
+
+    // 唱歌單：認領既有訂單，明細只列歌曲資訊
+    if (kind === 'cross2') {
+      let o;
+      try { o = M.reportOrder(i.guildId, f('order_no'), { reporterId: i.user.id }); }
+      catch (e) { return eph(i, err(i.guildId, e.message)); }
+      const body = emb(i.guildId, {
+        title: '🎤 唱歌報單明細',
+        desc: [
+          `訂單編號：\`${o.order_no}\``,
+          `老闆dc：${f('boss_dc')}`,
+          `幾首歌：${f('songs')}`,
+          `歌名：\n${f('song_names')}`,
+          '',
+          '*(請在下方補充截圖)*'
+        ].join('\n')
+      });
+      const csRole0 = getSetting('role_cs', '', i.guildId);
+      const content0 = [mention(i.user.id), csRole0 ? `<@&${csRole0}>` : '', '您的報單已產生：']
+        .filter(Boolean).join(' ');
+      await i.reply({ embeds: [ok(i.guildId, '報單已成功發布！', null)], ephemeral: true });
+      await sendToChannel(i.guild, 'channel_order_log', { content: content0, embeds: [body] });
+      return i.channel.send({ content: content0, embeds: [body] });
+    }
+
     const customerId = (f('customer').match(/\d{15,25}/) || [])[0];
     if (!customerId) return eph(i, err(i.guildId, '老闆 id 格式不正確（需為 Discord 數字 ID）。'));
     const staff = findStaff(i.guildId, f('staff'));
@@ -504,7 +578,6 @@ async function handleInteraction(i) {
     let o;
     try {
       if (kind === 'self') {
-        // 認領主群結帳產生的訂單，不重複扣款
         const exist = M.getOrder(i.guildId, f('order_no'));
         if (exist && exist.staff_id !== staff.user_id)
           return eph(i, err(i.guildId,
@@ -543,101 +616,6 @@ async function handleInteraction(i) {
     await i.reply({ embeds: [ok(i.guildId, '報單已成功發布！', null)], ephemeral: true });
     await sendToChannel(i.guild, 'channel_order_log', { content, embeds: [body] });
     return i.channel.send({ content, embeds: [body] });
-  }
-
-  // ---- 客服結帳 ----
-  if (id === 'checkout:start') {
-    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以結帳。');
-    return i.showModal(new ModalBuilder().setCustomId('checkoutm').setTitle('本次結帳明細')
-      .addComponents(
-        input('customer', '老闆 id', { ph: '例：123456789012345678' }),
-        input('staff', '陪玩 id', { ph: '例：lumi 或 R01' }),
-        input('slots', '服務項目／場次·小時', { ph: '例：娛樂4場' }),
-        input('list', '訂單原價（雨幣）', { ph: '例：2000' }),
-        input('discount', '手動/背包券折抵', { required: false, ph: '沒有折抵請留空或填 0' })
-      ));
-  }
-  if (id === 'checkoutm') {
-    const f = k => i.fields.getTextInputValue(k).trim();
-    const customerId = (f('customer').match(/\d{15,25}/) || [])[0];
-    if (!customerId) return eph(i, err(i.guildId, '老闆 id 格式不正確（需為 Discord 數字 ID）。'));
-    const staff = findStaff(i.guildId, f('staff'));
-    if (!staff) return eph(i, err(i.guildId, `查無陪玩「${f('staff')}」`));
-    const list = Number(f('list'));
-    const discount = Number(f('discount') || 0);
-    if (!Number.isFinite(list) || !Number.isFinite(discount))
-      return eph(i, err(i.guildId, '訂單原價與折抵必須是數字。'));
-    if (discount > list) return eph(i, err(i.guildId, '折抵金額不可大於訂單原價。'));
-    const { item, qty } = parseSlots(f('slots'));
-
-    let o;
-    try {
-      o = M.createOrder({
-        guildId: i.guildId, customerId, staffId: staff.user_id,
-        csId: i.user.id, csName: i.user.tag, item, qty,
-        unitPrice: qty ? Math.round((list - discount) / qty) : list - discount,
-        listPrice: list, amount: list - discount,
-        source: 'ticket', operator: i.user.tag, payMethod: '雨幣扣款'
-      });
-    } catch (e) { return eph(i, err(i.guildId, e.message)); }
-
-    await i.channel.send(checkoutMessage(i.guildId, o));
-    return eph(i, ok(i.guildId, '結帳完成', `訂單編號 \`${o.order_no}\`，已扣款並通知老闆。`));
-  }
-
-  // ---- 互動式送禮（預覽 → 付款方式）----
-  if (id.startsWith('gf:')) {
-    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以送禮。');
-    const [, act, sid, pay] = id.split(':');
-    if (act === 'cancel') { S.drop(sid); return i.update({ content: '已取消送禮，沒有扣款。', embeds: [], components: [] }); }
-    if (act === 'pay') {
-      let r;
-      try { r = GF.finish(sid, pay); }
-      catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
-      await i.update({ content: r.detail, embeds: [], components: [] });
-      return i.channel.send(r.message);
-    }
-  }
-
-  // ---- 互動式結帳（選券 → 預覽 → 付款方式）----
-  if (id.startsWith('co:')) {
-    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以結帳。');
-    const [, act, sid, pay] = id.split(':');
-    const sess = S.get(sid);
-    if (!sess) return eph(i, err(i.guildId, '這筆結帳已逾時（超過 15 分鐘），請重新執行 /結帳。'));
-
-    if (act === 'pick') {
-      const picked = i.values[0];
-      if (picked === 'manual') {
-        return i.showModal(new ModalBuilder().setCustomId(`co:manual:${sid}`).setTitle('額外折扣金額')
-          .addComponents(input('amount', '折扣金額（元）', { ph: '例：50', value: String(sess.manualDiscount || 0) })));
-      }
-      S.update(sid, { couponKey: picked === 'none' ? '' : picked });
-      return i.update(CF.preview(sid, S.get(sid)));
-    }
-    if (act === 'manual') {
-      const v = Math.max(0, Math.round(Number(i.fields.getTextInputValue('amount')) || 0));
-      if (v > sess.list) return eph(i, err(i.guildId, `折扣金額不可超過訂單原價 ${sess.list} 元。`));
-      S.update(sid, { manualDiscount: v });
-      return i.update(CF.couponPayload(sid, S.get(sid)));
-    }
-    if (act === 'cancel') {
-      S.drop(sid);
-      return i.update({ embeds: [ok(i.guildId, '已取消結帳', '沒有建立任何訂單，折價券也未扣除。')], components: [] });
-    }
-    if (act === 'pay') {
-      let r;
-      try { r = CF.finish(sid, pay); }
-      catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
-      await i.update({
-        content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）\n`
-               + '**[客服專屬機密]** 帳務紀錄已同步至資料庫：',
-        embeds: [r.detail], components: []
-      });
-      await i.channel.send(r.message);
-      await backupToFinance(i, r);
-      return archiveTicketChannel(i, r.order);
-    }
   }
 
   // ---- 點單系統（服務類型 → 性別 → 需求單 → 專屬包廂 → 附加選項 → 發布）----
@@ -871,37 +849,56 @@ async function handleInteraction(i) {
     return;
   }
 
-  // ---- 考核 ----
+  // ---- 考核入職 ----
   if (id === 'exam:start') {
-    return i.showModal(new ModalBuilder().setCustomId('exammodal').setTitle('陪玩考核報名表')
+    return i.showModal(new ModalBuilder().setCustomId('exammodal').setTitle('📝 考核基本資料填寫')
       .addComponents(
-        input('nickname', '想使用的藝名'),
-        input('age', '年齡'),
-        input('skills', '擅長項目', { ph: '例：英雄聯盟、唱歌、聊天' }),
-        input('contact', '聯絡方式／可上線時段', { style: TextInputStyle.Paragraph })
+        input('subject', '考試項目 (如: 唱歌, 特戰)'),
+        input('grade', '分級 (如: 娛樂, 技術, 歌手)'),
+        input('gender', '性別 (男 / 女)')
       ));
   }
   if (id === 'exammodal') {
     await i.deferReply({ ephemeral: true });
-    const f = k => i.fields.getTextInputValue(k).trim();
-    const ch = await createPrivateChannel(i.guild, i.member,
-      { prefix: '考場', categoryKey: 'category_exam', extraRoleKeys: ['role_admin', 'role_cs'] });
-    db.prepare(`INSERT INTO exams (guild_id, src_guild, user_id, nickname, age, skills, contact, channel_id)
-                VALUES (?,?,?,?,?,?,?,?)`)
-      .run(orgOf(i.guildId), i.guildId, i.user.id, f('nickname'), f('age'), f('skills'), f('contact'), ch.id);
-    await ch.send({
-      content: mention(i.user.id),
-      embeds: [emb(i.guildId, {
-        title: '📋 考核報名表',
-        fields: [
-          { name: '藝名', value: f('nickname'), inline: true },
-          { name: '年齡', value: f('age'), inline: true },
-          { name: '擅長項目', value: f('skills') },
-          { name: '聯絡方式／時段', value: f('contact') }
-        ]
-      })]
+    const f = k => (i.fields.getTextInputValue(k) || '').trim();
+    const ch = await createPrivateChannel(i.guild, i.member, {
+      name: `📝│考核單│${i.user.username}`,
+      categoryKey: 'category_exam',
+      extraRoleKeys: ['role_admin', 'role_cs']
     });
-    return i.editReply({ embeds: [ok(i.guildId, '報名成功', `專屬考場已建立：${ch}`)] });
+    const info = db.prepare(`INSERT INTO exams (guild_id, src_guild, user_id, nickname, subject, grade, gender, channel_id)
+                VALUES (?,?,?,?,?,?,?,?)`)
+      .run(orgOf(i.guildId), i.guildId, i.user.id, i.user.username,
+           f('subject'), f('grade'), f('gender'), ch.id);
+    const csRole = getSetting('role_cs', '', i.guildId);
+    await ch.send({
+      content: csRole ? `<@&${csRole}>` : undefined,
+      embeds: [emb(i.guildId, {
+        title: '📝 考核入職單',
+        color: COLOR.ok,
+        desc: [
+          `歡迎 ${mention(i.user.id)}！您的考核單已建立。`,
+          '',
+          '**【考生填寫資料】**',
+          `▫️ **考試項目：**${f('subject')}`,
+          `▫️ **分級：**${f('grade')}`,
+          `▫️ **性別：**${f('gender')}`,
+          '',
+          '請稍候，考官或客服人員將會盡速為您服務！'
+        ].join('\n')
+      })],
+      components: [row(btn(`exam:close:${info.lastInsertRowid}`, '關閉考核單', ButtonStyle.Danger, '🔒'))]
+    });
+    return i.editReply({ embeds: [ok(i.guildId, '考核單已開啟！', `請移步至：${ch}`)] });
+  }
+  if (id.startsWith('exam:close:')) {
+    const eid = Number(id.split(':')[2]);
+    const e = db.prepare('SELECT * FROM exams WHERE id=?').get(eid);
+    if (!e) return eph(i, err(i.guildId, '查無這張考核單。'));
+    if (e.user_id !== i.user.id && !isCS(i.member)) return denyEph(i, '只有考生或考官可以關閉考核單。');
+    db.prepare("UPDATE exams SET status='closed' WHERE id=?").run(eid);
+    await i.reply({ embeds: [ok(i.guildId, '考核單已關閉', '頻道將於 5 秒後刪除。')] });
+    return setTimeout(() => i.channel.delete().catch(() => {}), 5000);
   }
 
   // ---- 意見箱 ----

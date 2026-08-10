@@ -64,11 +64,13 @@ const handlers = {
     if (target !== msg.author.id && !isCS(msg.member)) throw new Error('只有客服／管理員可以查詢他人薪資。');
     const s = getStaff(msg.guild.id, target);
     if (!s) throw new Error('查無此人的員工資料。');
-    await msg.reply({ embeds: [money(msg.guild.id, '💵 薪資查詢', `**${s.name || s.code}**（${mention(target)}）`, [
-      { name: '可提領 Income', value: n(s.income), inline: true },
-      { name: '暫存 PendingIncome', value: n(s.pending_income), inline: true },
-      { name: '歷史累計入帳', value: n(s.total_income), inline: true }
-    ])] });
+    await msg.reply({
+      content: mention(target),
+      embeds: [money(msg.guild.id, '💰 專屬薪資查詢',
+        `${mention(target)} 您好！\n\n您目前的薪資狀況如下：\n`
+        + `✅ **可提領餘額：** \`${n(s.income)}\` 元\n`
+        + `⏳ **暫存薪水 (審核中)：** \`${n(s.pending_income)}\` 元`)]
+    });
   },
 
   async 全服雨幣(msg) {

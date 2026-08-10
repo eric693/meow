@@ -55,7 +55,12 @@ ensureColumns('tickets', [
   ['published_at', 'TEXT'],
   ['card_channel_id', "TEXT NOT NULL DEFAULT ''"]
 ]);
-ensureColumns('exams', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);
+ensureColumns('exams', [
+  ['src_guild', "TEXT NOT NULL DEFAULT ''"],
+  ['subject',   "TEXT NOT NULL DEFAULT ''"],
+  ['grade',     "TEXT NOT NULL DEFAULT ''"],
+  ['gender',    "TEXT NOT NULL DEFAULT ''"]
+]);
 // 舊資料補算原價與淨利
 db.exec("UPDATE orders SET list_price = amount WHERE list_price = 0 AND amount <> 0");
 db.exec("UPDATE orders SET net = amount - staff_share WHERE net = 0 AND amount <> 0");

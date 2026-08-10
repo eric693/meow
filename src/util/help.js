@@ -39,7 +39,8 @@ const SECTIONS = [
   { name: '⚙️ 面板建置（管理員）',
     value: '`!setup-checkout` 客服結帳台　`!setup-ticket` 派單接待大廳\n'
          + '`!setup-report` 自主報單　`!setup-report-cross` `!setup-report-cross-2` 跨服報單\n'
-         + '`!setup-exam` 考核報名　`!setup-bank` 地下金庫　`!setup-intimacy` 愛戀藏館\n'
+         + '`!setup-exam` 考核入職　`!setup-member` 會員服務中心　`!setup-bank` 地下金庫\n'
+         + '`!setup-intimacy` 愛戀藏館\n'
          + '`!setup-suggestion` 意見箱　`!setup-staff-suggestion` 員工輔導室\n'
          + '`!setup-identity` 身份大廳　`!sendrole` 身分組領取　`!sendorder` 下單前提醒' },
 
