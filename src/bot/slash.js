@@ -9,6 +9,14 @@ const G = require('../util/gifts');
 const R = require('../util/reports');
 const { isAdmin, isCS } = require('./perm');
 const { helpEmbed } = require('../util/help');
+const { getSetting } = require('../db');
+
+/** 把金流紀錄發到「金流紀錄頻道」；沒設定就退回後台財務頻道，再沒有就發在當前頻道 */
+async function moneyLog(i, embed) {
+  const id = getSetting('channel_money_log', '', i.guildId) || getSetting('channel_finance', '', i.guildId);
+  const ch = id ? await i.client.channels.fetch(id).catch(() => null) : null;
+  await (ch && ch.isTextBased() ? ch : i.channel).send({ embeds: [embed] }).catch(() => {});
+}
 
 // 標記起來，讓 index.js 把這次互動記成 deny 而不是成功
 const deny = i => {
@@ -105,6 +113,11 @@ const handlers = {
     addCoins(i.guildId, u.id, amt, reason, { operator: i.user.tag, name: u.username });
     await i.reply({ content: `✅ **儲值成功！** 已將 \`${n(amt)}\` 雨幣 放入 ${mention(u.id)} 的金庫。`,
       ephemeral: true });
+    return moneyLog(i, emb(i.guildId, {
+      title: '💰 儲值紀錄',
+      color: COLOR.ok,
+      desc: `**對象：** ${mention(u.id)}\n**金額：** \`${n(amt)}\` 雨幣\n**經辦：** ${mention(i.user.id)}`
+    }));
   },
 
   async 扣款(i) {
@@ -113,8 +126,14 @@ const handlers = {
     const amt = i.options.getInteger('金額');
     const reason = i.options.getString('原因') || '人工扣款';
     const bal = addCoins(i.guildId, u.id, -amt, reason, { operator: i.user.tag, name: u.username });
-    await i.reply({ content: `✅ **扣款成功！** 已從 ${mention(u.id)} 的金庫扣除 \`${n(amt)}\` 雨幣，餘額 \`${n(bal)}\`。`,
+    await i.reply({ content: `✅ **扣款成功！** 已從 ${mention(u.id)} 的帳戶扣除 \`${n(amt)}\` 雨幣。`,
       ephemeral: true });
+    return moneyLog(i, emb(i.guildId, {
+      title: '💵 手動扣款紀錄',
+      color: COLOR.err,
+      desc: `**經辦人：** ${mention(i.user.id)}\n**對象：** ${mention(u.id)}\n`
+          + `**扣除：** \`${n(amt)}\` 雨幣\n**剩餘餘額：** \`${n(bal)}\` 雨幣`
+    }));
   },
 
   async 提領(i) {
@@ -123,11 +142,14 @@ const handlers = {
     const amt = i.options.getInteger('金額');
     M.payoutStaff(i.guildId, s.user_id, amt, i.user.tag, i.options.getString('備註') || '');
     const after = getStaff(i.guildId, s.user_id);
-    await i.reply({ embeds: [money(i.guildId, '💸 薪資已發放', `**${s.name || s.code}**（${mention(s.user_id)}）`, [
-      { name: '本次發放', value: `${n(amt)} 雨幣`, inline: true },
-      { name: '剩餘可提領', value: n(after.income), inline: true },
-      { name: '經辦', value: mention(i.user.id), inline: true }
-    ])] });
+    await i.reply({ content: '✅ 提領作業已完成並公開發送至指定頻道。', ephemeral: true });
+    return moneyLog(i, emb(i.guildId, {
+      title: '💸 薪資發放成功',
+      color: COLOR.ok,
+      desc: `✅ 已成功扣除系統帳目，發放 \`${n(amt)}\` 元薪資給 ${mention(s.user_id)}。\n`
+          + `💳 該員剩餘可提領薪資：\`${n(after.income)}\` 元`,
+      footer: `經辦人：${i.user.tag}`
+    }));
   },
 
   async 退單(i) {

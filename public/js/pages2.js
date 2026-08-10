@@ -635,6 +635,7 @@ Pages.settings = async view => {
         <label class="f"><span>後台結帳／財務</span><select name="channel_finance">${opts(res.channels, v.channel_finance)}</select></label>
         <label class="f"><span>匯出區（機密）</span><select name="channel_export">${opts(res.channels, v.channel_export)}</select></label>
         <label class="f"><span>指令操作紀錄</span><select name="channel_command_log">${opts(res.channels, v.channel_command_log)}</select></label>
+        <label class="f"><span>金流紀錄（儲值／扣款／發薪）</span><select name="channel_money_log">${opts(res.channels, v.channel_money_log)}</select></label>
       </div>
       <h4 style="margin:14px 0 6px">會員售後</h4>
       <div class="grid c2">

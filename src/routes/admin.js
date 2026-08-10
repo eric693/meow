@@ -53,7 +53,7 @@ const GUILD_KEYS = [
   'channel_member_system', 'channel_notice_log', 'channel_cs_lobby',
   // 入口類
   'channel_order_entry', 'channel_exam_entry', 'channel_intro',
-  'channel_command_log',
+  'channel_command_log', 'channel_money_log',
   // 下單選單選項（逗號分隔）
   'order_genders', 'order_services', 'order_addons', 'order_type_labels', 'ticket_seq_start'
 ];
