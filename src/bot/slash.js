@@ -183,6 +183,33 @@ const handlers = {
     ])] });
   },
 
+  async 發放折價券(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('老闆');
+    const type = i.options.getString('類型');
+    const num = i.options.getInteger('數值');
+    const name = i.options.getString('名稱').trim();
+    const qty = i.options.getInteger('數量') || 1;
+    const minSpend = i.options.getInteger('門檻') || 0;
+    const expires = (i.options.getString('期限') || '').trim();
+    if (expires && !/^\d{4}-\d{2}-\d{2}$/.test(expires))
+      return i.reply({ embeds: [err(i.guildId, '期限格式請用 YYYY-MM-DD，例如 2026-12-31。')], ephemeral: true });
+    // 打折券以「折數」輸入（85 折），存的是折抵百分比（15）
+    if (type === 'percent' && (num < 1 || num > 99))
+      return i.reply({ embeds: [err(i.guildId, '打折券的折數請填 1~99，例如 85 折填 85。')], ephemeral: true });
+
+    const value = type === 'amount' ? num : 0;
+    const percent = type === 'percent' ? 100 - num : 0;
+    const desc = type === 'amount' ? `折抵 ${n(num)} 元` : `打 ${num} 折`;
+    const key = `${type}${num}-${name}`.replace(/\s+/g, '').slice(0, 60);
+    G.addItem(i.guildId, u.id, { key, name, qty, value, percent, minSpend, expires: expires || null });
+    audit(i.user.tag, '發放折價券', `${name}(${desc})×${qty} → ${u.tag}`, i.guildId);
+
+    const line = `【${name}】(${desc})${minSpend ? `（滿 ${n(minSpend)}）` : ''} x${qty}`;
+    await i.reply({ content: `✅ 成功將 ${line} 發送給老闆 ${mention(u.id)} 的背包！`, ephemeral: true });
+    return i.channel.send(`發放了 ${line} 給 ${mention(u.id)} 的背包！`);
+  },
+
   // ---------- 查詢與報表 ----------
   async 對帳(i) {
     if (!isCS(i.member)) return deny(i);

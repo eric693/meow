@@ -63,6 +63,18 @@ const commands = [
     .addIntegerOption(o => o.setName('金額').setDescription('正數增加淨利、負數減少').setRequired(true))
     .addStringOption(o => o.setName('原因').setDescription('平帳原因').setRequired(true)),
 
+  b('發放折價券', '發送折價券或代金券到金主的背包')
+    .addUserOption(o => o.setName('老闆').setDescription('請選擇要發放的金主').setRequired(true))
+    .addStringOption(o => o.setName('類型').setDescription('請選擇折價券類型').setRequired(true)
+      .addChoices({ name: '金額折抵 (如: 折 50 元)', value: 'amount' },
+                  { name: '打折券 (如: 打 85 折)', value: 'percent' }))
+    .addIntegerOption(o => o.setName('數值').setDescription('金額折抵填元數；打折券填折數（85 折填 85）')
+      .setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('名稱').setDescription('券的名稱，例：VIP2 折價卷').setRequired(true))
+    .addIntegerOption(o => o.setName('數量').setDescription('預設 1 張').setMinValue(1))
+    .addIntegerOption(o => o.setName('門檻').setDescription('最低消費門檻，不填為無門檻').setMinValue(0))
+    .addStringOption(o => o.setName('期限').setDescription('到期日 YYYY-MM-DD，不填為不限期')),
+
   // ---- 查詢與報表 ----
   b('對帳', '查詢特定老闆在特定陪玩身上的累計消費金額與次數')
     .addUserOption(o => o.setName('客人').setDescription('老闆').setRequired(true))
