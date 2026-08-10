@@ -8,6 +8,64 @@ const commands = [
   b('help', '顯示喚雨機器喵的全部指令與權限說明')
     .addBooleanOption(o => o.setName('公開').setDescription('讓整個頻道都看得到，預設只有你看得到')),
 
+  // ---- 財務與結帳 ----
+  b('結帳', '一般結帳：扣款、計算拆帳與親密度並發布結帳明細')
+    .addUserOption(o => o.setName('客人').setDescription('付款的老闆').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addIntegerOption(o => o.setName('金額').setDescription('客人實付金額').setRequired(true).setMinValue(1))
+    .addIntegerOption(o => o.setName('原價').setDescription('未折扣前的訂單原價，不填視為與實付相同').setMinValue(0))
+    .addStringOption(o => o.setName('項目').setDescription('例：娛樂4場、唱歌2小時'))
+    .addStringOption(o => o.setName('支付方式').setDescription('預設「雨幣扣款」')
+      .addChoices({ name: '雨幣扣款', value: '雨幣扣款' }, { name: '現金匯款', value: '現金匯款' },
+                  { name: '免費體驗', value: '免費體驗' }))
+    .addStringOption(o => o.setName('備註').setDescription('寫進流水帳的備註')),
+
+  b('身分組結帳', '身分組專屬結帳（如獨顯-週／獨顯-月），完成後免核銷')
+    .addUserOption(o => o.setName('客人').setDescription('付款的老闆').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addStringOption(o => o.setName('項目').setDescription('例：獨顯-週、獨顯-月').setRequired(true))
+    .addIntegerOption(o => o.setName('單價').setDescription('單份金額').setRequired(true).setMinValue(1))
+    .addIntegerOption(o => o.setName('數量').setDescription('預設 1').setMinValue(1))
+    .addStringOption(o => o.setName('備註').setDescription('寫進流水帳的備註')),
+
+  b('伺服器冠名結帳', '100% 收益直接歸入伺服器淨利的特殊結帳')
+    .addUserOption(o => o.setName('老闆').setDescription('付款的老闆').setRequired(true))
+    .addIntegerOption(o => o.setName('金額').setDescription('結帳金額').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('項目').setDescription('例：伺服器冠名-8月'))
+    .addStringOption(o => o.setName('備註').setDescription('寫進流水帳的備註')),
+
+  b('儲值', '為金主手動增加雨幣餘額')
+    .addUserOption(o => o.setName('對象').setDescription('老闆').setRequired(true))
+    .addIntegerOption(o => o.setName('金額').setDescription('增加的雨幣').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('原因').setDescription('例：轉帳儲值、活動補償')),
+
+  b('扣款', '手動扣除金主帳戶的雨幣餘額')
+    .addUserOption(o => o.setName('對象').setDescription('老闆').setRequired(true))
+    .addIntegerOption(o => o.setName('金額').setDescription('扣除的雨幣').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('原因').setDescription('例：重複儲值更正')),
+
+  b('提領', '發放薪資給陪玩，並從其可提領帳戶中扣除')
+    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addIntegerOption(o => o.setName('金額').setDescription('發放金額').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('備註').setDescription('例：匯款帳號末五碼')),
+
+  b('退單', '撤銷訂單，回溯陪玩薪水與親密度')
+    .addStringOption(o => o.setName('訂單編號').setDescription('例：ORD-63876816').setRequired(true))
+    .addBooleanOption(o => o.setName('退還雨幣').setDescription('預設「是」；選「否」則不退錢給老闆'))
+    .addStringOption(o => o.setName('原因').setDescription('退單原因')),
+
+  b('補單', '於底層帳本補登歷史紀錄（不影響實際雨幣餘額）')
+    .addUserOption(o => o.setName('客人').setDescription('老闆').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addIntegerOption(o => o.setName('金額').setDescription('補登金額').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('項目').setDescription('例：娛樂4場'))
+    .addStringOption(o => o.setName('日期').setDescription('YYYY-MM-DD，不填視為今天'))
+    .addStringOption(o => o.setName('備註').setDescription('寫進流水帳的備註')),
+
+  b('財務調整', '手動調整伺服器本月淨利潤（平帳專用）')
+    .addIntegerOption(o => o.setName('金額').setDescription('正數增加淨利、負數減少').setRequired(true))
+    .addStringOption(o => o.setName('原因').setDescription('平帳原因').setRequired(true)),
+
   // ---- 查詢與報表 ----
   b('對帳', '查詢特定老闆在特定陪玩身上的累計消費金額與次數')
     .addUserOption(o => o.setName('客人').setDescription('老闆').setRequired(true))

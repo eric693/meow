@@ -1,5 +1,8 @@
 // Slash 指令處理
-const { db, getCustomer, findStaff, refreshVip, audit, orgOf } = require('../db');
+const { db, getCustomer, findStaff, getStaff, addCoins, refreshVip, audit, orgOf } = require('../db');
+const M = require('../util/money');
+const { checkoutMessage } = require('../util/checkout');
+const { parseSlots } = require('../util/slots');
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const G = require('../util/gifts');
 const R = require('../util/reports');
@@ -21,6 +24,162 @@ const handlers = {
   async help(i) {
     const pub = i.options.getBoolean('公開') || false;
     await i.reply({ embeds: [helpEmbed(i.guildId)], ephemeral: !pub });
+  },
+
+  // ---------- 財務與結帳 ----------
+  async 結帳(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('客人');
+    const s = resolveStaff(i);
+    const paid = i.options.getInteger('金額');
+    const list = i.options.getInteger('原價') ?? paid;
+    if (list < paid) return i.reply({ embeds: [err(i.guildId, '訂單原價不可小於客人實付金額。')], ephemeral: true });
+    const item = i.options.getString('項目') || '陪玩服務';
+    const { qty } = parseSlots(item);
+    const o = M.createOrder({
+      guildId: i.guildId, customerId: u.id, customerName: u.username,
+      staffId: s.user_id, csId: i.user.id, csName: i.user.tag,
+      item, qty, unitPrice: Math.round(paid / (qty || 1)),
+      listPrice: list, amount: paid, source: 'ticket', operator: i.user.tag,
+      payMethod: i.options.getString('支付方式') || '雨幣扣款',
+      note: i.options.getString('備註') || ''
+    });
+    await i.reply(checkoutMessage(i.guildId, o));
+  },
+
+  async 身分組結帳(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('客人');
+    const s = resolveStaff(i);
+    const item = i.options.getString('項目');
+    const unit = i.options.getInteger('單價');
+    const qty = i.options.getInteger('數量') || 1;
+    const amount = unit * qty;
+    const o = M.createOrder({
+      guildId: i.guildId, customerId: u.id, customerName: u.username,
+      staffId: s.user_id, csId: i.user.id, csName: i.user.tag,
+      kind: 'role', item, qty, unitPrice: unit, amount,
+      source: 'ticket', status: 'settled', operator: i.user.tag,
+      note: i.options.getString('備註') || ''
+    });
+    await i.reply({ embeds: [money(i.guildId, '💳 身分組結帳完成', `訂單編號 \`${o.order_no}\`（免核銷）`, [
+      { name: '消費金主', value: mention(u.id), inline: true },
+      { name: '服務陪玩', value: s.name || s.code, inline: true },
+      { name: '項目', value: `${item} ×${qty}`, inline: true },
+      { name: '客人實付', value: `${n(amount)} 雨幣`, inline: true },
+      { name: '陪玩分潤', value: `${n(o.staff_share)}（已直接入可提領）`, inline: true },
+      { name: '增加羈絆', value: `+${n(o.intimacy)}`, inline: true }
+    ])] });
+  },
+
+  async 伺服器冠名結帳(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('老闆');
+    const amount = i.options.getInteger('金額');
+    const o = M.createOrder({
+      guildId: i.guildId, customerId: u.id, customerName: u.username,
+      staffId: '', allowNoStaff: true, staffName: '（伺服器）',
+      csId: i.user.id, csName: i.user.tag,
+      item: i.options.getString('項目') || '伺服器冠名', qty: 1, unitPrice: amount, amount,
+      source: 'ticket', status: 'settled', operator: i.user.tag,
+      note: i.options.getString('備註') || ''
+    });
+    await i.reply({ embeds: [money(i.guildId, '🏷️ 伺服器冠名結帳完成', `訂單編號 \`${o.order_no}\``, [
+      { name: '消費金主', value: mention(u.id), inline: true },
+      { name: '實付金額', value: `${n(amount)} 雨幣`, inline: true },
+      { name: '伺服器淨利', value: `**${n(o.net)}**（100%）`, inline: true }
+    ])] });
+  },
+
+  async 儲值(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('對象');
+    const amt = i.options.getInteger('金額');
+    const reason = i.options.getString('原因') || '人工儲值';
+    const bal = addCoins(i.guildId, u.id, amt, reason, { operator: i.user.tag, name: u.username });
+    await i.reply({ embeds: [ok(i.guildId, '儲值完成',
+      `${mention(u.id)} +${n(amt)} 雨幣\n目前餘額：**${n(bal)}**\n原因：${reason}`)] });
+  },
+
+  async 扣款(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('對象');
+    const amt = i.options.getInteger('金額');
+    const reason = i.options.getString('原因') || '人工扣款';
+    const bal = addCoins(i.guildId, u.id, -amt, reason, { operator: i.user.tag, name: u.username });
+    await i.reply({ embeds: [ok(i.guildId, '扣款完成',
+      `${mention(u.id)} -${n(amt)} 雨幣\n目前餘額：**${n(bal)}**\n原因：${reason}`)] });
+  },
+
+  async 提領(i) {
+    if (!isAdmin(i.member)) return deny(i);
+    const s = resolveStaff(i);
+    const amt = i.options.getInteger('金額');
+    M.payoutStaff(i.guildId, s.user_id, amt, i.user.tag, i.options.getString('備註') || '');
+    const after = getStaff(i.guildId, s.user_id);
+    await i.reply({ embeds: [money(i.guildId, '💸 薪資已發放', `**${s.name || s.code}**（${mention(s.user_id)}）`, [
+      { name: '本次發放', value: `${n(amt)} 雨幣`, inline: true },
+      { name: '剩餘可提領', value: n(after.income), inline: true },
+      { name: '經辦', value: mention(i.user.id), inline: true }
+    ])] });
+  },
+
+  async 退單(i) {
+    if (!isAdmin(i.member)) return deny(i);
+    const no = i.options.getString('訂單編號').trim().toUpperCase();
+    const refundCoins = i.options.getBoolean('退還雨幣') ?? true;
+    const reason = i.options.getString('原因') || '';
+    const o = M.refundOrder(i.guildId, no, i.user.tag, reason, { refundCoins });
+    await i.reply({ embeds: [ok(i.guildId, `訂單 ${o.order_no} 已撤銷`, null, [
+      { name: '退還老闆', value: refundCoins ? `${n(o.amount)} 雨幣` : '未退幣', inline: true },
+      { name: '扣回陪玩分潤', value: n(o.staff_share), inline: true },
+      { name: '扣回羈絆', value: o.intimacy ? `-${n(o.intimacy)}` : '無', inline: true },
+      { name: '原因', value: reason || '無註記' }
+    ])] });
+  },
+
+  async 補單(i) {
+    if (!isAdmin(i.member)) return deny(i);
+    const u = i.options.getUser('客人');
+    const s = resolveStaff(i);
+    const amount = i.options.getInteger('金額');
+    const date = (i.options.getString('日期') || '').trim();
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date))
+      return i.reply({ embeds: [err(i.guildId, '日期格式請用 YYYY-MM-DD，例如 2026-08-01。')], ephemeral: true });
+    const item = i.options.getString('項目') || '補登';
+    const { qty } = parseSlots(item);
+    const o = M.createOrder({
+      guildId: i.guildId, customerId: u.id, customerName: u.username,
+      staffId: s.user_id, csId: i.user.id, csName: i.user.tag,
+      item, qty, unitPrice: Math.round(amount / (qty || 1)), amount,
+      source: 'manual', status: 'settled', skipWallet: true, intimacy: 0,
+      createdAt: date ? `${date} 12:00:00` : null,
+      operator: i.user.tag, note: i.options.getString('備註') || '手動補單'
+    });
+    await i.reply({ embeds: [money(i.guildId, '📒 已補登帳本', `訂單編號 \`${o.order_no}\``, [
+      { name: '金主', value: mention(u.id), inline: true },
+      { name: '陪玩', value: s.name || s.code, inline: true },
+      { name: '金額', value: `${n(amount)} 雨幣`, inline: true },
+      { name: '日期', value: o.created_at.slice(0, 10), inline: true },
+      { name: '說明', value: '僅影響對帳與戰報，未變動雨幣餘額與可提領薪資。' }
+    ])] });
+  },
+
+  async 財務調整(i) {
+    if (!isAdmin(i.member)) return deny(i);
+    const amount = i.options.getInteger('金額');
+    const reason = i.options.getString('原因');
+    const o = M.createOrder({
+      guildId: i.guildId, customerId: '', staffId: '', allowNoStaff: true, allowZero: true,
+      csId: i.user.id, csName: i.user.tag, kind: 'adjust', item: reason,
+      qty: 1, unitPrice: amount, amount, source: 'manual', status: 'settled',
+      skipWallet: true, intimacy: 0, operator: i.user.tag, note: reason
+    });
+    await i.reply({ embeds: [money(i.guildId, '⚙️ 財務調整已記錄', `訂單編號 \`${o.order_no}\``, [
+      { name: '淨利變動', value: `${amount > 0 ? '+' : ''}${n(amount)} 雨幣`, inline: true },
+      { name: '原因', value: reason, inline: true },
+      { name: '經辦', value: mention(i.user.id), inline: true }
+    ])] });
   },
 
   // ---------- 查詢與報表 ----------

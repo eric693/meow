@@ -28,7 +28,8 @@ ensureColumns('orders', [
   ['net',           'INTEGER NOT NULL DEFAULT 0'],
   ['pay_method',    "TEXT NOT NULL DEFAULT '雨幣扣款'"],
   ['reporter_id',   "TEXT NOT NULL DEFAULT ''"],
-  ['reported_at',   'TEXT']
+  ['reported_at',   'TEXT'],
+  ['intimacy',      'INTEGER NOT NULL DEFAULT 0']
 ]);
 ensureColumns('gift_logs', [['order_no', "TEXT NOT NULL DEFAULT ''"]]);
 ensureColumns('tickets', [['src_guild', "TEXT NOT NULL DEFAULT ''"]]);

@@ -8,6 +8,7 @@ const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const M = require('../util/money');
 const G = require('../util/gifts');
 const { checkoutMessage } = require('../util/checkout');
+const { parseSlots } = require('../util/slots');
 const { isAdmin, isCS } = require('./perm');
 
 const btn = (id, label, style = ButtonStyle.Primary, emoji) => {
@@ -202,12 +203,6 @@ function reportModal(kind) {
     input('slots', '報單場次／小時', { ph: '例：娛樂4場' }),
     input('price', '單價（雨幣）', { ph: '例：300' })
   );
-}
-
-// 「娛樂4場」→ { item: '娛樂', qty: 4 }；沒寫數字就當 1
-function parseSlots(text) {
-  const m = text.match(/(\d+(?:\.\d+)?)/);
-  return { item: text.replace(/\d+(?:\.\d+)?.*$/, '').trim() || text, qty: m ? Number(m[1]) : 1 };
 }
 
 async function handleInteraction(i) {

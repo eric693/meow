@@ -19,6 +19,8 @@ const STATUS = { pending: '暫存中', settled: '已核銷', refunded: '已退�
 
 // 陪玩分潤成數（%），可在後台「系統設定」調整
 const shareRate = guildId => getNum('staff_share_rate', 80, orgOf(guildId));
+// 結帳親密度成數（%）：實收金額 × 此比例 = 本單增加的羈絆點數
+const intimacyRate = guildId => getNum('order_intimacy_rate', 10, orgOf(guildId));
 
 /**
  * 建立一筆交易（報單／送禮／身分組結帳）。
@@ -29,49 +31,65 @@ function createOrder({
   guildId, customerId, customerName = '', staffId, staffName = '', csId = '', csName = '',
   kind = 'order', item = '', qty = 1, unitPrice = 0, listPrice = null, amount = null,
   staffShare = null, source = 'self', note = '', operator = '', orderNo = null, createdAt = null,
-  status = 'pending', skipWallet = false, payMethod = '雨幣扣款'
+  status = 'pending', skipWallet = false, payMethod = '雨幣扣款',
+  intimacy = null, allowNoStaff = false, allowZero = false
 }) {
   guildId = orgOf(guildId);
-  const staff = getStaff(guildId, staffId);
-  if (!staff || !staff.active) throw new Error('查無此陪玩（或已離職），請先用 /入職 建檔');
+  // 伺服器冠名、財務調整這類收入沒有對應陪玩，staffId 允許留空
+  const staff = staffId ? getStaff(guildId, staffId) : null;
+  if (staffId && (!staff || !staff.active))
+    throw new Error('查無此陪玩（或已離職），請先用 /入職 建檔');
+  if (!staffId && !allowNoStaff) throw new Error('請指定陪玩');
 
   const paid = Math.round(amount == null ? Number(qty) * Number(unitPrice) : Number(amount));
   if (!Number.isFinite(paid)) throw new Error('實收金額格式不正確');
-  // 匯入歷史資料時允許 0 元紀錄（例如免費贈禮）；日常開單則不允許
-  if (paid === 0 && !skipWallet) throw new Error('實收金額不可為 0');
+  // 匯入歷史資料與財務調整允許 0 元紀錄；日常開單則不允許
+  if (paid === 0 && !skipWallet && !allowZero) throw new Error('實收金額不可為 0');
   const list = Math.round(listPrice == null ? paid : Number(listPrice));
-  const share = Math.round(staffShare == null ? paid * shareRate(guildId) / 100 : Number(staffShare));
+  const share = !staffId ? 0
+    : Math.round(staffShare == null ? paid * shareRate(guildId) / 100 : Number(staffShare));
   const net = paid - share;
+  // 一般訂單與身分組結帳會累積羈絆；送禮由 gifts.sendGift 另外計算，這裡傳 0
+  const bond = Math.round(intimacy == null
+    ? (staffId && customerId && (kind === 'order' || kind === 'role') ? paid * intimacyRate(guildId) / 100 : 0)
+    : Number(intimacy));
   const no = orderNo || nextOrderNo();
 
   db.transaction(() => {
     // 匯入歷史資料時不動錢包（skipWallet），避免把過去的帳重算一次
-    if (!skipWallet && paid !== 0) {
+    if (!skipWallet && paid !== 0 && customerId) {
       addCoins(guildId, customerId, -paid, `${KINDS[kind]?.label || kind} ${no}`,
         { ref: no, operator, name: customerName });
     }
-    db.prepare('UPDATE customers SET total_spend = total_spend + ? WHERE guild_id = ? AND user_id = ?')
-      .run(paid, guildId, customerId);
+    if (customerId) {
+      db.prepare('UPDATE customers SET total_spend = total_spend + ? WHERE guild_id = ? AND user_id = ?')
+        .run(paid, guildId, customerId);
+    }
     db.prepare(`INSERT INTO orders
         (order_no, guild_id, customer_id, staff_id, cs_id, customer_name, staff_name, cs_name,
          kind, item, qty, unit_price, list_price, amount, staff_share, net, source, status, note,
-         pay_method, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?, datetime('now','localtime')))`)
+         pay_method, intimacy, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?, datetime('now','localtime')))`)
       .run(no, guildId, customerId, staffId, csId,
-           customerName || getCustomer(guildId, customerId).name || customerId,
-           staffName || staff.name || staff.code, csName,
+           customerName || (customerId ? getCustomer(guildId, customerId).name || customerId : ''),
+           staffName || (staff ? staff.name || staff.code : ''), csName,
            kind, item, Number(qty) || 1, Math.round(unitPrice) || 0,
-           list, paid, share, net, source, status, note, payMethod || '雨幣扣款', createdAt);
-    if (status === 'settled') {
-      db.prepare(`UPDATE staff SET income = income + ?, total_income = total_income + ?
-                  WHERE guild_id=? AND user_id=?`).run(share, share, guildId, staffId);
-    } else {
-      db.prepare('UPDATE staff SET pending_income = pending_income + ? WHERE guild_id = ? AND user_id = ?')
-        .run(share, guildId, staffId);
+           list, paid, share, net, source, status, note, payMethod || '雨幣扣款', bond, createdAt);
+    if (staffId) {
+      if (status === 'settled') {
+        db.prepare(`UPDATE staff SET income = income + ?, total_income = total_income + ?
+                    WHERE guild_id=? AND user_id=?`).run(share, share, guildId, staffId);
+      } else {
+        db.prepare('UPDATE staff SET pending_income = pending_income + ? WHERE guild_id = ? AND user_id = ?')
+          .run(share, guildId, staffId);
+      }
+    }
+    if (bond && staffId && customerId) {
+      require('./gifts').addIntimacy(guildId, customerId, staffId, bond);
     }
   })();
 
-  refreshVip(guildId, customerId);
+  if (customerId) refreshVip(guildId, customerId);
   audit(operator || customerId, '建立交易', `${no} ${kindLabel(kind)} ${paid}`, guildId);
   return db.prepare('SELECT * FROM orders WHERE order_no = ?').get(no);
 }
@@ -183,30 +201,42 @@ function settleOrder(guildId, orderNo, operator = '') {
 }
 
 /** 退單／撤銷：退還老闆實收金額、扣回陪玩抽成 */
-function refundOrder(guildId, orderNo, operator = '', reason = '') {
+function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins = true } = {}) {
   guildId = orgOf(guildId);
   const o = db.prepare('SELECT * FROM orders WHERE guild_id = ? AND order_no = ?').get(guildId, orderNo);
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
   if (o.status === 'refunded') throw new Error(`訂單 ${orderNo} 已退過款`);
 
   db.transaction(() => {
-    addCoins(guildId, o.customer_id, o.amount, `退單 ${orderNo}${reason ? '：' + reason : ''}`,
-      { ref: orderNo, operator });
-    db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend - ?) WHERE guild_id = ? AND user_id = ?')
-      .run(o.amount, guildId, o.customer_id);
-    const col = o.status === 'settled' ? 'income' : 'pending_income';
-    db.prepare(`UPDATE staff SET ${col} = MAX(0, ${col} - ?) WHERE guild_id = ? AND user_id = ?`)
-      .run(o.staff_share, guildId, o.staff_id);
-    if (o.status === 'settled') {
-      db.prepare('UPDATE staff SET total_income = MAX(0, total_income - ?) WHERE guild_id=? AND user_id=?')
+    // 不退幣時（例如老闆違規）只撤銷訂單、扣回陪玩分潤，雨幣不還給老闆
+    if (refundCoins && o.customer_id) {
+      addCoins(guildId, o.customer_id, o.amount, `退單 ${orderNo}${reason ? '：' + reason : ''}`,
+        { ref: orderNo, operator });
+    }
+    if (o.customer_id) {
+      db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend - ?) WHERE guild_id = ? AND user_id = ?')
+        .run(o.amount, guildId, o.customer_id);
+    }
+    if (o.staff_id) {
+      const col = o.status === 'settled' ? 'income' : 'pending_income';
+      db.prepare(`UPDATE staff SET ${col} = MAX(0, ${col} - ?) WHERE guild_id = ? AND user_id = ?`)
         .run(o.staff_share, guildId, o.staff_id);
+      if (o.status === 'settled') {
+        db.prepare('UPDATE staff SET total_income = MAX(0, total_income - ?) WHERE guild_id=? AND user_id=?')
+          .run(o.staff_share, guildId, o.staff_id);
+      }
+    }
+    // 本單當初加的羈絆點數原數扣回
+    if (o.intimacy && o.staff_id && o.customer_id) {
+      require('./gifts').addIntimacy(guildId, o.customer_id, o.staff_id, -o.intimacy);
     }
     db.prepare("UPDATE orders SET status = 'refunded', note = ? WHERE id = ?")
-      .run((o.note ? o.note + ' / ' : '') + '退單：' + (reason || '無註記'), o.id);
+      .run((o.note ? o.note + ' / ' : '') + '退單：' + (reason || '無註記')
+           + (refundCoins ? '' : '（不退幣）'), o.id);
   })();
 
-  refreshVip(guildId, o.customer_id);
-  audit(operator, '退單', `${orderNo} 退還 ${o.amount}`, guildId);
+  if (o.customer_id) refreshVip(guildId, o.customer_id);
+  audit(operator, '退單', `${orderNo} ${refundCoins ? '退還' : '未退'} ${o.amount}`, guildId);
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id);
 }
 
@@ -229,6 +259,12 @@ function requestWithdraw(guildId, staffId, amount, operator = '', note = '') {
     .get(guildId, staffId);
 }
 
+/** 管理員直接發薪：從陪玩「可提領」扣除並直接記為已完成，不需再審核 */
+function payoutStaff(guildId, staffId, amount, operator = '', note = '') {
+  const w = requestWithdraw(guildId, staffId, amount, operator, note || '管理員直接發放');
+  return reviewWithdraw(guildId, w.id, 'done', operator);
+}
+
 /** 管理員審核提領：done 完成 / rejected 退回（退回會把錢還給陪玩） */
 function reviewWithdraw(guildId, id, status, operator = '') {
   guildId = orgOf(guildId);
@@ -249,5 +285,6 @@ function reviewWithdraw(guildId, id, status, operator = '') {
 
 module.exports = {
   createOrder, updateOrder, deleteOrder, getOrder, reportOrder, settleOrder, refundOrder,
-  requestWithdraw, reviewWithdraw, shareRate, KINDS, STATUS, kindLabel
+  requestWithdraw, reviewWithdraw, payoutStaff,
+  shareRate, intimacyRate, KINDS, STATUS, kindLabel
 };
