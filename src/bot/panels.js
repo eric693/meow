@@ -163,8 +163,29 @@ const commands = {
   async 'setup-exam'(msg) {
     adminOnly(msg);
     await post(msg, {
-      embeds: [emb(msg.guild.id, { title: '📋 陪玩考核報名', desc: '想加入喚雨？點下方按鈕填寫報名表，系統會為你建立專屬考場。' })],
-      components: [row(btn('exam:start', '開始考核', ButtonStyle.Success, '📋'))]
+      embeds: [emb(msg.guild.id, {
+        title: '📋 喚雨｜考核入職開單說明',
+        desc: [
+          '歡迎來到喚雨電競',
+          '',
+          '在開啟考核入職單前，請先詳閱上方的考核規則，確認自己已了解考核流程',
+          '',
+          '**📌 開單前請先確認：**',
+          '',
+          '・已閱讀並了解考核規則',
+          '・確認自己可以配合考核流程',
+          '・清楚考核期間需遵守店內規範',
+          '・有任何疑問請先詢問管理，不要自行判斷',
+          '',
+          '開單後，考官會看到你的考核入職單，並依照流程進行後續考核流程',
+          '',
+          '**⚠️ 小提醒**',
+          '',
+          '開單不代表已正式入職，也不代表已開放接單權限',
+          '請等待考官或管理通知後，再進行下一步流程'
+        ].join('\n')
+      })],
+      components: [row(btn('exam:start', '開啟考核入職單', ButtonStyle.Success, '📋'))]
     });
   },
 
