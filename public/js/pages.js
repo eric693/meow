@@ -107,8 +107,18 @@ Pages.bank = async view => {
 
 // ---------------- 薪資與提領 ----------------
 Pages.salary = async view => {
+  const WD = { offset: 0, limit: 50 };
+  const F = [
+    { id: 'q', label: '關鍵字（藝名／代號）' },
+    { id: 'status', label: '提領狀態', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'pending', t: '待審核' }, { v: 'done', t: '已撥款' }, { v: 'rejected', t: '已退回' }] },
+    { id: 'month', label: '月份', type: 'month' },
+    { id: 'owed', label: '只看有薪資的人', type: 'select',
+      options: [{ v: '', t: '全部在職' }, { v: '1', t: '只看有薪資' }] }
+  ];
   const load = async () => {
-    const d = await GET('/salary');
+    const d = await GET('/salary?' + new URLSearchParams({ ...bind.values(), limit: WD.limit, offset: WD.offset }));
+    H.pager('sw', d.total || 0, WD);
 
     const paid = d.withdrawals.filter(w => w.status === 'done').reduce((s, w) => s + w.amount, 0);
     const waiting = d.withdrawals.filter(w => w.status === 'pending').reduce((s, w) => s + w.amount, 0);
@@ -161,8 +171,10 @@ Pages.salary = async view => {
     });
   };
   view.innerHTML = `<div class="grid c2" id="scharts"></div>
+    ${H.filters('sw', F)}
     <div class="card"><h3>員工薪資</h3><div id="sstaff"><div class="empty">載入中…</div></div></div>
     <div class="card"><h3>提領紀錄</h3><div id="swd"></div></div>`;
+  const bind = H.bindFilters('sw', F, () => load(), WD);
   load();
 };
 

@@ -2,8 +2,22 @@
 
 // ---------------- 禮物與親密度 ----------------
 Pages.gifts = async view => {
-  const load = async () => {
-    const [d, inti] = await Promise.all([GET('/gifts'), GET('/intimacy')]);
+  const LOG = { offset: 0, limit: 50 }, INT = { offset: 0, limit: 50 };
+  const logF = [
+    { id: 'q', label: '關鍵字（禮物名／單號）', placeholder: '例：玫瑰 或 GFT-' },
+    { id: 'customer_id', label: '老闆 Discord ID' },
+    { id: 'staff_id', label: '陪玩 Discord ID' },
+    { id: 'from', label: '起始日', type: 'date' },
+    { id: 'to', label: '結束日', type: 'date' }
+  ];
+  const intF = [
+    { id: 'q', label: '關鍵字（老闆／陪玩名稱）' },
+    { id: 'staff_id', label: '陪玩 Discord ID' },
+    { id: 'min', label: '羈絆點數 ≥', type: 'number' }
+  ];
+
+  const loadCat = async () => {
+    const d = await GET('/gifts?limit=1');
     document.getElementById('gcat').innerHTML = H.table(
       ['', '代號', '名稱', { label: '價格', num: 1 }, { label: '親密度', num: 1 }, '狀態', '操作'],
       d.catalog.map(g => `<tr><td style="font-size:19px">${UI.esc(g.emoji)}</td><td><code>${UI.esc(g.key)}</code></td>
@@ -11,49 +25,28 @@ Pages.gifts = async view => {
         <td>${g.active ? '<span class="tag ok">上架</span>' : '<span class="tag err">下架</span>'}</td>
         <td><button class="btn sm" data-ge='${UI.esc(JSON.stringify(g))}'>編輯</button>
             <button class="btn danger sm" data-gd="${UI.esc(g.key)}">下架</button></td></tr>`));
+    bindCat(d.catalog);
+  };
 
+  const loadLogs = async () => {
+    const d = await GET('/gifts?' + new URLSearchParams({ ...logBind.values(), limit: LOG.limit, offset: LOG.offset }));
+    H.pager('gl', d.total, LOG);
     document.getElementById('glog').innerHTML = H.table(
-      ['時間', '老闆', '陪玩', '禮物', { label: '數量', num: 1 }, { label: '金額', num: 1 }, { label: '親密度', num: 1 }],
-      d.logs.map(l => `<tr><td>${H.date(l.created_at)}</td><td>${H.user(l.customer_id)}</td>
-        <td>${H.user(l.staff_id)}</td><td>${UI.esc(l.gift_name)}</td><td class="num">${l.qty}</td>
-        <td class="num">${H.n(l.amount)}</td><td class="num">+${H.n(l.intimacy)}</td></tr>`));
+      ['時間', '單號', '老闆', '陪玩', '禮物', { label: '數量', num: 1 }, { label: '金額', num: 1 }, { label: '親密度', num: 1 }],
+      d.rows.map(l => `<tr><td>${H.date(l.created_at)}</td><td><code>${UI.esc(l.order_no || '—')}</code></td>
+        <td>${H.user(l.customer_id)}</td><td>${H.user(l.staff_id)}</td><td>${UI.esc(l.gift_name)}</td>
+        <td class="num">${l.qty}</td><td class="num">${H.n(l.amount)}</td><td class="num">+${H.n(l.intimacy)}</td></tr>`));
+  };
 
+  const loadInti = async () => {
+    const d = await GET('/intimacy?' + new URLSearchParams({ ...intBind.values(), limit: INT.limit, offset: INT.offset }));
+    H.pager('gi', d.total, INT);
     document.getElementById('ginti').innerHTML = H.table(
       ['老闆', '陪玩', { label: '羈絆點數', num: 1 }, '更新時間', '操作'],
-      inti.map(i => `<tr><td>${H.user(i.customer_id, i.customer_name)}</td>
+      d.rows.map(i => `<tr><td>${H.user(i.customer_id, i.customer_name)}</td>
         <td>${H.user(i.staff_id, i.staff_name)}</td><td class="num"><b>${H.n(i.points)}</b></td>
         <td>${H.date(i.updated_at)}</td>
         <td><button class="btn sm" data-ia="${i.customer_id}|${i.staff_id}">調整</button></td></tr>`));
-
-    const giftForm = g => `
-      <div class="row">
-        <label class="f"><span>代號</span><input name="key" value="${UI.esc(g?.key || '')}" ${g ? 'readonly' : ''}></label>
-        <label class="f"><span>Emoji</span><input name="emoji" value="${UI.esc(g?.emoji || '🎁')}"></label>
-      </div>
-      <label class="f"><span>名稱</span><input name="name" value="${UI.esc(g?.name || '')}"></label>
-      <div class="row">
-        <label class="f"><span>價格（雨幣）</span><input name="price" type="number" value="${g?.price || 0}"></label>
-        <label class="f"><span>單份親密度</span><input name="intimacy" type="number" value="${g?.intimacy || 0}"></label>
-        <label class="f"><span>排序</span><input name="sort" type="number" value="${g?.sort || 0}"></label>
-      </div>
-      <div class="muted">送禮時親密度自動 ×2。</div>`;
-
-    const saveGift = async back => {
-      await POST('/gifts', {
-        key: UI.val(back, 'key'), emoji: UI.val(back, 'emoji'), name: UI.val(back, 'name'),
-        price: Number(UI.val(back, 'price')), intimacy: Number(UI.val(back, 'intimacy')),
-        sort: Number(UI.val(back, 'sort'))
-      });
-      UI.ok('已儲存'); load();
-    };
-    document.querySelectorAll('[data-ge]').forEach(b => b.onclick = () =>
-      UI.modal({ title: '編輯禮物款式', bodyHTML: giftForm(JSON.parse(b.dataset.ge)), onOk: saveGift }));
-    document.getElementById('gnew').onclick = () =>
-      UI.modal({ title: '新增禮物款式', bodyHTML: giftForm(null), onOk: saveGift });
-    document.querySelectorAll('[data-gd]').forEach(b => b.onclick = async () => {
-      if (!await UI.confirm('確定要下架這個禮物款式嗎？')) return;
-      await DEL('/gifts/' + encodeURIComponent(b.dataset.gd)); UI.ok('已下架'); load();
-    });
     document.querySelectorAll('[data-ia]').forEach(b => b.onclick = () => {
       const [cid, sid] = b.dataset.ia.split('|');
       UI.modal({
@@ -62,16 +55,47 @@ Pages.gifts = async view => {
           <div class="muted">歸零時該 CP 的歷史禮物紀錄會同步清除。</div>`,
         onOk: async back => {
           const r = await POST('/intimacy/adjust', { customer_id: cid, staff_id: sid, delta: Number(UI.val(back, 'delta')) });
-          UI.ok(`已調整，目前 ${H.n(r.points)}（${r.rank.name}）`); load();
+          UI.ok(`已調整，目前 ${H.n(r.points)}（${r.rank.name}）`); loadInti();
         }
       });
+    });
+  };
+
+  const giftForm = g => `
+    <div class="row">
+      <label class="f"><span>代號</span><input name="key" value="${UI.esc(g?.key || '')}" ${g ? 'readonly' : ''}></label>
+      <label class="f"><span>Emoji</span><input name="emoji" value="${UI.esc(g?.emoji || '🎁')}"></label>
+    </div>
+    <label class="f"><span>名稱</span><input name="name" value="${UI.esc(g?.name || '')}"></label>
+    <div class="row">
+      <label class="f"><span>價格（雨幣）</span><input name="price" type="number" value="${g?.price || 0}"></label>
+      <label class="f"><span>單份親密度</span><input name="intimacy" type="number" value="${g?.intimacy || 0}"></label>
+      <label class="f"><span>排序</span><input name="sort" type="number" value="${g?.sort || 0}"></label>
+    </div>
+    <div class="muted">送禮的親密度依實付金額計算（後台「結帳親密度成數」），此欄僅作參考。</div>`;
+
+  const saveGift = async back => {
+    await POST('/gifts', {
+      key: UI.val(back, 'key'), emoji: UI.val(back, 'emoji'), name: UI.val(back, 'name'),
+      price: Number(UI.val(back, 'price')), intimacy: Number(UI.val(back, 'intimacy')),
+      sort: Number(UI.val(back, 'sort'))
+    });
+    UI.ok('已儲存'); loadCat();
+  };
+
+  const bindCat = catalog => {
+    document.querySelectorAll('[data-ge]').forEach(b => b.onclick = () =>
+      UI.modal({ title: '編輯禮物款式', bodyHTML: giftForm(JSON.parse(b.dataset.ge)), onOk: saveGift }));
+    document.querySelectorAll('[data-gd]').forEach(b => b.onclick = async () => {
+      if (!await UI.confirm('確定要下架這個禮物款式嗎？')) return;
+      await DEL('/gifts/' + encodeURIComponent(b.dataset.gd)); UI.ok('已下架'); loadCat();
     });
     document.getElementById('gsend').onclick = () => UI.modal({
       title: '代送禮物',
       bodyHTML: `<label class="f"><span>老闆 Discord ID</span><input name="customerId"></label>
         <label class="f"><span>陪玩 Discord ID</span><input name="staffId"></label>
         <label class="f"><span>禮物款式</span><select name="giftKey">
-          ${d.catalog.filter(g => g.active).map(g => `<option value="${UI.esc(g.key)}">${UI.esc(g.emoji + ' ' + g.name)}（${H.n(g.price)}）</option>`).join('')}
+          ${catalog.filter(g => g.active).map(g => `<option value="${UI.esc(g.key)}">${UI.esc(g.emoji + ' ' + g.name)}（${H.n(g.price)}）</option>`).join('')}
         </select></label>
         <label class="f"><span>數量</span><input name="qty" type="number" value="1" min="1"></label>`,
       onOk: async back => {
@@ -79,7 +103,7 @@ Pages.gifts = async view => {
           customerId: UI.val(back, 'customerId'), staffId: UI.val(back, 'staffId'),
           giftKey: UI.val(back, 'giftKey'), qty: Number(UI.val(back, 'qty'))
         });
-        UI.ok(`送出成功，親密度 +${H.n(r.gain)}`); load();
+        UI.ok(`送出成功，親密度 +${H.n(r.gain)}`); loadCat(); loadLogs(); loadInti();
       }
     });
   };
@@ -89,33 +113,56 @@ Pages.gifts = async view => {
       <div class="fit"><button class="btn secondary" id="gsend">🎁 代送禮物</button></div>
       <div class="fit"><button class="btn" id="gnew">＋ 新增款式</button></div></div></div>
     <div class="card"><h3>禮物款式</h3><div id="gcat"><div class="empty">載入中…</div></div></div>
-    <div class="card"><h3>親密度排行（CP）</h3><div id="ginti"></div></div>
-    <div class="card"><h3>送禮紀錄</h3><div id="glog"></div></div>`;
-  load();
+    <div class="card"><h3>親密度排行（CP）</h3></div>
+    ${H.filters('gi', intF)}
+    <div class="card"><div id="ginti"><div class="empty">載入中…</div></div></div>
+    <div class="card"><h3>送禮紀錄</h3></div>
+    ${H.filters('gl', logF)}
+    <div class="card"><div id="glog"><div class="empty">載入中…</div></div></div>`;
+
+  const logBind = H.bindFilters('gl', logF, () => loadLogs(), LOG);
+  const intBind = H.bindFilters('gi', intF, () => loadInti(), INT);
+  document.getElementById('gnew').onclick = () =>
+    UI.modal({ title: '新增禮物款式', bodyHTML: giftForm(null), onOk: saveGift });
+  loadCat(); loadLogs(); loadInti();
 };
 
 // ---------------- 背包 ----------------
 Pages.backpack = async view => {
-  const load = async (uid = '') => {
-    const rows = await GET('/backpack?' + new URLSearchParams(uid ? { user_id: uid } : {}));
+  const ST = { offset: 0, limit: 50 };
+  const F = [
+    { id: 'q', label: '關鍵字（名稱／代號）' },
+    { id: 'user_id', label: '對象 Discord ID' },
+    { id: 'type', label: '類型', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'coupon', t: '折價券' }, { v: 'item', t: '一般道具' }] },
+    { id: 'expiring', label: '即將到期（7 天內）', type: 'select',
+      options: [{ v: '', t: '不限' }, { v: '1', t: '只看即將到期' }] }
+  ];
+  const load = async () => {
+    const d = await GET('/backpack?' + new URLSearchParams({ ...bind.values(), limit: ST.limit, offset: ST.offset }));
+    H.pager('bk', d.total, ST);
     document.getElementById('kt').innerHTML = H.table(
       ['對象', '道具代號', '名稱', { label: '數量', num: 1 }, { label: '面額', num: 1 },
        { label: '折扣', num: 1 }, { label: '門檻', num: 1 }, '到期', '操作'],
-      rows.map(r => `<tr><td>${H.user(r.user_id)}</td><td><code>${UI.esc(r.item_key)}</code></td>
+      d.rows.map(r => `<tr><td>${H.user(r.user_id)}</td><td><code>${UI.esc(r.item_key)}</code></td>
         <td>${UI.esc(r.name)}</td><td class="num">${r.qty}</td>
         <td class="num">${r.value ? H.n(r.value) : '—'}</td>
         <td class="num">${r.percent ? r.percent + '%' : '—'}</td>
         <td class="num">${r.min_spend ? H.n(r.min_spend) : '—'}</td><td>${UI.esc(r.expires || '—')}</td>
         <td><button class="btn danger sm" data-kd="${r.id}">刪除</button></td></tr>`));
     document.querySelectorAll('[data-kd]').forEach(b => b.onclick = async () => {
-      await DEL('/backpack/' + b.dataset.kd); UI.ok('已刪除'); load(document.getElementById('ku').value.trim());
+      if (!await UI.confirm('確定要刪除這筆道具嗎？')) return;
+      await DEL('/backpack/' + b.dataset.kd); UI.ok('已刪除'); load();
     });
   };
-  view.innerHTML = `<div class="card"><div class="row">
-      <label class="f"><span>只看某位老闆</span><input id="ku" placeholder="Discord ID"></label>
+
+  view.innerHTML = `
+    <div class="card"><div class="row"><div class="grow"><h3 style="margin:0">背包與折價券</h3></div>
       <div class="fit"><button class="btn" id="kadd">＋ 發放道具／折價券</button></div></div></div>
+    ${H.filters('bk', F)}
     <div class="card" id="kt"><div class="empty">載入中…</div></div>`;
-  document.getElementById('ku').oninput = (() => { let t; return e => { clearTimeout(t); t = setTimeout(() => load(e.target.value.trim()), 350); }; })();
+
+  const bind = H.bindFilters('bk', F, () => load(), ST);
   document.getElementById('kadd').onclick = () => UI.modal({
     title: '發放道具／折價券',
     bodyHTML: `<label class="f"><span>對象 Discord ID</span><input name="user_id"></label>
@@ -139,7 +186,7 @@ Pages.backpack = async view => {
         percent: Number(UI.val(back, 'percent')), min_spend: Number(UI.val(back, 'min_spend')),
         expires: UI.val(back, 'expires') || null
       });
-      UI.ok('已發放'); load(document.getElementById('ku').value.trim());
+      UI.ok('已發放'); load();
     }
   });
   load();
@@ -147,122 +194,110 @@ Pages.backpack = async view => {
 
 // ---------------- 客服單與考核 ----------------
 Pages.tickets = async view => {
-  const load = async () => {
-    const [tk, ex] = await Promise.all([GET('/tickets'), GET('/exams')]);
+  const TK = { offset: 0, limit: 50 }, EX = { offset: 0, limit: 50 };
+  const tkF = [
+    { id: 'q', label: '關鍵字（單號／服務類型）' },
+    { id: 'status', label: '狀態', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'open', t: '待處理' }, { v: 'claimed', t: '已接單' }, { v: 'closed', t: '已結束' }] },
+    { id: 'publish', label: '發布狀態', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'draft', t: '尚未發布' }, { v: 'public', t: '公開單' }, { v: 'anon', t: '匿名單' }] },
+    { id: 'customer_id', label: '開單者 Discord ID' },
+    { id: 'from', label: '起始日', type: 'date' },
+    { id: 'to', label: '結束日', type: 'date' }
+  ];
+  const exF = [
+    { id: 'q', label: '關鍵字（暱稱／項目／分級）' },
+    { id: 'status', label: '狀態', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'open', t: '進行中' }, { v: 'passed', t: '通過' }, { v: 'failed', t: '未通過' }, { v: 'closed', t: '已關閉' }] }
+  ];
+
+  const loadTk = async () => {
+    const d = await GET('/tickets?' + new URLSearchParams({ ...tkBind.values(), limit: TK.limit, offset: TK.offset }));
+    H.pager('tk', d.total, TK);
     document.getElementById('tt').innerHTML = H.table(
-      ['#', '類型', '開單者', '客服', '狀態', '建立時間', '接單時間', '操作'],
-      tk.map(t => `<tr><td>${t.id}</td><td>${UI.esc(t.subject || t.kind)}</td>
+      ['#', '單號', '服務', '開單者', '客服', '狀態', '發布', '建立時間', '操作'],
+      d.rows.map(t => `<tr><td>${t.id}</td><td>${t.seq ? `<code>${t.seq}</code>` : '—'}</td>
+        <td>${UI.esc(t.service || t.subject || t.kind)}</td>
         <td>${H.user(t.customer_id)}</td><td>${H.user(t.cs_id)}</td><td>${H.statusTag(t.status)}</td>
-        <td>${H.date(t.created_at)}</td><td>${H.date(t.claimed_at)}</td>
+        <td>${t.publish === 'anon' ? '<span class="tag warn">匿名</span>'
+             : t.publish === 'public' ? '<span class="tag">公開</span>' : '<span class="tag err">未發布</span>'}</td>
+        <td>${H.date(t.created_at)}</td>
         <td>${t.status !== 'closed' ? `<button class="btn danger sm" data-tc="${t.id}">結束</button>` : ''}</td></tr>`));
+    document.querySelectorAll('[data-tc]').forEach(b => b.onclick = async () => {
+      await POST(`/tickets/${b.dataset.tc}/close`); UI.ok('已結束'); loadTk();
+    });
+  };
+
+  const loadEx = async () => {
+    const d = await GET('/exams?' + new URLSearchParams({ paged: 1, ...exBind.values(), limit: EX.limit, offset: EX.offset }));
+    H.pager('ex', d.total, EX);
     document.getElementById('et').innerHTML = H.table(
-      ['#', '報名者', '藝名', '年齡', '擅長', '狀態', '時間', '操作'],
-      ex.map(e => `<tr><td>${e.id}</td><td>${H.user(e.user_id)}</td><td>${UI.esc(e.nickname)}</td>
-        <td>${UI.esc(e.age)}</td><td>${UI.esc(e.skills)}</td><td>${H.statusTag(e.status)}</td>
+      ['#', '報名者', '考試項目', '分級', '性別', '狀態', '時間', '操作'],
+      d.rows.map(e => `<tr><td>${e.id}</td><td>${H.user(e.user_id, e.nickname)}</td>
+        <td>${UI.esc(e.subject || e.skills || '—')}</td><td>${UI.esc(e.grade || '—')}</td>
+        <td>${UI.esc(e.gender || e.age || '—')}</td><td>${H.statusTag(e.status)}</td>
         <td>${H.date(e.created_at)}</td>
         <td><button class="btn ok sm" data-ep="${e.id}">通過</button>
             <button class="btn danger sm" data-ef="${e.id}">不通過</button></td></tr>`));
-    document.querySelectorAll('[data-tc]').forEach(b => b.onclick = async () => {
-      await POST(`/tickets/${b.dataset.tc}/close`); UI.ok('已結束'); load();
-    });
     document.querySelectorAll('[data-ep]').forEach(b => b.onclick = async () => {
-      await PUT('/exams/' + b.dataset.ep, { status: 'passed' }); UI.ok('已標記通過'); load();
+      await PUT('/exams/' + b.dataset.ep, { status: 'passed' }); UI.ok('已標記通過'); loadEx();
     });
     document.querySelectorAll('[data-ef]').forEach(b => b.onclick = async () => {
-      await PUT('/exams/' + b.dataset.ef, { status: 'failed' }); UI.ok('已標記不通過'); load();
+      await PUT('/exams/' + b.dataset.ef, { status: 'failed' }); UI.ok('已標記不通過'); loadEx();
     });
-  };
-  view.innerHTML = `<div class="card"><h3>客服單 / 派單</h3><div id="tt"><div class="empty">載入中…</div></div></div>
-    <div class="card"><h3>考核報名</h3><div id="et"></div></div>`;
-  load();
-};
-
-// ---------------- 操作紀錄 ----------------
-Pages.logs = async view => {
-  const SOURCE = { prefix: '前綴指令', slash: '斜線指令', button: '按鈕', modal: '表單',
-                   select: '選單', web: '後台', system: '系統' };
-  const STATUS = { ok: ['ok', '✅ 成功'], fail: ['err', '⚠️ 失敗'], deny: ['warn', '⛔ 權限不足'] };
-  const state = { offset: 0, limit: 100 };
-
-  const filters = () => ({
-    source: document.getElementById('lgSource').value,
-    status: document.getElementById('lgStatus').value,
-    actor: document.getElementById('lgActor').value.trim(),
-    from: document.getElementById('lgFrom').value,
-    to: document.getElementById('lgTo').value,
-    q: document.getElementById('lgQ').value.trim()
-  });
-
-  const load = async () => {
-    const p = { ...filters(), limit: state.limit, offset: state.offset };
-    Object.keys(p).forEach(k => p[k] === '' && delete p[k]);
-    const d = await GET('/logs?' + new URLSearchParams(p));
-    const shown = Math.min(state.offset + d.rows.length, d.total);
-    document.getElementById('lgCount').textContent =
-      d.total ? `第 ${state.offset + 1}–${shown} 筆，共 ${H.n(d.total)} 筆` : '沒有符合條件的紀錄';
-    document.getElementById('lgPrev').disabled = state.offset <= 0;
-    document.getElementById('lgNext').disabled = state.offset + state.limit >= d.total;
-    document.getElementById('lgTable').innerHTML = H.table(
-      ['時間', '操作者', '來源', '動作', '狀態', '頻道', '內容'],
-      d.rows.map(r => {
-        const [cls, label] = STATUS[r.status] || ['', r.status];
-        return `<tr>
-          <td style="white-space:nowrap">${H.date(r.created_at)}</td>
-          <td>${UI.esc(r.actor || '—')}${r.actor_id ? `<div class="muted" style="font-size:11px">${UI.esc(r.actor_id)}</div>` : ''}</td>
-          <td>${UI.esc(SOURCE[r.source] || r.source)}</td>
-          <td><code>${UI.esc(r.action)}</code></td>
-          <td><span class="tag ${cls}">${UI.esc(label)}</span></td>
-          <td class="muted">${r.channel_id ? UI.esc(r.channel_id) : '—'}</td>
-          <td style="max-width:420px;word-break:break-all">${UI.esc(r.detail || '')}</td>
-        </tr>`;
-      }), '沒有符合條件的紀錄');
   };
 
   view.innerHTML = `
-    <div class="card">
-      <div class="grid c3">
-        <label class="f"><span>來源</span><select id="lgSource">
-          <option value="">全部</option>
-          ${Object.entries(SOURCE).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
-        </select></label>
-        <label class="f"><span>狀態</span><select id="lgStatus">
-          <option value="">全部</option>
-          <option value="ok">成功</option><option value="fail">失敗</option><option value="deny">權限不足</option>
-        </select></label>
-        <label class="f"><span>操作者（名稱或 Discord ID）</span><input id="lgActor" placeholder="例：yu 或 123456789012345678"></label>
-        <label class="f"><span>起始日</span><input id="lgFrom" type="date"></label>
-        <label class="f"><span>結束日</span><input id="lgTo" type="date"></label>
-        <label class="f"><span>關鍵字（動作或內容）</span><input id="lgQ" placeholder="例：核銷、ORD-"></label>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <div class="fit"><button class="btn" id="lgGo">查詢</button></div>
-        <div class="fit"><button class="btn secondary" id="lgReset">清除條件</button></div>
-        <div class="grow muted" id="lgCount" style="align-self:center"></div>
-        <div class="fit"><button class="btn secondary sm" id="lgPrev">上一頁</button></div>
-        <div class="fit"><button class="btn secondary sm" id="lgNext">下一頁</button></div>
-      </div>
-    </div>
-    <div class="card"><div id="lgTable"><div class="empty">載入中…</div></div></div>`;
+    <div class="card"><h3>客服單 / 派單</h3></div>
+    ${H.filters('tk', tkF)}
+    <div class="card"><div id="tt"><div class="empty">載入中…</div></div></div>
+    <div class="card"><h3>考核報名</h3></div>
+    ${H.filters('ex', exF)}
+    <div class="card"><div id="et"><div class="empty">載入中…</div></div></div>`;
 
-  const go = () => { state.offset = 0; load(); };
-  document.getElementById('lgGo').onclick = go;
-  document.getElementById('lgReset').onclick = () => {
-    ['lgSource', 'lgStatus', 'lgActor', 'lgFrom', 'lgTo', 'lgQ'].forEach(id => document.getElementById(id).value = '');
-    go();
-  };
-  document.getElementById('lgQ').onkeydown = e => { if (e.key === 'Enter') go(); };
-  document.getElementById('lgActor').onkeydown = e => { if (e.key === 'Enter') go(); };
-  document.getElementById('lgPrev').onclick = () => { state.offset = Math.max(0, state.offset - state.limit); load(); };
-  document.getElementById('lgNext').onclick = () => { state.offset += state.limit; load(); };
-  load();
+  const tkBind = H.bindFilters('tk', tkF, () => loadTk(), TK);
+  const exBind = H.bindFilters('ex', exF, () => loadEx(), EX);
+  loadTk(); loadEx();
 };
 
 // ---------------- 投票與意見箱 ----------------
 Pages.polls = async view => {
-  const load = async () => {
-    const [ps, sug, staffSug] = await Promise.all([
-      GET('/polls'), GET('/suggestions?kind=public'), GET('/suggestions?kind=staff')
-    ]);
+  const SG = { offset: 0, limit: 50 }, ST = { offset: 0, limit: 50 };
+  const mk = kind => ([
+    { id: 'q', label: '關鍵字（內容）' },
+    { id: 'handled', label: '處理狀態', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: '0', t: '待處理' }, { v: '1', t: '已處理' }] },
+    { id: 'from', label: '起始日', type: 'date' },
+    { id: 'to', label: '結束日', type: 'date' }
+  ]);
+  const sgF = mk('public'), stF = mk('staff');
+
+  const sugTable = rows => H.table(['時間', '投稿人', '內容', '狀態', '操作'],
+    rows.map(s => `<tr><td>${H.date(s.created_at)}</td><td>${H.user(s.user_id)}</td>
+      <td style="white-space:normal;max-width:460px">${UI.esc(s.content)}</td>
+      <td>${s.handled ? '<span class="tag ok">已處理</span>' : '<span class="tag warn">待處理</span>'}</td>
+      <td><button class="btn sm" data-sh="${s.id}" data-v="${s.handled ? 0 : 1}">${s.handled ? '標記未處理' : '標記已處理'}</button></td></tr>`),
+    '尚無投稿');
+
+  const bindHandled = reload => document.querySelectorAll('[data-sh]').forEach(b => b.onclick = async () => {
+    await PUT('/suggestions/' + b.dataset.sh, { handled: Number(b.dataset.v) }); reload();
+  });
+
+  const loadSug = async () => {
+    const d = await GET('/suggestions?' + new URLSearchParams({ kind: 'public', ...sgBind.values(), limit: SG.limit, offset: SG.offset }));
+    H.pager('sg', d.total, SG);
+    document.getElementById('sg').innerHTML = sugTable(d.rows);
+    bindHandled(loadSug);
+  };
+  const loadStaffSug = async () => {
+    const d = await GET('/suggestions?' + new URLSearchParams({ kind: 'staff', ...stBind.values(), limit: ST.limit, offset: ST.offset }));
+    H.pager('st', d.total, ST);
+    document.getElementById('sgs').innerHTML = sugTable(d.rows);
+    bindHandled(loadStaffSug);
+  };
+
+  const loadPolls = async () => {
+    const ps = await GET('/polls');
     document.getElementById('pl').innerHTML = ps.length ? ps.map(p => {
       const total = Object.values(p.votes).reduce((a, b) => a + b, 0);
       return `<div class="card"><h3>${UI.esc(p.title)} ${p.closed ? '<span class="tag err">已結束</span>' : ''}</h3>
@@ -275,28 +310,23 @@ Pages.polls = async view => {
         }).join('')}
         <div class="muted" style="margin-top:8px">共 ${total} 票・${H.date(p.created_at)}
           ${p.closed ? '' : `<button class="btn danger sm" data-pc="${p.id}" style="margin-left:8px">結束投票</button>`}</div></div>`;
-    }).join('') : '<div class="card"><div class="empty">尚無投票</div></div>';
-
-    const sugTable = rows => H.table(['時間', '投稿人', '內容', '狀態', '操作'],
-      rows.map(s => `<tr><td>${H.date(s.created_at)}</td><td>${H.user(s.user_id)}</td>
-        <td style="white-space:normal;max-width:460px">${UI.esc(s.content)}</td>
-        <td>${s.handled ? '<span class="tag ok">已處理</span>' : '<span class="tag warn">待處理</span>'}</td>
-        <td><button class="btn sm" data-sh="${s.id}" data-v="${s.handled ? 0 : 1}">${s.handled ? '標記未處理' : '標記已處理'}</button></td></tr>`),
-      '尚無投稿');
-    document.getElementById('sg').innerHTML = sugTable(sug);
-    document.getElementById('sgs').innerHTML = sugTable(staffSug);
-
+    }).join('') : '<div class="card"><div class="empty">尚無投票（可到「面板與公告」頁發布）</div></div>';
     document.querySelectorAll('[data-pc]').forEach(b => b.onclick = async () => {
-      await POST(`/polls/${b.dataset.pc}/close`); UI.ok('已結束'); load();
-    });
-    document.querySelectorAll('[data-sh]').forEach(b => b.onclick = async () => {
-      await PUT('/suggestions/' + b.dataset.sh, { handled: Number(b.dataset.v) }); load();
+      await POST(`/polls/${b.dataset.pc}/close`); UI.ok('已結束'); loadPolls();
     });
   };
+
   view.innerHTML = `<div id="pl"></div>
-    <div class="card"><h3>意見投訴與建議箱</h3><div id="sg"></div></div>
-    <div class="card"><h3>員工輔導室</h3><div id="sgs"></div></div>`;
-  load();
+    <div class="card"><h3>意見投訴與建議箱</h3></div>
+    ${H.filters('sg', sgF)}
+    <div class="card"><div id="sg"><div class="empty">載入中…</div></div></div>
+    <div class="card"><h3>員工輔導室</h3></div>
+    ${H.filters('st', stF)}
+    <div class="card"><div id="sgs"><div class="empty">載入中…</div></div></div>`;
+
+  const sgBind = H.bindFilters('sg', sgF, () => loadSug(), SG);
+  const stBind = H.bindFilters('st', stF, () => loadStaffSug(), ST);
+  loadPolls(); loadSug(); loadStaffSug();
 };
 
 // ---------------- 報表與匯出 ----------------

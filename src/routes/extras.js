@@ -5,14 +5,35 @@ const { requireAuth, guardModule } = require('../auth');
 const G = require('../util/gifts');
 
 const router = express.Router();
+
+// 統一的分頁與關鍵字篩選（避免資料量大時一次撈爆）
+const page = req => ({
+  limit: Math.min(500, Math.max(1, Number(req.query.limit) || 50)),
+  offset: Math.max(0, Number(req.query.offset) || 0)
+});
+const listed = (sql, countSql, args, req) => {
+  const { limit, offset } = page(req);
+  return {
+    total: db.prepare(countSql).get(...args).c,
+    rows: db.prepare(sql + ' LIMIT ? OFFSET ?').all(...args, limit, offset)
+  };
+};
 router.use(requireAuth());
 
 // ---------------- 禮物與親密度 ----------------
 router.use(['/gifts', '/intimacy'], guardModule('gifts'));
 router.get('/gifts', (req, res) => {
+  const cond = ['guild_id = ?'], args = [req.orgId];
+  if (req.query.customer_id) { cond.push('customer_id = ?'); args.push(req.query.customer_id); }
+  if (req.query.staff_id) { cond.push('staff_id = ?'); args.push(req.query.staff_id); }
+  if (req.query.from) { cond.push('date(created_at) >= date(?)'); args.push(req.query.from); }
+  if (req.query.to) { cond.push('date(created_at) <= date(?)'); args.push(req.query.to); }
+  if (req.query.q) { cond.push('(gift_name LIKE ? OR order_no LIKE ?)'); args.push(`%${req.query.q}%`, `%${req.query.q}%`); }
+  const where = cond.join(' AND ');
   res.json({
     catalog: db.prepare('SELECT * FROM gift_catalog WHERE guild_id=? ORDER BY sort, price').all(req.orgId),
-    logs: db.prepare('SELECT * FROM gift_logs WHERE guild_id=? ORDER BY id DESC LIMIT 200').all(req.orgId)
+    ...listed(`SELECT * FROM gift_logs WHERE ${where} ORDER BY id DESC`,
+              `SELECT COUNT(*) c FROM gift_logs WHERE ${where}`, args, req)
   });
 });
 router.post('/gifts', (req, res) => {
@@ -34,11 +55,19 @@ router.post('/gifts/send', (req, res) => {
 });
 
 router.get('/intimacy', (req, res) => {
-  res.json(db.prepare(`SELECT i.*, s.name staff_name, s.code staff_code, c.name customer_name
-    FROM intimacy i
+  const cond = ['i.guild_id = ?'], args = [req.orgId];
+  if (req.query.customer_id) { cond.push('i.customer_id = ?'); args.push(req.query.customer_id); }
+  if (req.query.staff_id) { cond.push('i.staff_id = ?'); args.push(req.query.staff_id); }
+  if (req.query.min) { cond.push('i.points >= ?'); args.push(Number(req.query.min) || 0); }
+  if (req.query.q) { cond.push('(s.name LIKE ? OR s.code LIKE ? OR c.name LIKE ?)');
+    args.push(`%${req.query.q}%`, `%${req.query.q}%`, `%${req.query.q}%`); }
+  const where = cond.join(' AND ');
+  const base = `FROM intimacy i
     LEFT JOIN staff s ON s.guild_id=i.guild_id AND s.user_id=i.staff_id
     LEFT JOIN customers c ON c.guild_id=i.guild_id AND c.user_id=i.customer_id
-    WHERE i.guild_id=? ORDER BY i.points DESC LIMIT 200`).all(req.orgId));
+    WHERE ${where}`;
+  res.json(listed(`SELECT i.*, s.name staff_name, s.code staff_code, c.name customer_name ${base} ORDER BY i.points DESC`,
+                  `SELECT COUNT(*) c ${base}`, args, req));
 });
 router.post('/intimacy/adjust', (req, res) => {
   const { customer_id, staff_id, delta } = req.body || {};
@@ -52,7 +81,13 @@ router.use('/backpack', guardModule('backpack'));
 router.get('/backpack', (req, res) => {
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (req.query.user_id) { cond.push('user_id = ?'); args.push(req.query.user_id); }
-  res.json(db.prepare(`SELECT * FROM backpack WHERE ${cond.join(' AND ')} ORDER BY user_id, id`).all(...args));
+  if (req.query.type === 'coupon') cond.push('(value > 0 OR percent > 0)');
+  if (req.query.type === 'item') cond.push('(value = 0 AND percent = 0)');
+  if (req.query.expiring) cond.push("(expires IS NOT NULL AND expires <> '' AND date(expires) <= date('now','+7 days'))");
+  if (req.query.q) { cond.push('(name LIKE ? OR item_key LIKE ?)'); args.push(`%${req.query.q}%`, `%${req.query.q}%`); }
+  const where = cond.join(' AND ');
+  res.json(listed(`SELECT * FROM backpack WHERE ${where} ORDER BY user_id, id`,
+                  `SELECT COUNT(*) c FROM backpack WHERE ${where}`, args, req));
 });
 router.post('/backpack', (req, res) => {
   const { user_id, key, name, qty = 1, value = 0, percent = 0, min_spend = 0, expires = null } = req.body || {};
@@ -72,15 +107,30 @@ router.get('/tickets', (req, res) => {
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (req.query.status) { cond.push('status = ?'); args.push(req.query.status); }
   if (req.query.kind) { cond.push('kind = ?'); args.push(req.query.kind); }
-  res.json(db.prepare(`SELECT * FROM tickets WHERE ${cond.join(' AND ')} ORDER BY id DESC LIMIT 200`).all(...args));
+  if (req.query.publish) { cond.push('publish = ?'); args.push(req.query.publish); }
+  if (req.query.customer_id) { cond.push('customer_id = ?'); args.push(req.query.customer_id); }
+  if (req.query.from) { cond.push('date(created_at) >= date(?)'); args.push(req.query.from); }
+  if (req.query.to) { cond.push('date(created_at) <= date(?)'); args.push(req.query.to); }
+  if (req.query.q) { cond.push('(subject LIKE ? OR service LIKE ? OR CAST(seq AS TEXT) LIKE ?)');
+    args.push(`%${req.query.q}%`, `%${req.query.q}%`, `%${req.query.q}%`); }
+  const where = cond.join(' AND ');
+  res.json(listed(`SELECT * FROM tickets WHERE ${where} ORDER BY id DESC`,
+                  `SELECT COUNT(*) c FROM tickets WHERE ${where}`, args, req));
 });
 router.post('/tickets/:id/close', (req, res) => {
   db.prepare("UPDATE tickets SET status='closed', closed_at=datetime('now','localtime') WHERE id=? AND guild_id=?")
     .run(req.params.id, req.orgId);
   res.json({ ok: true });
 });
-router.get('/exams', (req, res) =>
-  res.json(db.prepare('SELECT * FROM exams WHERE guild_id=? ORDER BY id DESC LIMIT 200').all(req.orgId)));
+router.get('/exams', (req, res) => {
+  const cond = ['guild_id = ?'], args = [req.orgId];
+  if (req.query.status) { cond.push('status = ?'); args.push(req.query.status); }
+  if (req.query.q) { cond.push('(nickname LIKE ? OR subject LIKE ? OR grade LIKE ?)');
+    args.push(`%${req.query.q}%`, `%${req.query.q}%`, `%${req.query.q}%`); }
+  const where = cond.join(' AND ');
+  res.json(listed(`SELECT * FROM exams WHERE ${where} ORDER BY id DESC`,
+                  `SELECT COUNT(*) c FROM exams WHERE ${where}`, args, req));
+});
 router.put('/exams/:id', (req, res) => {
   const st = ['pending', 'passed', 'failed'].includes(req.body?.status) ? req.body.status : 'pending';
   db.prepare('UPDATE exams SET status=? WHERE id=? AND guild_id=?').run(st, req.params.id, req.orgId);
@@ -90,7 +140,15 @@ router.put('/exams/:id', (req, res) => {
 router.get('/suggestions', (req, res) => {
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (req.query.kind) { cond.push('kind = ?'); args.push(req.query.kind); }
-  res.json(db.prepare(`SELECT * FROM suggestions WHERE ${cond.join(' AND ')} ORDER BY id DESC LIMIT 200`).all(...args));
+  if (req.query.handled !== undefined && req.query.handled !== '') {
+    cond.push('handled = ?'); args.push(req.query.handled === '1' ? 1 : 0);
+  }
+  if (req.query.from) { cond.push('date(created_at) >= date(?)'); args.push(req.query.from); }
+  if (req.query.to) { cond.push('date(created_at) <= date(?)'); args.push(req.query.to); }
+  if (req.query.q) { cond.push('content LIKE ?'); args.push(`%${req.query.q}%`); }
+  const where = cond.join(' AND ');
+  res.json(listed(`SELECT * FROM suggestions WHERE ${where} ORDER BY id DESC`,
+                  `SELECT COUNT(*) c FROM suggestions WHERE ${where}`, args, req));
 });
 router.put('/suggestions/:id', (req, res) => {
   db.prepare('UPDATE suggestions SET handled=? WHERE id=? AND guild_id=?')

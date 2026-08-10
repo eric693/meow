@@ -147,3 +147,22 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .chart .slice { stroke: var(--panel); stroke-width: 2; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
 .chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+
+/* ---------- 篩選列 ---------- */
+.filter-card { position: sticky; top: 0; z-index: 5; }
+.filter-card .grid { align-items: end; }
+.filter-card .f span { font-size: 12px; letter-spacing: .02em; }
+.filter-card .row { flex-wrap: wrap; gap: 8px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------- 設定頁分區 ---------- */
+.section-title {
+  display: flex; align-items: center; gap: 8px;
+  margin: 18px 0 8px; font-size: 14px; font-weight: 700;
+}
+.section-title::after { content: ""; flex: 1; height: 1px; background: var(--line, #e5e5e5); }
+.card h4 { margin: 16px 0 8px; font-size: 14px; }
+.card h4:first-child { margin-top: 0; }
+.grid.c2, .grid.c3 { gap: 10px 14px; }
+label.f > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

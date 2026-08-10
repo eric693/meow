@@ -94,7 +94,7 @@ function createOrder({
     const vipAfter = refreshVip(guildId, customerId);
     if (vipAfter > vipBefore) require('./announce').vipUpgraded(guildId, customerId, vipBefore, vipAfter);
   }
-  audit(operator || customerId, '建立交易', `${no} ${kindLabel(kind)} ${paid}`, guildId);
+  audit(operator || customerId, '建立交易', `${no} ${kindLabel(kind)} ${paid}`, guildId, { source: 'orders' });
   return db.prepare('SELECT * FROM orders WHERE order_no = ?').get(no);
 }
 
@@ -134,7 +134,7 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
   })();
 
   refreshVip(guildId, o.customer_id);
-  audit(operator, '修改交易', `${orderNo}`, guildId);
+  audit(operator, '修改交易', `${orderNo}`, guildId, { source: 'orders' });
   return db.prepare('SELECT * FROM orders WHERE id=?').get(o.id);
 }
 
@@ -155,7 +155,7 @@ function deleteOrder(guildId, orderNo, operator = '') {
     db.prepare('DELETE FROM gift_logs WHERE guild_id=? AND order_no=?').run(guildId, orderNo);
     db.prepare('DELETE FROM orders WHERE id=?').run(o.id);
   })();
-  audit(operator, '刪除交易', orderNo, guildId);
+  audit(operator, '刪除交易', orderNo, guildId, { source: 'orders' });
   return { ok: true };
 }
 
@@ -180,7 +180,7 @@ function reportOrder(guildId, orderNo, { reporterId = '', item = null, qty = nul
   db.prepare(`UPDATE orders SET reporter_id=?, reported_at=?, item=COALESCE(?, item),
               qty=COALESCE(?, qty), note=? WHERE id=?`)
     .run(reporterId, now(), item, qty, note ? (o.note ? o.note + ' / ' + note : note) : o.note, o.id);
-  audit(reporterId, '陪玩報單', o.order_no, guildId);
+  audit(reporterId, '陪玩報單', o.order_no, guildId, { source: 'orders', actorId: reporterId });
   return db.prepare('SELECT * FROM orders WHERE id=?').get(o.id);
 }
 
@@ -200,7 +200,7 @@ function settleOrder(guildId, orderNo, operator = '') {
       .run(o.staff_share, o.staff_share, o.staff_share, guildId, o.staff_id);
   })();
 
-  audit(operator, '核銷訂單', `${orderNo} 陪玩入帳 ${o.staff_share}`, guildId);
+  audit(operator, '核銷訂單', `${orderNo} 陪玩入帳 ${o.staff_share}`, guildId, { source: 'salary' });
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id);
 }
 
@@ -240,7 +240,7 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
   })();
 
   if (o.customer_id) refreshVip(guildId, o.customer_id);
-  audit(operator, '退單', `${orderNo} ${refundCoins ? '退還' : '未退'} ${o.amount}`, guildId);
+  audit(operator, '退單', `${orderNo} ${refundCoins ? '退還' : '未退'} ${o.amount}`, guildId, { source: 'salary' });
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id);
 }
 
@@ -258,7 +258,7 @@ function requestWithdraw(guildId, staffId, amount, operator = '', note = '') {
     db.prepare('INSERT INTO withdrawals (guild_id, staff_id, amount, operator, note) VALUES (?,?,?,?,?)')
       .run(guildId, staffId, amt, operator, note);
   })();
-  audit(operator || staffId, '申請提領', `${s.name || staffId} ${amt}`, guildId);
+  audit(operator || staffId, '申請提領', `${s.name || staffId} ${amt}`, guildId, { source: 'salary' });
   return db.prepare('SELECT * FROM withdrawals WHERE guild_id = ? AND staff_id = ? ORDER BY id DESC LIMIT 1')
     .get(guildId, staffId);
 }

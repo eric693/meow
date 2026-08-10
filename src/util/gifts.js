@@ -103,7 +103,7 @@ function sendGift({ guildId, customerId, customerName = '', staffId, giftKey, qt
     .run(guildId, order.order_no, customerId, staffId, g.key, g.name, n, amount, gain);
   const points = getIntimacy(guildId, customerId, staffId);
 
-  audit(operator || customerId, '送禮', `${g.name}×${n} = ${amount}`, guildId);
+  audit(operator || customerId, '送禮', `${g.name}×${n} = ${amount}`, guildId, { source: 'gifts' });
   return { gift: g, qty: n, list, amount, discount: list - amount, gain, points, rank: rankOf(points), order };
 }
 

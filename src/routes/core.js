@@ -101,11 +101,23 @@ router.post('/bank/adjust', (req, res) => {
 // ---------------- 薪資與提領 ----------------
 router.use('/salary', guardModule('salary'));
 router.get('/salary', (req, res) => {
+  const { limit, offset } = page(req);
+  const sc = ['guild_id = ?', 'active = 1'], sa = [req.orgId];
+  if (req.query.q) { sc.push('(name LIKE ? OR code LIKE ? OR user_id LIKE ?)');
+    sa.push(`%${req.query.q}%`, `%${req.query.q}%`, `%${req.query.q}%`); }
+  if (req.query.owed === '1') sc.push('(income > 0 OR pending_income > 0)');
+  const wc = ['w.guild_id = ?'], wa = [req.orgId];
+  if (req.query.status) { wc.push('w.status = ?'); wa.push(req.query.status); }
+  if (req.query.month) { wc.push("strftime('%Y-%m', w.created_at) = ?"); wa.push(req.query.month); }
+  if (req.query.q) { wc.push('(s.name LIKE ? OR s.code LIKE ?)'); wa.push(`%${req.query.q}%`, `%${req.query.q}%`); }
+  const ww = wc.join(' AND ');
   res.json({
-    staff: db.prepare(`SELECT * FROM staff WHERE guild_id=? AND active=1 ORDER BY income DESC`).all(req.orgId),
+    staff: db.prepare(`SELECT * FROM staff WHERE ${sc.join(' AND ')} ORDER BY income DESC`).all(...sa),
+    total: db.prepare(`SELECT COUNT(*) c FROM withdrawals w
+      LEFT JOIN staff s ON s.guild_id=w.guild_id AND s.user_id=w.staff_id WHERE ${ww}`).get(...wa).c,
     withdrawals: db.prepare(`SELECT w.*, s.name, s.code FROM withdrawals w
       LEFT JOIN staff s ON s.guild_id=w.guild_id AND s.user_id=w.staff_id
-      WHERE w.guild_id=? ORDER BY w.id DESC LIMIT 200`).all(req.orgId)
+      WHERE ${ww} ORDER BY w.id DESC LIMIT ? OFFSET ?`).all(...wa, limit, offset)
   });
 });
 router.post('/salary/withdraw', (req, res) =>
