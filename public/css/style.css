@@ -166,3 +166,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .card h4:first-child { margin-top: 0; }
 .grid.c2, .grid.c3 { gap: 10px 14px; }
 label.f > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+
+/* ---------- 表格：操作欄固定在右側 ---------- */
+.table-wrap table.has-actions th:last-child,
+.table-wrap table.has-actions td:last-child {
+  position: sticky; right: 0; z-index: 2;
+  background: var(--panel);
+  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, .18);
+  white-space: nowrap;
+}
+.table-wrap table.has-actions thead th:last-child { z-index: 3; }
+.table-wrap table.has-actions tbody tr:hover td:last-child { background: var(--panel-2, var(--panel)); }
+.table-wrap { position: relative; }

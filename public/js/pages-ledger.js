@@ -29,7 +29,7 @@ Pages.orders = async view => {
         S.f.sort === key ? (S.f.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
 
     document.getElementById('ltable').innerHTML = d.rows.length ? `
-      <div class="table-wrap"><table>
+      <div class="table-wrap"><table class="has-actions">
         <thead><tr>
           <th><input type="checkbox" id="lall" style="width:auto"></th>
           ${th('order_no', '訂單編號')}${th('created_at', '交易時間')}${th('kind', '交易類型')}

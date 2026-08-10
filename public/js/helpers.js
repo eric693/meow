@@ -74,8 +74,10 @@ const H = {
   },
 
   table(headers, rows, emptyText = '目前沒有資料') {
+    const lastLabel = (h => (typeof h === 'string' ? h : h?.label) || '')(headers[headers.length - 1]);
+    const sticky = /操作/.test(lastLabel) ? ' has-actions' : '';
     if (!rows.length) return `<div class="empty">${UI.esc(emptyText)}</div>`;
-    return `<div class="table-wrap"><table>
+    return `<div class="table-wrap"><table class="${sticky.trim()}">
       <thead><tr>${headers.map(h => `<th class="${h.num ? 'num' : ''}">${UI.esc(h.label || h)}</th>`).join('')}</tr></thead>
       <tbody>${rows.join('')}</tbody></table></div>`;
   },
