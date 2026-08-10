@@ -140,16 +140,24 @@ const handlers = {
   async 財務報表(msg) {
     if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
     const f = R.financeReport(msg.guild.id);
-    await msg.reply({ embeds: [money(msg.guild.id, `🧮 ${f.month} 財務淨利對帳單`, null, [
-      { name: '實收營收', value: `${n(f.revenue)}（${f.order_count} 筆）`, inline: true },
-      { name: '其中禮物', value: `${n(f.gift_revenue)}（${f.gift_count} 筆）`, inline: true },
-      { name: '折扣讓利', value: `-${n(f.discount)}`, inline: true },
-      { name: '陪玩抽成', value: `-${n(f.staff_share)}`, inline: true },
-      { name: '退單', value: `-${n(f.refund)}（${f.refund_count} 筆）`, inline: true },
-      { name: '已提領', value: `${n(f.withdrawn)}（${f.withdraw_count} 筆）`, inline: true },
-      { name: '伺服器淨利', value: `**${n(f.net)}** 雨幣`, inline: true },
-      { name: '本月陪玩業績 Top 3', value: rankLine(f.top3, s => `**${s.name || s.code}** — ${n(s.amount)}`) }
-    ])] });
+    const rate = M.shareRate(msg.guild.id);
+    // 依本月分潤（薪資）排名，沒有業績的不列
+    const top = R.staffRanking(msg.guild.id)
+      .filter(s => s.share > 0)
+      .sort((a, b) => b.share - a.share)
+      .slice(0, 10);
+    const list = top.length
+      ? top.map((s, i) => `第 ${i + 1} 名：${mention(s.user_id)} ➜ \`${n(s.share)}\` 元`).join('\n')
+      : '本月還沒有薪資紀錄。';
+    await msg.reply({ embeds: [emb(msg.guild.id, {
+      title: `📊 喚雨財務淨利報表 - ${f.month}`,
+      color: COLOR.money,
+      fields: [
+        { name: '伺服器本月淨利潤', value: `\`${n(f.net)}\` 元` },
+        { name: '🏆 陪玩本月薪資 Top 5', value: list.slice(0, 1000) }
+      ],
+      footer: `利潤已扣除 ${rate}% 陪玩分成及代金券成本`
+    })] });
   },
 
   async 客服業績(msg, args) {
