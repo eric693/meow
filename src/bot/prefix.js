@@ -25,12 +25,17 @@ const handlers = {
     const target = firstId(msg, args) || msg.author.id;
     if (target !== msg.author.id && !isCS(msg.member)) throw new Error('只有客服／管理員可以查詢他人。');
     const s = R.customerSpend(msg.guild.id, target);
-    await msg.reply({ embeds: [money(msg.guild.id, '💰 消費紀錄', mention(target), [
-      { name: '本月消費', value: `${n(s.month)} 雨幣（${s.month_count} 單）`, inline: true },
-      { name: '歷史累計', value: `${n(s.total)} 雨幣（${s.total_count} 單）`, inline: true },
-      { name: '禮物累計', value: `${n(s.gift_total)} 雨幣`, inline: true },
-      { name: '雨幣餘額', value: n(s.coins), inline: true },
-      { name: 'VIP 等級', value: `Lv.${s.vip_level}`, inline: true }
+    // 距離下一級 VIP 還差多少
+    const thresholds = require('../db').vipThresholds(msg.guild.id);
+    const next = thresholds.find(t => t > s.total_spend);
+    const progress = next
+      ? `（進度：距離 **${R.vipName(msg.guild.id, thresholds.indexOf(next) + 1)}** 還差 \`${n(next - s.total_spend)}\` 元，老闆加油！）`
+      : '（已達最高等級，感謝老闆一路支持 💜）';
+    await msg.reply({ embeds: [money(msg.guild.id, '💠 喚雨｜消費成就查詢', progress, [
+      { name: '👤 查詢對象', value: mention(target) },
+      { name: '📅 本月累計消費', value: `\`${n(s.month)}\` 元`, inline: true },
+      { name: '🏆 歷史累計消費', value: `\`${n(s.total_spend)}\` 元`, inline: true },
+      { name: '\u200b', value: '💡 所有金額均以「實付金額(折價後)」累計，已與點單紀錄同步' }
     ])] });
   },
 
@@ -38,18 +43,30 @@ const handlers = {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const target = firstId(msg, args);
     if (!target) throw new Error('請標記要查詢的老闆，例如 `!查點單 @老闆`');
-    const rows = R.customerOrders(msg.guild.id, target, 25);
+    const rows = db.prepare(`SELECT staff_id, SUM(amount) amt FROM orders
+                             WHERE guild_id=? AND customer_id=? AND status!='refunded'
+                             GROUP BY staff_id ORDER BY amt DESC LIMIT 25`)
+      .all(orgOf(msg.guild.id), target);
+    const c = getCustomer(msg.guild.id, target);
     const body = rows.length
-      ? rows.map(o => `\`${o.order_no}\` ${o.created_at.slice(5, 16)} ${o.item || '—'} ×${o.qty} **${n(o.amount)}** ${o.status === 'settled' ? '✅' : o.status === 'refunded' ? '↩️' : '🕗'} <@${o.staff_id}>`).join('\n')
+      ? rows.map(r => `・${mention(r.staff_id)}：共消費 \`${n(r.amt)}\` 元`).join('\n')
+        + `\n\n────────────────\n💰 **歷史總計消費：** \`${n(c.total_spend)}\` 元`
       : '這位老闆還沒有任何點單紀錄。';
-    await msg.reply({ embeds: [emb(msg.guild.id, { title: '🧾 歷史點單', desc: `${mention(target)}\n\n${body.slice(0, 3800)}` })] });
+    await msg.reply({ embeds: [emb(msg.guild.id, {
+      title: `📋 ${c.name || target} 的專屬點單紀錄`,
+      desc: body.slice(0, 3900)
+    })] });
   },
 
   async 消費榜(msg) {
     const r = R.spendRanking(msg.guild.id, 10);
-    await msg.reply({ embeds: [money(msg.guild.id, '👑 金主榜', null, [
-      { name: '全服歷史 VIP 總榜', value: rankLine(r.history, x => `${mention(x.user_id)} — **${n(x.total_spend)}**（VIP ${x.vip_level}）`) },
-      { name: '本月消費大戶', value: rankLine(r.month, x => `${mention(x.user_id)} — **${n(x.amount)}**`) }
+    const line = (arr, fmt) => arr.length
+      ? arr.map((x, i) => `${i + 1}. ${fmt(x)}`).join('\n') : '目前沒有資料。';
+    await msg.reply({ embeds: [money(msg.guild.id, '🏆 喚雨｜金主消費榮譽榜', null, [
+      { name: '👑 歷史累計總榜 (VVIP)',
+        value: line(r.history, x => `${mention(x.user_id)} ➜ \`${n(x.total_spend)}\` 元`) },
+      { name: '📅 本月消費戰報',
+        value: line(r.month, x => `${mention(x.user_id)} ➜ \`${n(x.amount)}\` 元`) }
     ])] });
   },
 

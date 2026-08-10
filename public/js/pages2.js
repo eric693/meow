@@ -649,6 +649,11 @@ Pages.settings = async view => {
         <label class="f"><span>點我入職頻道</span><select name="channel_exam_entry">${opts(res.channels, v.channel_exam_entry)}</select></label>
         <label class="f"><span>陪陪介紹／評價頻道</span><select name="channel_intro">${opts(res.channels, v.channel_intro)}</select></label>
       </div>
+      <h4 style="margin:14px 0 6px">自動語音房</h4>
+      <div class="grid c2">
+        <label class="f"><span>「創建語音房」語音頻道 ID</span><input name="channel_voice_hub" value="${UI.esc(v.channel_voice_hub || '')}" placeholder="貼上語音頻道 ID"></label>
+        <label class="f"><span>語音房建立在哪個分類</span><select name="category_voice">${opts(res.categories, v.category_voice)}</select></label>
+      </div>
       <h4 style="margin:14px 0 6px">下單選單選項（逗號分隔，留空用預設）</h4>
       <div class="grid c2">
         <label class="f"><span>偏好性別</span><input name="order_genders" value="${UI.esc(v.order_genders || '')}" placeholder="男女都可,女生陪玩,男生陪玩"></label>

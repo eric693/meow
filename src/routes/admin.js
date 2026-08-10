@@ -54,6 +54,8 @@ const GUILD_KEYS = [
   // 入口類
   'channel_order_entry', 'channel_exam_entry', 'channel_intro',
   'channel_command_log', 'channel_money_log',
+  // 語音房
+  'channel_voice_hub', 'category_voice',
   // 下單選單選項（逗號分隔）
   'order_genders', 'order_services', 'order_addons', 'order_type_labels', 'ticket_seq_start'
 ];

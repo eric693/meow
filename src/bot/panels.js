@@ -225,8 +225,11 @@ const PANELS = {
   'setup-suggestion': {
     label: '意見投訴與建議箱',
     build: guildId => ({
-      embeds: [emb(guildId, { title: '📮 意見投訴與建議箱', desc: '任何建議或申訴都歡迎提出，內容只有管理層看得到。' })],
-      components: [row(btn('sug:public', '我要投稿', ButtonStyle.Secondary, '📮'))]
+      embeds: [emb(guildId, {
+        title: '📮 喚雨｜意見箱',
+        desc: '接收任何關於喚雨的改善建議。\n\n抑或著是有任何問題也可以在此提出，\n我們會絕對對非當事人保密意見箱內容！'
+      })],
+      components: [row(btn('sug:public', '填寫意見表單', ButtonStyle.Primary, '📝'))]
     })
   },
 

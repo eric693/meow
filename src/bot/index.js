@@ -16,7 +16,8 @@ function build() {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildVoiceStates
     ],
     partials: [Partials.Channel, Partials.Message]
   });
@@ -113,6 +114,8 @@ async function start() {
       await msg.reply({ embeds: [err(msg.guild.id, e.message || '指令執行失敗')] }).catch(() => {});
     }
   });
+
+  require('./voice').attach(client);
 
   client.on('error', e => console.error('Discord client 錯誤：', e.message));
   await client.login(process.env.DISCORD_TOKEN);
