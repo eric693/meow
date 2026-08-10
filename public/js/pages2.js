@@ -662,6 +662,7 @@ Pages.settings = async view => {
         <label class="f"><span>單別名稱（服務=單別）</span><input name="order_type_labels" value="${UI.esc(v.order_type_labels || '')}" placeholder="特戰英豪=娛樂單,Steam 小遊戲=steam單"></label>
         <label class="f"><span>單號起始值</span><input name="ticket_seq_start" type="number" value="${UI.esc(v.ticket_seq_start || '1001')}"></label>
         <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '100')}"></label>
+        <label class="f"><span>高薪陪玩門檻（!業績查詢）</span><input name="high_income_threshold" type="number" value="${UI.esc(v.high_income_threshold || '20000')}"></label>
       </div>
       ${res.roles.length ? '' : '<div class="muted">機器人目前離線或尚未加入伺服器，因此無法列出身分組與頻道。</div>'}
     </div>

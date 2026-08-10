@@ -1,6 +1,6 @@
 // ! 前綴指令（日常操作、查詢報表、面板建置）
 const { AttachmentBuilder } = require('discord.js');
-const { db, getCustomer, findStaff, getStaff, addCoins, monthPrefix, audit, orgOf } = require('../db');
+const { db, getCustomer, findStaff, getStaff, addCoins, monthPrefix, getNum, audit, orgOf } = require('../db');
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const M = require('../util/money');
 const R = require('../util/reports');
@@ -72,8 +72,8 @@ const handlers = {
 
   async 匯出消費總表(msg) {
     if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
-    await msg.reply({ content: '📤 全服金主消費總表與 VIP 等級紀錄：',
-      files: [csv(`金主消費總表-${monthPrefix()}.csv`, toCSV(R.PATRON_COLUMNS, R.patronBoard(msg.guild.id)))] });
+    await msg.reply({ content: '✅ **全服金主消費總表已成功匯出！**\n包含所有老闆的 VIP 進度與完整數據，請下載附件查看。',
+      files: [csv(`喚雨金主總表_${monthPrefix()}.csv`, toCSV(R.PATRON_COLUMNS, R.patronBoard(msg.guild.id)))] });
   },
 
   async 薪資查詢(msg, args) {
@@ -91,14 +91,15 @@ const handlers = {
   },
 
   async 全服雨幣(msg) {
+    const rows = db.prepare(`SELECT user_id, name, coins FROM customers
+                             WHERE guild_id=? AND coins > 0 ORDER BY coins DESC LIMIT 60`)
+      .all(orgOf(msg.guild.id));
     const t = R.totalCoins(msg.guild.id);
-    const pend = db.prepare("SELECT COALESCE(SUM(pending_income),0) p, COALESCE(SUM(income),0) i FROM staff WHERE guild_id=?").get(orgOf(msg.guild.id));
-    await msg.reply({ embeds: [money(msg.guild.id, '🏦 地下金庫總覽', null, [
-      { name: '流通雨幣總額', value: `${n(t.c)} 雨幣`, inline: true },
-      { name: '持有人數', value: `${t.n} 位`, inline: true },
-      { name: '陪玩可提領總額', value: n(pend.i), inline: true },
-      { name: '陪玩暫存薪水總額', value: n(pend.p), inline: true }
-    ])] });
+    const body = rows.length
+      ? rows.map(r => `${mention(r.user_id)}：\`${n(r.coins)}\` 雨幣`).join('\n')
+      : '目前沒有人持有雨幣。';
+    await msg.reply({ embeds: [money(msg.guild.id, '🏦 全服雨幣金庫總覽',
+      body.slice(0, 3800) + `\n\n────────────────\n流通總額 \`${n(t.c)}\` 雨幣・持有 ${t.n} 位`)] });
   },
 
   async 雨幣查詢(msg, args) {
@@ -118,23 +119,27 @@ const handlers = {
 
   async 業績查詢(msg) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
-    const rows = R.staffRanking(msg.guild.id);
+    const LINE_UP = getNum('high_income_threshold', 20000, orgOf(msg.guild.id));
+    const rows = R.staffRanking(msg.guild.id)
+      .filter(s => s.amount >= LINE_UP)
+      .sort((a, b) => b.amount - a.amount);
     const body = rows.length
-      ? rows.map((s, i) => `\`${String(i + 1).padStart(2)}\` **${s.name || s.code}** — 業績 ${n(s.amount)}（${s.cnt} 單）／分潤 ${n(s.share)}／可提領 ${n(s.income)}`).join('\n')
-      : '本月還沒有業績。';
-    await msg.reply({ embeds: [money(msg.guild.id, `📈 ${monthPrefix()} 陪玩業績結算`, body.slice(0, 3900))] });
+      ? rows.map((s, i) => `${i + 1}. ${mention(s.user_id)} ➜ \`${n(s.amount)}\` 元`).join('\n')
+      : `本月暫無陪玩達 ${n(LINE_UP / 10000)} 萬元`;
+    await msg.reply({ embeds: [money(msg.guild.id,
+      `🏆 喚雨｜${monthPrefix()} 高薪陪玩 (達 ${n(LINE_UP / 10000)} 萬以上)`, body.slice(0, 3900))] });
   },
 
   async 匯出報表(msg) {
     if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
-    await msg.reply({ content: `📤 ${monthPrefix()} 財務流水帳（含訂單／退單／系統調整）：`,
-      files: [csv(`財務流水帳-${monthPrefix()}.csv`, toCSV(R.LEDGER_COLUMNS, R.ledgerQuery(msg.guild.id, { month: monthPrefix() }).rows))] });
+    await msg.reply({ content: `✅ **${monthPrefix()} 財務報表已成功匯出！**\n，請下載附件查看。`,
+      files: [csv(`喚雨財務報表_${monthPrefix()}.csv`, toCSV(R.LEDGER_COLUMNS, R.ledgerQuery(msg.guild.id, { month: monthPrefix() }).rows))] });
   },
 
   async 匯出提領報表(msg) {
     if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
-    await msg.reply({ content: `📤 ${monthPrefix()} 陪玩提領薪資明細：`,
-      files: [csv(`提領明細-${monthPrefix()}.csv`, toCSV(R.WITHDRAW_COLUMNS, R.withdrawRows(msg.guild.id, { month: monthPrefix() })))] });
+    await msg.reply({ content: `✅ **${monthPrefix()} 陪玩提領明細已成功匯出！**\n請下載附件查看。`,
+      files: [csv(`喚雨提領明細_${monthPrefix()}.csv`, toCSV(R.WITHDRAW_COLUMNS, R.withdrawRows(msg.guild.id, { month: monthPrefix() })))] });
   },
 
   async 財務報表(msg) {
@@ -163,12 +168,15 @@ const handlers = {
   async 客服業績(msg, args) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const [from = '', to = ''] = args.trim().split(/\s+/).filter(Boolean);
-    const r = R.csRanking(msg.guild.id, from, to);
-    const range = from || to ? `${from || '不限'} ~ ${to || '今天'}` : '全部區間';
-    await msg.reply({ embeds: [money(msg.guild.id, '🎧 客服接單排行榜', `區間：${range}`, [
-      { name: '接單傳票數', value: rankLine(r.tickets, x => `${mention(x.cs_id)} — **${x.cnt}** 單`) },
-      { name: '經辦成交金額', value: rankLine(r.orders, x => `${x.cs_name || mention(x.cs_id)} — **${n(x.amount)}**（${x.cnt} 筆）`) }
-    ])] });
+    const fix = d => (d ? d.replace(/^(\d{1,2})\/(\d{1,2})$/,
+      (_, m, dd) => `${new Date().getFullYear()}-${m.padStart(2, '0')}-${dd.padStart(2, '0')}`) : '');
+    const r = R.csRanking(msg.guild.id, fix(from), fix(to));
+    const short = d => (d ? d.slice(5).replace('-', '/') : '不限');
+    const body = r.tickets.length
+      ? r.tickets.map((x, i) => `${i + 1}. ${mention(x.cs_id)} ➜ \`${n(x.cnt)}\` 次`).join('\n')
+      : '這個區間還沒有接單紀錄。';
+    await msg.reply({ embeds: [money(msg.guild.id, '📊 喚雨｜客服接單排行榜',
+      `📅 **結算區間：** \`${short(fix(from))}\` ~ \`${short(fix(to)) === '不限' ? '今天' : short(fix(to))}\`\n\n${body}`.slice(0, 3900))] });
   },
 
   async 清空客服業績(msg) {
@@ -220,11 +228,22 @@ const handlers = {
 
   async 未銷(msg) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
-    const rows = R.unsettled(msg.guild.id, 25);
+    const rows = R.unsettled(msg.guild.id, 30);
+    const total = db.prepare("SELECT COUNT(*) c FROM orders WHERE guild_id=? AND status='pending'")
+      .get(orgOf(msg.guild.id)).c;
     const body = rows.length
-      ? rows.map(o => `\`${o.order_no}\` ${o.created_at.slice(5, 16)} ${mention(o.customer_id)} → <@${o.staff_id}> **${n(o.amount)}**`).join('\n')
+      ? rows.map(o => {
+          const t = o.created_at.slice(5, 16).replace('-', '/');
+          const note = o.note ? ` | 📝: ${o.note}` : '';
+          return `▫️ \`${o.order_no}\` | ${t} | 陪玩 ${mention(o.staff_id)} | 金額: \`${n(o.amount)}\`${note}`;
+        }).join('\n')
       : '🎉 目前沒有未核銷的訂單。';
-    await msg.reply({ embeds: [emb(msg.guild.id, { title: `🕗 未核銷訂單（前 ${rows.length} 筆）`, desc: body.slice(0, 3900), color: COLOR.warn })] });
+    await msg.reply({ embeds: [emb(msg.guild.id, {
+      title: `📋 待核銷訂單總覽 (目前共 ${n(total)} 筆)`,
+      desc: `以下是系統中尚未被核銷發放的訂單列表：\n\n${body}`.slice(0, 3900)
+        + `\n\n*(第 1 頁 / 共 ${Math.max(1, Math.ceil(total / 30))} 頁)*`,
+      color: COLOR.warn
+    })] });
   },
 
   async 結單(msg) {
