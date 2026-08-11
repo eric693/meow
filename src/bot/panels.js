@@ -334,6 +334,9 @@ const selectRow = (customId, placeholder, values, maxValues = 1) =>
       .setMinValues(1).setMaxValues(Math.min(maxValues, values.length))
       .addOptions(values.map(v => ({ label: v.slice(0, 100), value: v.slice(0, 100) }))));
 
+/** 服務類型對應的分類（娛樂／技術…），取單別名稱去掉「單」字 */
+const categoryOf = (guildId, service) => ticketLabel(guildId, service).replace(/單$/, '');
+
 /** 服務類型對應的單別名稱（頻道名稱用） */
 function ticketLabel(guildId, service) {
   const raw = getSetting('order_type_labels', '', guildId);
@@ -732,7 +735,7 @@ async function handleInteraction(i) {
       await rollbackChannel(ch, null, null);
       throw e;
     }
-    return i.editReply({ embeds: [ok(i.guildId, '報單頻道已建立', `請前往填寫詳細內容：${ch}`)] });
+    return i.editReply({ content: `✅ **報單頻道已建立**，請前往填寫詳細內容：${ch}` });
   }
 
   // 跨服報單／頻道內的填寫按鈕，都直接開表單
@@ -921,16 +924,8 @@ async function handleInteraction(i) {
     if (!sess) return eph(i, err(i.guildId, '這次下單已逾時（超過 15 分鐘），請重新點一次按鈕。'));
 
     if (step === 'service') {
-      S.update(sid, { service: i.values[0] });
-      return i.update({
-        content: '請選擇服務分類：',
-        components: [selectRow(`ord:cat:${sid}`, '請選擇服務分類（技術／娛樂）',
-          optionList(i.guildId, 'order_categories', DEFAULT_CATEGORIES))]
-      });
-    }
-
-    if (step === 'cat') {
-      S.update(sid, { category: i.values[0] });
+      // 分類（技術／娛樂）由服務類型自動判定，不另外問一次
+      S.update(sid, { service: i.values[0], category: categoryOf(i.guildId, i.values[0]) });
       return i.update({
         content: '請選擇您偏好的性別：',
         components: [selectRow(`ord:gender:${sid}`, '請選擇您偏好的性別',
@@ -940,20 +935,6 @@ async function handleInteraction(i) {
 
     if (step === 'gender') {
       S.update(sid, { gender: i.values[0] });
-      const addons = addonOptions(i.guildId);
-      return i.update({
-        content: '請選擇附加選項（可複選）：',
-        components: [new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder().setCustomId(`ord:addon:${sid}`)
-            .setPlaceholder('請選擇附加選項（可複選）')
-            .setMinValues(1).setMaxValues(addons.length)
-            .addOptions(addons.map(a => ({ label: a.label.slice(0, 100), value: a.name.slice(0, 100) }))))]
-      });
-    }
-
-    if (step === 'addon') {
-      const picked = i.values.filter(v => v !== '無');
-      S.update(sid, { addons: picked });
       const d = S.get(sid);
       return i.showModal(new ModalBuilder().setCustomId(`ord:final:${sid}`)
         .setTitle(`📝 ${d.category || ''}${d.gender} - 需求單`.slice(0, 45))
@@ -1000,7 +981,7 @@ async function handleInteraction(i) {
         throw e;
       }
       S.drop(sid);
-      return i.editReply({ embeds: [ok(i.guildId, '派單初步建立！', `請移步至專屬包廂完成選項設定：${ch}`)] });
+      return i.editReply({ content: `✅ **派單初步建立！** 請移步至專屬包廂完成選項設定：${ch}` });
     }
   }
 
@@ -1147,7 +1128,7 @@ async function handleInteraction(i) {
       await rollbackChannel(ch, 'tickets', info.lastInsertRowid);
       throw e;
     }
-    return i.editReply({ embeds: [ok(i.guildId, '已開啟下單頻道', `${ch}`)] });
+    return i.editReply({ content: `✅ **已開啟下單頻道**：${ch}` });
   }
 
   if (id.startsWith('ticket:claim:')) {
@@ -1218,7 +1199,7 @@ async function handleInteraction(i) {
       await rollbackChannel(ch, 'exams', info.lastInsertRowid);
       throw e;
     }
-    return i.editReply({ embeds: [ok(i.guildId, '考核單已開啟！', `請移步至：${ch}`)] });
+    return i.editReply({ content: `✅ **考核單已開啟！** 請移步至：${ch}` });
   }
   if (id.startsWith('exam:close:')) {
     const eid = Number(id.split(':')[2]);
