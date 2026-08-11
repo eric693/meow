@@ -276,6 +276,12 @@ async function sendToChannel(guild, settingKey, payload) {
   return true;
 }
 
+/** 建立頻道後若後續動作失敗，把頻道與資料列一起收掉，避免殘留擋住使用者 */
+async function rollbackChannel(channel, table, id) {
+  if (channel) await channel.delete().catch(() => {});
+  if (table && id) db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+}
+
 async function createPrivateChannel(guild, member, { prefix, name, categoryKey, extraRoleKeys = [] }) {
   const parent = getSetting(categoryKey, '', guild.id) || null;
   const overwrites = [
@@ -706,7 +712,8 @@ async function handleInteraction(i) {
       categoryKey: 'category_report',
       extraRoleKeys: ['role_cs', 'role_admin']
     });
-    await ch.send({
+    try {
+      await ch.send({
       content: `${mention(i.user.id)} 您的專屬報單通道已建立！`,
       embeds: [emb(i.guildId, {
         title: '📝 報單內容提交',
@@ -720,7 +727,11 @@ async function handleInteraction(i) {
       })],
       components: [row(btn('reportform:self', '填寫報單', ButtonStyle.Primary, '📄'))]
     });
-    await panel.pin().catch(() => {});
+      await panel.pin().catch(() => {});
+    } catch (e) {
+      await rollbackChannel(ch, null, null);
+      throw e;
+    }
     return i.editReply({ embeds: [ok(i.guildId, '報單頻道已建立', `請前往填寫詳細內容：${ch}`)] });
   }
 
@@ -979,10 +990,15 @@ async function handleInteraction(i) {
       if (f('note')) db.prepare('UPDATE tickets SET content=? WHERE id=?').run(f('note'), info.lastInsertRowid);
 
       const csRole = getSetting('role_cs', '', i.guildId);
-      await ch.send({
-        content: [mention(i.user.id), csRole ? `<@&${csRole}>` : ''].filter(Boolean).join(' '),
-        ...draftPayload(i.guildId, info.lastInsertRowid)
-      });
+      try {
+        await ch.send({
+          content: [mention(i.user.id), csRole ? `<@&${csRole}>` : ''].filter(Boolean).join(' '),
+          ...draftPayload(i.guildId, info.lastInsertRowid)
+        });
+      } catch (e) {
+        await rollbackChannel(ch, 'tickets', info.lastInsertRowid);
+        throw e;
+      }
       S.drop(sid);
       return i.editReply({ embeds: [ok(i.guildId, '派單初步建立！', `請移步至專屬包廂完成選項設定：${ch}`)] });
     }
@@ -1115,17 +1131,22 @@ async function handleInteraction(i) {
       { prefix: '下單', categoryKey: 'category_ticket', extraRoleKeys: ['role_cs', 'role_admin'] });
     const info = db.prepare("INSERT INTO tickets (guild_id, src_guild, channel_id, customer_id, kind, subject) VALUES (?,?,?,?,'order','下單')")
       .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id);
-    await ch.send({
+    try {
+      await ch.send({
       content: `${mention(i.user.id)} 歡迎光臨！`,
       embeds: [emb(i.guildId, {
         title: '🛒 下單接待中',
         desc: '請告訴我們：\n1️⃣ 想指定的陪玩代號\n2️⃣ 服務項目與時數\n\n客服看到後會點「接單」為你服務。'
       })],
-      components: [row(
-        btn(`ticket:claim:${info.lastInsertRowid}`, '客服接單', ButtonStyle.Success, '🙋'),
-        btn(`ticket:close:${info.lastInsertRowid}`, '關閉頻道', ButtonStyle.Danger, '🔒')
-      )]
-    });
+        components: [row(
+          btn(`ticket:claim:${info.lastInsertRowid}`, '客服接單', ButtonStyle.Success, '🙋'),
+          btn(`ticket:close:${info.lastInsertRowid}`, '關閉頻道', ButtonStyle.Danger, '🔒')
+        )]
+      });
+    } catch (e) {
+      await rollbackChannel(ch, 'tickets', info.lastInsertRowid);
+      throw e;
+    }
     return i.editReply({ embeds: [ok(i.guildId, '已開啟下單頻道', `${ch}`)] });
   }
 
@@ -1174,7 +1195,8 @@ async function handleInteraction(i) {
       .run(orgOf(i.guildId), i.guildId, i.user.id, i.user.username,
            f('subject'), f('grade'), f('gender'), ch.id);
     const csRole = getSetting('role_cs', '', i.guildId);
-    await ch.send({
+    try {
+      await ch.send({
       content: csRole ? `<@&${csRole}>` : undefined,
       embeds: [emb(i.guildId, {
         title: '📝 考核入職單',
@@ -1191,7 +1213,11 @@ async function handleInteraction(i) {
         ].join('\n')
       })],
       components: [row(btn(`exam:close:${info.lastInsertRowid}`, '關閉考核單', ButtonStyle.Danger, '🔒'))]
-    });
+      });
+    } catch (e) {
+      await rollbackChannel(ch, 'exams', info.lastInsertRowid);
+      throw e;
+    }
     return i.editReply({ embeds: [ok(i.guildId, '考核單已開啟！', `請移步至：${ch}`)] });
   }
   if (id.startsWith('exam:close:')) {
