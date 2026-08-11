@@ -340,6 +340,10 @@ const DEFAULT_GENDERS = ['不限男女', '限女生', '限男生'];
 const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '唱歌單曲', '語聊', '其他遊戲'];
 // 需要再問子類型的服務（服務 → 子選項清單）
 const SERVICE_SUBTYPES = { '語聊': ['一般語聊', '戀愛語聊'] };
+// 不必問技術／娛樂分類的服務，選完（子類型後）直接問性別
+const SKIP_CATEGORY = ['唱歌單曲'];
+// 需求單不問段位的服務（沒有段位可言）
+const SKIP_RANK = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊'];
 // 加購選項可標價，格式「名稱=每局加價」
 const DEFAULT_ADDONS = ['指定/甜蜜=50', '聲優=50', '無=0'];
 // 服務分類（技術／娛樂）
@@ -360,6 +364,22 @@ const selectRow = (customId, placeholder, values, maxValues = 1) =>
     new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(placeholder.slice(0, 150))
       .setMinValues(1).setMaxValues(Math.min(maxValues, values.length))
       .addOptions(values.map(v => ({ label: v.slice(0, 100), value: v.slice(0, 100) }))));
+
+/** 不需要分類的服務直接問性別，其餘先問技術／娛樂 */
+function askCategoryOrGender(guildId, sid, service) {
+  if (SKIP_CATEGORY.includes(service)) {
+    return {
+      content: '請選擇您偏好的性別：',
+      components: [selectRow(`ord:gender:${sid}`, '請選擇您偏好的性別',
+        optionList(guildId, 'order_genders', DEFAULT_GENDERS))]
+    };
+  }
+  return {
+    content: '請選擇服務分類：',
+    components: [selectRow(`ord:cat:${sid}`, '請選擇服務分類（技術／娛樂）',
+      optionList(guildId, 'order_categories', DEFAULT_CATEGORIES))]
+  };
+}
 
 /** 服務類型對應的分類（娛樂／技術…），取單別名稱去掉「單」字 */
 const categoryOf = (guildId, service) => ticketLabel(guildId, service).replace(/單$/, '');
@@ -990,20 +1010,13 @@ async function handleInteraction(i) {
         });
       }
 
-      return i.update({
-        content: '請選擇服務分類：',
-        components: [selectRow(`ord:cat:${sid}`, '請選擇服務分類（技術／娛樂）',
-          optionList(i.guildId, 'order_categories', DEFAULT_CATEGORIES))]
-      });
+      return i.update(askCategoryOrGender(i.guildId, sid, svc));
     }
 
     if (step === 'sub') {
-      S.update(sid, { service: i.values[0] });
-      return i.update({
-        content: '請選擇服務分類：',
-        components: [selectRow(`ord:cat:${sid}`, '請選擇服務分類（技術／娛樂）',
-          optionList(i.guildId, 'order_categories', DEFAULT_CATEGORIES))]
-      });
+      const svc = i.values[0];
+      S.update(sid, { service: svc });
+      return i.update(askCategoryOrGender(i.guildId, sid, svc));
     }
 
     if (step === 'cat') {
@@ -1036,8 +1049,9 @@ async function handleInteraction(i) {
       return i.showModal(new ModalBuilder().setCustomId(`ord:final:${sid}`)
         .setTitle(`📝 ${d.service} ${d.gender} - 需求單`.slice(0, 45))
         .addComponents(
-          ...(other
-            ? [input('game', '遊戲名稱'), input('want', '希望遊玩內容 (模式、教學、解任務)')]
+          ...(other ? [input('game', '遊戲名稱'), input('want', '希望遊玩內容 (模式、教學、解任務)')] : []),
+          ...(other || SKIP_RANK.includes(d.service)
+            ? []
             : [input('rank', '您的目前段位？(無則填無)', { value: '無' })]),
           input('play_at', '希望時段 (例如: 今晚 20:00 後 / 現在)'),
           input('duration', '預計時長、場次', { ph: '例如：1小時 / 2場 / 不確定' }),
