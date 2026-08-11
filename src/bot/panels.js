@@ -499,6 +499,49 @@ function openOrderTicket(i) {
   return i.guild.channels.cache.has(t.channel_id) ? t.channel_id : null;
 }
 
+/** 名片專區刪除前，把裡面的對話整理成存底貼到老闆的訂單頻道 */
+async function archiveCardChannel(guild, t) {
+  try {
+    const cc = await guild.channels.fetch(t.card_channel_id).catch(() => null);
+    const boss = await guild.channels.fetch(t.channel_id).catch(() => null);
+    if (!cc || !boss?.isTextBased?.()) return;
+
+    const msgs = [...(await cc.messages.fetch({ limit: 100 })).values()]
+      .filter(m => !m.author.bot || m.embeds.length)
+      .reverse();
+    if (!msgs.length) return;
+
+    const lines = msgs.map(m => {
+      const who = m.member?.displayName || m.author.username;
+      const text = m.content || m.embeds[0]?.description || '（附件）';
+      const files = [...m.attachments.values()].map(a => a.url).join(' ');
+      return `**${who}**：${text}${files ? '\n' + files : ''}`;
+    });
+
+    // Discord 描述上限 4096，超過就分批送
+    const chunks = [];
+    let buf = '';
+    for (const l of lines) {
+      if ((buf + l).length > 3800) { chunks.push(buf); buf = ''; }
+      buf += l + '\n';
+    }
+    if (buf) chunks.push(buf);
+
+    for (const [idx, body] of chunks.entries()) {
+      await boss.send({
+        embeds: [emb(guild.id, {
+          title: idx === 0 ? `🗂️ 名片專區存底（單號 ${t.seq || t.id}）` : `🗂️ 名片專區存底（續 ${idx + 1}）`,
+          desc: body,
+          color: COLOR.warn,
+          footer: idx === chunks.length - 1 ? '名片專區已關閉，以上為完整對話紀錄' : undefined
+        })]
+      }).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('名片專區存底失敗：', e.message);
+  }
+}
+
 /** 把結帳明細自動備份一份到財務頻道 */
 async function backupToFinance(i, r) {
   const id = getSetting('channel_finance', '', i.guildId);
@@ -519,7 +562,10 @@ async function archiveTicketChannel(i) {
   db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), t.id);
   if (t.card_channel_id) {
     const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
-    if (cc) await cc.delete().catch(() => {});
+    if (cc) {
+      await archiveCardChannel(i.guild, t);
+      await cc.delete().catch(() => {});
+    }
     db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(t.id);
   }
   await i.channel.send({
@@ -1027,7 +1073,10 @@ async function handleInteraction(i) {
     if (act === 'closecard' || act === 'end') {
       if (t.card_channel_id) {
         const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
-        if (cc) await cc.delete().catch(() => {});
+        if (cc) {
+          await archiveCardChannel(i.guild, t);   // 刪除前先把對話存底到老闆頻道
+          await cc.delete().catch(() => {});
+        }
         db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(tid);
       } else {
         // 公開單沒有獨立頻道，改成收回陪玩的檢視權限

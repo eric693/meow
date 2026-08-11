@@ -116,6 +116,7 @@ async function start() {
   });
 
   require('./voice').attach(client);
+  require('./relay').attach(client);
 
   client.on('error', e => console.error('Discord client 錯誤：', e.message));
   await client.login(process.env.DISCORD_TOKEN);
