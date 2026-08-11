@@ -30,6 +30,10 @@ const post = async (msg, payload) => {
     await msg.channel.send(payload);
   } catch (e) {
     // Discord 的 50013 只回 Missing Permissions，翻成看得懂的指引
+    if (e.code === 50001) {
+      throw new Error(`機器人在 ${msg.channel} 沒有存取權限。\n`
+        + '請到「編輯頻道 → 權限」把 **喚雨機器喵** 加進去並允許「檢視頻道」。');
+    }
     if (e.code === 50013) {
       throw new Error(`機器人在 ${msg.channel} 沒有發送訊息的權限。\n`
         + '請到「編輯頻道 → 權限」把 **喚雨機器喵** 加進去，並允許：檢視頻道、發送訊息、嵌入連結、管理訊息。');
@@ -276,6 +280,12 @@ async function createPrivateChannel(guild, member, { prefix, name, categoryKey, 
   const parent = getSetting(categoryKey, '', guild.id) || null;
   const overwrites = [
     { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+    // 機器人自己也要開權限：@everyone 被關掉檢視後，它會看不到自己剛建的頻道
+    { id: guild.members.me.id,
+      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles,
+              PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels,
+              PermissionsBitField.Flags.ManageMessages] },
     { id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages,
                              PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] }
   ];
