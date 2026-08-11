@@ -281,6 +281,44 @@ const handlers = {
     await msg.reply({ embeds: [ok(msg.guild.id, '扣款完成', `${mention(target)} -${n(amount)} 雨幣\n目前餘額：**${n(bal)}**`)] });
   },
 
+  // 用法：!發券 @老闆 名稱 100 [滿1000] [到2026-12-31]
+  // 金額寫「20%」就是打折券；同名的券會累加張數
+  async 發券(msg, args) {
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    const G = require('../util/gifts');
+    const target = firstId(msg, args);
+    const rest = args.replace(/<@!?\d+>/g, '').replace(/\d{15,25}/, '').trim().split(/\s+/).filter(Boolean);
+    const usage = '用法：`!發券 @老闆 新春折價券 100`\n'
+                + '折扣券：`!發券 @老闆 週年慶 20%`\n'
+                + '可選：`滿1000`（低消門檻）、`到2026-12-31`（到期日）、`x3`（張數）';
+    if (!target || rest.length < 2) throw new Error(usage);
+
+    let qty = 1, minSpend = 0, expires = null, amount = null, percent = 0;
+    const nameParts = [];
+    for (const w of rest) {
+      let m;
+      if ((m = w.match(/^滿(\d+)$/))) minSpend = Number(m[1]);
+      else if ((m = w.match(/^到(\d{4}-\d{2}-\d{2})$/))) expires = m[1];
+      else if ((m = w.match(/^[x×](\d+)$/i))) qty = Number(m[1]);
+      else if ((m = w.match(/^(\d+)%$/))) percent = Number(m[1]);
+      else if (/^\d+$/.test(w)) amount = Number(w);
+      else nameParts.push(w);
+    }
+    const name = nameParts.join(' ');
+    if (!name) throw new Error(usage);
+    if (!percent && !amount) throw new Error(`請給折抵金額或折扣百分比。\n${usage}`);
+    if (percent > 100) throw new Error('折扣百分比不能超過 100。');
+
+    const key = `c${Date.now().toString(36)}`;   // 每次發券都是獨立一種，不會覆蓋既有的券
+    G.addItem(msg.guild.id, target, { key, name, qty, value: amount || 0, percent, minSpend, expires });
+    audit(msg.author.tag, '發券', `${mention(target)} ${name}×${qty}`, msg.guild.id);
+    const detail = percent ? `折 ${percent}%` : `折抵 ${n(amount)} 元`;
+    await msg.reply({ embeds: [ok(msg.guild.id, '折價券已發送',
+      `${mention(target)} 收到 **${name}** ×${qty}\n`
+      + `${detail}${minSpend ? `・滿 ${n(minSpend)}` : ''}${expires ? `・${expires} 到期` : ''}\n\n`
+      + '老闆可到「地下金庫 → 查詢餘額」查看背包。')] });
+  },
+
   async 退單(msg, args) {
     if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
     const [no, ...rest] = args.trim().split(/\s+/);
