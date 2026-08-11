@@ -651,6 +651,7 @@ Pages.settings = async view => {
         <label class="f"><span>已結單分類</span><select name="category_order_done">${opts(res.categories, v.category_order_done)}</select></label>
         <label class="f"><span>公開單分類</span><select name="category_order_public">${opts(res.categories, v.category_order_public)}</select></label>
         <label class="f"><span>匿名單分類</span><select name="category_order_anon">${opts(res.categories, v.category_order_anon)}</select></label>
+        <label class="f"><span>結單後分類（按「關閉訂單」）</span><select name="category_order_closed">${opts(res.categories, v.category_order_closed)}</select></label>
       </div>
       <h4 style="margin:14px 0 6px">播報</h4>
       <div class="grid c2">

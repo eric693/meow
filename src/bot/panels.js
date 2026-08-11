@@ -1148,10 +1148,26 @@ async function handleInteraction(i) {
     if (!t) return eph(i, err(i.guildId, '查無此傳票。'));
     if (t.customer_id !== i.user.id && !isCS(i.member))
       return denyEph(i, '只有開單者或客服可以關閉。');
+
     db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
-    await i.reply({ embeds: [ok(i.guildId, '頻道將於 5 秒後關閉', '感謝你的支持 💜')] });
-    setTimeout(() => i.channel.delete().catch(() => {}), 5000);
-    return;
+    // 名片專區一併收掉（收掉前先把對話存底到包廂）
+    if (t.card_channel_id) {
+      const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
+      if (cc) { await archiveCardChannel(i.guild, t); await cc.delete().catch(() => {}); }
+      db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(tid);
+    }
+
+    // 結單＝搬到結單分類並鎖住發言，頻道保留供日後查閱
+    const target = getSetting('category_order_closed', '', i.guildId)
+                || getSetting('category_ticket', '', i.guildId);
+    if (target) await i.channel.setParent(target, { lockPermissions: false }).catch(() => {});
+    for (const rid of [t.customer_id, ...getSetting('role_player', '', i.guildId).split(',').map(x => x.trim())]) {
+      if (rid) await i.channel.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
+    }
+    if (t.seq) await i.channel.setName(`🎫│${ticketLabel(i.guildId, t.service)}│${t.seq}│已結單`.slice(0, 90)).catch(() => {});
+
+    return i.reply({ embeds: [ok(i.guildId, '訂單已結單',
+      '本頻道已移至結單分類並鎖定發言，紀錄保留供日後查閱。')] });
   }
 
   // ---- 考核入職 ----
