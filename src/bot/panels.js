@@ -511,14 +511,6 @@ function unsettledPage(guildId, page = 0) {
   };
 }
 
-/** 這個人是否已經有進行中的下單頻道；有的話回傳頻道 ID */
-function openOrderTicket(i) {
-  const t = db.prepare("SELECT * FROM tickets WHERE guild_id=? AND customer_id=? AND kind='order' AND status!='closed'")
-    .get(orgOf(i.guildId), i.user.id);
-  if (!t || !t.channel_id) return null;
-  return i.guild.channels.cache.has(t.channel_id) ? t.channel_id : null;
-}
-
 /** 名片專區刪除前，把裡面的對話整理成存底貼到老闆的訂單頻道 */
 async function archiveCardChannel(guild, t) {
   try {
@@ -909,8 +901,6 @@ async function handleInteraction(i) {
 
   // ---- 點單系統（服務類型 → 性別 → 需求單 → 專屬包廂 → 附加選項 → 發布）----
   if (id === 'order:start') {
-    const open = openOrderTicket(i);
-    if (open) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${open}>`));
     const sid = S.put({ guildId: i.guildId, userId: i.user.id });
     return i.reply({
       components: [selectRow(`ord:service:${sid}`, '🔍 請選擇服務類型...',
@@ -948,8 +938,6 @@ async function handleInteraction(i) {
     }
 
     if (step === 'final') {
-      const open = openOrderTicket(i);
-      if (open) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：<#${open}>`));
       await i.deferReply({ ephemeral: true });
       const f = k => (i.fields.getTextInputValue(k) || '').trim();
       const seq = nextTicketSeq(i.guildId);
@@ -1101,17 +1089,13 @@ async function handleInteraction(i) {
 
   // ---- 下單傳票 ----
   if (id === 'ticket:order') {
-    const exist = db.prepare("SELECT * FROM tickets WHERE guild_id=? AND customer_id=? AND kind='order' AND status!='closed'")
-      .get(orgOf(i.guildId), i.user.id);
-    if (exist && exist.channel_id) {
-      const ch = await i.guild.channels.fetch(exist.channel_id).catch(() => null);
-      if (ch) return eph(i, err(i.guildId, `你已經有一個進行中的下單頻道：${ch}`));
-    }
     await i.deferReply({ ephemeral: true });
+    const seqT = nextTicketSeq(i.guildId);
     const ch = await createPrivateChannel(i.guild, i.member,
-      { prefix: '下單', categoryKey: 'category_ticket', extraRoleKeys: ['role_cs', 'role_admin'] });
-    const info = db.prepare("INSERT INTO tickets (guild_id, src_guild, channel_id, customer_id, kind, subject) VALUES (?,?,?,?,'order','下單')")
-      .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id);
+      { name: `下單-${i.user.username}-${seqT}`.toLowerCase(),
+        categoryKey: 'category_ticket', extraRoleKeys: ['role_cs', 'role_admin'] });
+    const info = db.prepare("INSERT INTO tickets (guild_id, src_guild, channel_id, customer_id, kind, subject, seq) VALUES (?,?,?,?,'order','下單',?)")
+      .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, seqT);
     try {
       await ch.send({
       content: `${mention(i.user.id)} 歡迎光臨！`,
