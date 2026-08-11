@@ -729,13 +729,24 @@ async function handleInteraction(i) {
     const R = require('../util/reports');
     const s = R.customerSpend(i.guildId, i.user.id);
     getCustomer(i.guildId, i.user.id, i.user.username);
-    return eph(i, money(i.guildId, '🏦 你的地下金庫', null, [
+    const fields = [
       { name: '雨幣餘額', value: n(s.coins), inline: true },
       { name: 'VIP 等級', value: `Lv.${s.vip_level}`, inline: true },
       { name: '歷史消費', value: n(s.total_spend), inline: true },
       { name: '本月消費', value: `${n(s.month)}（${s.month_count} 單）`, inline: true },
       { name: '禮物累計', value: n(s.gift_total), inline: true }
-    ]));
+    ];
+    // 背包：只列還沒過期的券，沒有券就不佔版面
+    const today = now().slice(0, 10);
+    const bag = G.listBackpack(i.guildId, i.user.id).filter(c => !c.expires || c.expires.slice(0, 10) >= today);
+    if (bag.length) {
+      fields.push({
+        name: '🎒 背包',
+        value: bag.map(c => `・${G.couponLabel(c)}${c.expires ? `（${c.expires.slice(0, 10)} 到期）` : ''}`)
+          .join('\n').slice(0, 1024)
+      });
+    }
+    return eph(i, money(i.guildId, '🏦 你的地下金庫', null, fields));
   }
 
   // ---- 愛戀查詢 ----
