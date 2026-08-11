@@ -1078,7 +1078,7 @@ async function handleInteraction(i) {
       return;
     }
 
-    // 陪玩遞交名片：把影音名片轉發到老闆的包廂
+    // 陪玩遞交名片：名片專區公開展示一份，老闆的包廂也收到一份
     if (act === 'card') {
       const staff = getStaff(i.guildId, i.user.id);
       if (!staff || !staff.active || staff.kind !== 'player')
@@ -1089,7 +1089,7 @@ async function handleInteraction(i) {
       const boss = await i.guild.channels.fetch(t.channel_id).catch(() => null);
       if (!boss) return eph(i, err(i.guildId, '找不到老闆的訂單頻道，請聯絡客服。'));
 
-      await boss.send({
+      const card = {
         content: staff.card_url || undefined,
         embeds: [emb(i.guildId, {
           title: `✨ 專屬名片：${name}`,
@@ -1097,7 +1097,10 @@ async function handleInteraction(i) {
           color: COLOR.ok,
           footer: staff.card_url ? undefined : '這位陪玩還沒綁定影音名片，請管理用 /入職 補上'
         })]
-      });
+      };
+      await boss.send(card);
+      // 在名片專區也公開一份，讓其他陪玩與客服看得到誰報名了
+      if (i.channel.id !== boss.id) await i.channel.send(card).catch(() => {});
       return eph(i, ok(i.guildId, '影片名片已成功遞交！', '老闆將在頻道收到您的名片！'));
     }
 
