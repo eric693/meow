@@ -342,6 +342,8 @@ const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '�
 const SERVICE_SUBTYPES = { '語聊': ['一般語聊', '戀愛語聊'] };
 // 不必問技術／娛樂分類的服務，選完（子類型後）直接問性別
 const SKIP_CATEGORY = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊', 'Steam 小遊戲'];
+// 不提供加購選項的服務，選完性別直接進需求單
+const SKIP_ADDON = ['唱歌單曲'];
 // 需求單不問段位的服務（沒有段位可言）
 const SKIP_RANK = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊'];
 // 加購選項可標價，格式「名稱=每局加價」
@@ -379,6 +381,23 @@ function askCategoryOrGender(guildId, sid, service) {
     components: [selectRow(`ord:cat:${sid}`, '請選擇服務分類（技術／娛樂）',
       optionList(guildId, 'order_categories', DEFAULT_CATEGORIES))]
   };
+}
+
+/** 需求單表單，欄位依服務類型調整（Discord 上限 5 欄） */
+function finalModal(sid, d) {
+  // 「其他遊戲」要先問是哪款、想玩什麼，欄位滿了就不再問段位
+  const other = d.service === '其他遊戲';
+  return new ModalBuilder().setCustomId(`ord:final:${sid}`)
+    .setTitle(`📝 ${d.service} ${d.gender} - 需求單`.slice(0, 45))
+    .addComponents(
+      ...(other ? [input('game', '遊戲名稱'), input('want', '希望遊玩內容 (模式、教學、解任務)')] : []),
+      ...(other || SKIP_RANK.includes(d.service)
+        ? []
+        : [input('rank', '您的目前段位？(無則填無)', { value: '無' })]),
+      input('play_at', '希望時段 (例如: 今晚 20:00 後 / 現在)'),
+      input('duration', '預計時長、場次', { ph: '例如：1小時 / 2場 / 不確定' }),
+      input('note', '其他需求或備註', { required: false, style: TextInputStyle.Paragraph, ph: '填寫於此' })
+    );
 }
 
 /** 服務類型對應的分類（娛樂／技術…），取單別名稱去掉「單」字 */
@@ -1030,6 +1049,8 @@ async function handleInteraction(i) {
 
     if (step === 'gender') {
       S.update(sid, { gender: i.values[0] });
+      // 沒有加購選項的服務（例：唱歌單）直接進需求單
+      if (SKIP_ADDON.includes(sess.service)) return i.showModal(finalModal(sid, S.get(sid)));
       const addons = addonOptions(i.guildId);
       return i.update({
         content: '請選擇附加選項（可複選，沒有需求請選「無」）：',
@@ -1043,20 +1064,7 @@ async function handleInteraction(i) {
 
     if (step === 'addon') {
       S.update(sid, { addons: i.values.filter(v => v !== '無') });
-      const d = S.get(sid);
-      // 「其他遊戲」要先問是哪款、想玩什麼；Discord 表單上限 5 欄，故不再問段位
-      const other = d.service === '其他遊戲';
-      return i.showModal(new ModalBuilder().setCustomId(`ord:final:${sid}`)
-        .setTitle(`📝 ${d.service} ${d.gender} - 需求單`.slice(0, 45))
-        .addComponents(
-          ...(other ? [input('game', '遊戲名稱'), input('want', '希望遊玩內容 (模式、教學、解任務)')] : []),
-          ...(other || SKIP_RANK.includes(d.service)
-            ? []
-            : [input('rank', '您的目前段位？(無則填無)', { value: '無' })]),
-          input('play_at', '希望時段 (例如: 今晚 20:00 後 / 現在)'),
-          input('duration', '預計時長、場次', { ph: '例如：1小時 / 2場 / 不確定' }),
-          input('note', '其他需求或備註', { required: false, style: TextInputStyle.Paragraph, ph: '填寫於此' })
-        ));
+      return i.showModal(finalModal(sid, S.get(sid)));
     }
 
     if (step === 'final') {
