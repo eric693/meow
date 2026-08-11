@@ -511,6 +511,14 @@ function unsettledPage(guildId, page = 0) {
   };
 }
 
+/** 歸檔時的頻道名稱：有服務類型就用「單別│單號│狀態」，否則保留原名再加狀態 */
+function archivedName(channel, t, suffix) {
+  const base = t.service && t.seq
+    ? `🎫│${ticketLabel(channel.guild.id, t.service)}│${t.seq}`
+    : channel.name.replace(/│(已結帳|已結單)$/, '');
+  return `${base}│${suffix}`.slice(0, 90);
+}
+
 /** 名片專區刪除前，把裡面的對話整理成存底貼到老闆的訂單頻道 */
 async function archiveCardChannel(guild, t) {
   try {
@@ -594,7 +602,7 @@ async function archiveTicketChannel(i) {
     })],
     components: [row(btn(`ticket:close:${t.id}`, '關閉訂單', ButtonStyle.Danger, '🔒'))]
   }).catch(() => {});
-  await i.channel.setName(`🎫│${ticketLabel(i.guildId, t.service)}│${t.seq}│已結帳`.slice(0, 90)).catch(() => {});
+  await i.channel.setName(archivedName(i.channel, t, '已結帳')).catch(() => {});
   const done = getSetting('category_order_done', '', i.guildId);
   if (done) await i.channel.setParent(done, { lockPermissions: false }).catch(() => {});
 }
@@ -1148,7 +1156,7 @@ async function handleInteraction(i) {
     for (const rid of [t.customer_id, ...getSetting('role_player', '', i.guildId).split(',').map(x => x.trim())]) {
       if (rid) await i.channel.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
     }
-    if (t.seq) await i.channel.setName(`🎫│${ticketLabel(i.guildId, t.service)}│${t.seq}│已結單`.slice(0, 90)).catch(() => {});
+    await i.channel.setName(archivedName(i.channel, t, '已結單')).catch(() => {});
 
     return i.reply({ embeds: [ok(i.guildId, '訂單已結單',
       '本頻道已移至結單分類並鎖定發言，紀錄保留供日後查閱。')] });
