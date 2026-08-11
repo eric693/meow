@@ -311,6 +311,30 @@ async function createPrivateChannel(guild, member, { prefix, name, categoryKey, 
 
 const REPORT_LABEL = { self: '自主報單', cross: '跨服報單 1 號', cross2: '唱歌單跨服報單' };
 
+// 開單防呆：同時進行的張數上限與冷卻時間（後台可調，設 0 表示不限）
+const lastOrderAt = new Map();
+function checkOrderQuota(i) {
+  const org = orgOf(i.guildId);
+  const max = getNum('order_max_open', 5, org);
+  if (max > 0) {
+    const open = db.prepare(`SELECT COUNT(*) c FROM tickets
+                             WHERE guild_id=? AND customer_id=? AND kind='order' AND status!='closed'`)
+      .get(org, i.user.id).c;
+    if (open >= max) {
+      return `你目前有 ${open} 張進行中的單，已達上限 ${max} 張。\n請先結束其中一張（按頻道裡的「🔒 關閉訂單」）再開新單。`;
+    }
+  }
+  const cd = getNum('order_cooldown_sec', 30, org);
+  if (cd > 0) {
+    const key = `${i.guildId}:${i.user.id}`;
+    const last = lastOrderAt.get(key) || 0;
+    const left = Math.ceil((last + cd * 1000 - Date.now()) / 1000);
+    if (left > 0) return `開單太頻繁了，請於 ${left} 秒後再試。`;
+  }
+  return null;
+}
+const markOrderCreated = i => lastOrderAt.set(`${i.guildId}:${i.user.id}`, Date.now());
+
 // 下單選單的選項，皆可用後台設定覆蓋（逗號分隔）
 const DEFAULT_GENDERS = ['不限男女', '限女生', '限男生'];
 const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '唱歌單曲', '語聊'];
@@ -909,6 +933,8 @@ async function handleInteraction(i) {
 
   // ---- 點單系統（服務類型 → 性別 → 需求單 → 專屬包廂 → 附加選項 → 發布）----
   if (id === 'order:start') {
+    const over = checkOrderQuota(i);
+    if (over) return eph(i, err(i.guildId, over));
     const sid = S.put({ guildId: i.guildId, userId: i.user.id });
     return i.reply({
       components: [selectRow(`ord:service:${sid}`, '🔍 請選擇服務類型...',
@@ -946,6 +972,8 @@ async function handleInteraction(i) {
     }
 
     if (step === 'final') {
+      const over = checkOrderQuota(i);
+      if (over) return eph(i, err(i.guildId, over));
       await i.deferReply({ ephemeral: true });
       const f = k => (i.fields.getTextInputValue(k) || '').trim();
       const seq = nextTicketSeq(i.guildId);
@@ -977,6 +1005,7 @@ async function handleInteraction(i) {
         throw e;
       }
       S.drop(sid);
+      markOrderCreated(i);
       return i.editReply({ content: `✅ **派單初步建立！** 請移步至專屬包廂完成選項設定：${ch}` });
     }
   }
@@ -1097,6 +1126,8 @@ async function handleInteraction(i) {
 
   // ---- 下單傳票 ----
   if (id === 'ticket:order') {
+    const over = checkOrderQuota(i);
+    if (over) return eph(i, err(i.guildId, over));
     await i.deferReply({ ephemeral: true });
     const seqT = nextTicketSeq(i.guildId);
     const ch = await createPrivateChannel(i.guild, i.member,
@@ -1120,6 +1151,7 @@ async function handleInteraction(i) {
       await rollbackChannel(ch, 'tickets', info.lastInsertRowid);
       throw e;
     }
+    markOrderCreated(i);
     return i.editReply({ content: `✅ **已開啟下單頻道**：${ch}` });
   }
 

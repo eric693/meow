@@ -693,6 +693,8 @@ Pages.settings = async view => {
         <label class="f"><span>加購選項（名稱=加價）</span><input name="order_addons" value="${UI.esc(v.order_addons || '')}" placeholder="指定/甜蜜=50,聲優=50,無=0"></label>
         <label class="f"><span>單別名稱（服務=單別）</span><input name="order_type_labels" value="${UI.esc(v.order_type_labels || '')}" placeholder="特戰英豪=娛樂單,Steam 小遊戲=steam單"></label>
         <label class="f"><span>單號起始值</span><input name="ticket_seq_start" type="number" value="${UI.esc(v.ticket_seq_start || '1001')}"></label>
+        <label class="f"><span>每人同時開單上限（0＝不限）</span><input name="order_max_open" type="number" value="${UI.esc(v.order_max_open || '5')}"></label>
+        <label class="f"><span>開單冷卻秒數（0＝不限）</span><input name="order_cooldown_sec" type="number" value="${UI.esc(v.order_cooldown_sec || '30')}"></label>
         <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '100')}"></label>
         <label class="f"><span>高薪陪玩門檻（!業績查詢）</span><input name="high_income_threshold" type="number" value="${UI.esc(v.high_income_threshold || '20000')}"></label>
       </div>

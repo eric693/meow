@@ -59,7 +59,7 @@ const GUILD_KEYS = [
   'channel_voice_hub', 'category_voice',
   // 下單選單選項（逗號分隔）
   'order_genders', 'order_services', 'order_categories', 'order_addons',
-  'order_type_labels', 'ticket_seq_start'
+  'order_type_labels', 'ticket_seq_start', 'order_max_open', 'order_cooldown_sec'
 ];
 const SETTING_KEYS = [...ORG_KEYS, ...GUILD_KEYS];
 
