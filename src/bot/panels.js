@@ -395,7 +395,10 @@ function finalModal(sid, d) {
         ? []
         : [input('rank', '您的目前段位？(無則填無)', { value: '無' })]),
       input('play_at', '希望時段 (例如: 今晚 20:00 後 / 現在)'),
-      input('duration', '預計時長、場次', { ph: '例如：1小時 / 2場 / 不確定' }),
+      // 唱歌單以首數計，不是時數
+      ...(d.service === '唱歌單曲'
+        ? [input('duration', '預計幾首歌曲', { ph: '例如：1首 / 2首 / 3首' })]
+        : [input('duration', '預計時長、場次', { ph: '例如：1小時 / 2場 / 不確定' })]),
       input('note', '其他需求或備註', { required: false, style: TextInputStyle.Paragraph, ph: '填寫於此' })
     );
 }
