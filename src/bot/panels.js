@@ -337,7 +337,9 @@ const markOrderCreated = i => lastOrderAt.set(`${i.guildId}:${i.user.id}`, Date.
 
 // 下單選單的選項，皆可用後台設定覆蓋（逗號分隔）
 const DEFAULT_GENDERS = ['不限男女', '限女生', '限男生'];
-const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '唱歌單曲', '語聊'];
+const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '唱歌單曲', '語聊', '其他遊戲'];
+// 需要再問子類型的服務（服務 → 子選項清單）
+const SERVICE_SUBTYPES = { '語聊': ['一般語聊', '戀愛語聊'] };
 // 加購選項可標價，格式「名稱=每局加價」
 const DEFAULT_ADDONS = ['指定/甜蜜=50', '聲優=50', '無=0'];
 // 服務分類（技術／娛樂）
@@ -345,7 +347,8 @@ const DEFAULT_CATEGORIES = ['技術', '娛樂'];
 // 服務類型 → 頻道名稱用的單別，可用設定 order_type_labels 覆蓋（格式：服務=單別,服務=單別）
 const DEFAULT_TYPE_LABELS = {
   '雨幣儲值': '儲值單', '特戰英豪': '娛樂單', 'Steam 小遊戲': 'steam單',
-  '唱歌單曲': '唱歌單', '語聊': '語聊單'
+  '唱歌單曲': '唱歌單', '語聊': '語聊單',
+  '一般語聊': '語聊單', '戀愛語聊': '語聊單', '其他遊戲': '娛樂單'
 };
 
 const optionList = (guildId, key, fallback) => {
@@ -395,14 +398,13 @@ const addonText = (guildId, t) => {
   return t.addons.split(',').filter(Boolean).map(k => map[k]?.label || k).join('、');
 };
 
-/** 包廂內「訂單建立中」的卡片（含附加選項選單與四顆按鈕） */
+/** 包廂內「訂單建立中」的卡片（附加選項已於下單流程選定，這裡只做確認與發布） */
 function draftPayload(guildId, tid) {
   const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
-  const addons = addonOptions(guildId);
   return {
     embeds: [emb(guildId, {
-      title: '⏳ 訂單建立中...(請選擇附加選項)',
-      desc: `老闆 ${mention(t.customer_id)} 您好！您的基礎需求已記錄，請在下方下拉選單選擇附加服務：`,
+      title: '⏳ 訂單建立中...(請確認並發布)',
+      desc: `老闆 ${mention(t.customer_id)} 您好！您的需求已記錄，確認無誤後請點下方按鈕發布訂單：`,
       fields: [
         { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
         { name: '老闆段位', value: t.rank || '無', inline: true },
@@ -412,17 +414,9 @@ function draftPayload(guildId, tid) {
       ]
     })],
     components: [
-      new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId(`tk:addon:${tid}`)
-          .setPlaceholder('＋ 選擇附加選項 (選完請點選下方發布訂單)')
-          .setMinValues(1).setMaxValues(addons.length + 1)
-          .addOptions(
-            { label: '不加購', value: '不加購' },
-            ...addons.map(a => ({ label: a.label.slice(0, 100), value: a.name.slice(0, 100) })))),
       row(
+        btn(`tk:anon:${tid}`, '確認訂單', ButtonStyle.Success, '✅'),
         btn(`tk:public:${tid}`, '公開訂單', ButtonStyle.Primary, '📢'),
-        btn(`tk:anon:${tid}`, '匿名訂單', ButtonStyle.Success, '🏆'),
-        btn(`tk:clear:${tid}`, '清空選項', ButtonStyle.Secondary, '🧹'),
         btn(`tk:cancel:${tid}`, '取消訂單', ButtonStyle.Danger, '❌')
       )
     ]
@@ -949,8 +943,71 @@ async function handleInteraction(i) {
     if (!sess) return eph(i, err(i.guildId, '這次下單已逾時（超過 15 分鐘），請重新點一次按鈕。'));
 
     if (step === 'service') {
-      // 分類（技術／娛樂）由服務類型自動判定，不另外問一次
-      S.update(sid, { service: i.values[0], category: categoryOf(i.guildId, i.values[0]) });
+      const svc = i.values[0];
+      S.update(sid, { service: svc });
+
+      // 雨幣儲值不需要需求單，直接開專屬頻道給客服處理
+      if (svc.includes('儲值')) {
+        await i.deferUpdate();
+        const seq = nextTicketSeq(i.guildId);
+        const ch = await createPrivateChannel(i.guild, i.member, {
+          name: `🎫│${ticketLabel(i.guildId, svc)}│${seq}`,
+          categoryKey: 'category_ticket',
+          extraRoleKeys: ['role_cs', 'role_admin']
+        });
+        const info = db.prepare(`INSERT INTO tickets
+            (guild_id, src_guild, channel_id, customer_id, kind, subject, seq, service, publish)
+            VALUES (?,?,?,?,'order',?,?,?,'draft')`)
+          .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, svc, seq, svc);
+        const csRole = getSetting('role_cs', '', i.guildId);
+        try {
+          await ch.send({
+            content: [mention(i.user.id), csRole ? `<@&${csRole}>` : ''].filter(Boolean).join(' '),
+            embeds: [emb(i.guildId, {
+              title: '🪙 雨幣儲值受理中',
+              desc: '請告訴我們您要儲值的金額與付款方式，客服看到後會為你處理 💜'
+            })],
+            components: [row(
+              btn(`ticket:claim:${info.lastInsertRowid}`, '客服接單', ButtonStyle.Success, '🙋'),
+              btn(`ticket:close:${info.lastInsertRowid}`, '關閉頻道', ButtonStyle.Danger, '🔒')
+            )]
+          });
+        } catch (e) {
+          await rollbackChannel(ch, 'tickets', info.lastInsertRowid);
+          throw e;
+        }
+        S.drop(sid);
+        markOrderCreated(i);
+        return i.editReply({ content: `✅ **已開啟儲值頻道**：${ch}`, components: [] });
+      }
+
+      // 需要再細分的服務（例：語聊 → 一般／戀愛）先問子類型
+      const subs = SERVICE_SUBTYPES[svc];
+      if (subs) {
+        return i.update({
+          content: `請選擇 ${svc} 的類型：`,
+          components: [selectRow(`ord:sub:${sid}`, `選擇${subs.join(' / ')}...`, subs)]
+        });
+      }
+
+      return i.update({
+        content: '請選擇服務分類：',
+        components: [selectRow(`ord:cat:${sid}`, '請選擇服務分類（技術／娛樂）',
+          optionList(i.guildId, 'order_categories', DEFAULT_CATEGORIES))]
+      });
+    }
+
+    if (step === 'sub') {
+      S.update(sid, { service: i.values[0] });
+      return i.update({
+        content: '請選擇服務分類：',
+        components: [selectRow(`ord:cat:${sid}`, '請選擇服務分類（技術／娛樂）',
+          optionList(i.guildId, 'order_categories', DEFAULT_CATEGORIES))]
+      });
+    }
+
+    if (step === 'cat') {
+      S.update(sid, { category: i.values[0] });
       return i.update({
         content: '請選擇您偏好的性別：',
         components: [selectRow(`ord:gender:${sid}`, '請選擇您偏好的性別',
@@ -960,11 +1017,28 @@ async function handleInteraction(i) {
 
     if (step === 'gender') {
       S.update(sid, { gender: i.values[0] });
+      const addons = addonOptions(i.guildId);
+      return i.update({
+        content: '請選擇附加選項（可複選，沒有需求請選「無」）：',
+        components: [new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder().setCustomId(`ord:addon:${sid}`)
+            .setPlaceholder('＋ 選擇附加選項（可複選）')
+            .setMinValues(1).setMaxValues(addons.length)
+            .addOptions(addons.map(a => ({ label: a.label.slice(0, 100), value: a.name.slice(0, 100) }))))]
+      });
+    }
+
+    if (step === 'addon') {
+      S.update(sid, { addons: i.values.filter(v => v !== '無') });
       const d = S.get(sid);
+      // 「其他遊戲」要先問是哪款、想玩什麼；Discord 表單上限 5 欄，故不再問段位
+      const other = d.service === '其他遊戲';
       return i.showModal(new ModalBuilder().setCustomId(`ord:final:${sid}`)
-        .setTitle(`📝 ${d.category || ''}${d.gender} - 需求單`.slice(0, 45))
+        .setTitle(`📝 ${d.service} ${d.gender} - 需求單`.slice(0, 45))
         .addComponents(
-          input('rank', '您的目前段位？(無則填無)', { value: '無' }),
+          ...(other
+            ? [input('game', '遊戲名稱'), input('want', '希望遊玩內容 (模式、教學、解任務)')]
+            : [input('rank', '您的目前段位？(無則填無)', { value: '無' })]),
           input('play_at', '希望時段 (例如: 今晚 20:00 後 / 現在)'),
           input('duration', '預計時長、場次', { ph: '例如：1小時 / 2場 / 不確定' }),
           input('note', '其他需求或備註', { required: false, style: TextInputStyle.Paragraph, ph: '填寫於此' })
@@ -975,7 +1049,8 @@ async function handleInteraction(i) {
       const over = checkOrderQuota(i);
       if (over) return eph(i, err(i.guildId, over));
       await i.deferReply({ ephemeral: true });
-      const f = k => (i.fields.getTextInputValue(k) || '').trim();
+      // 欄位會依服務類型不同（其他遊戲沒有段位、多了遊戲名稱與遊玩內容）
+      const f = k => { try { return (i.fields.getTextInputValue(k) || '').trim(); } catch { return ''; } };
       const seq = nextTicketSeq(i.guildId);
       const label = (sess.category ? sess.category + '單' : ticketLabel(i.guildId, sess.service));
 
@@ -992,7 +1067,12 @@ async function handleInteraction(i) {
              sess.category || sess.service, sess.gender, f('rank'), f('play_at'), f('duration'));
       if (sess.addons?.length)
         db.prepare('UPDATE tickets SET addons=? WHERE id=?').run(sess.addons.join(','), info.lastInsertRowid);
-      if (f('note')) db.prepare('UPDATE tickets SET content=? WHERE id=?').run(f('note'), info.lastInsertRowid);
+      const note = [
+        f('game') && `遊戲：${f('game')}`,
+        f('want') && `希望內容：${f('want')}`,
+        f('note')
+      ].filter(Boolean).join('\n');
+      if (note) db.prepare('UPDATE tickets SET content=? WHERE id=?').run(note, info.lastInsertRowid);
 
       const csRole = getSetting('role_cs', '', i.guildId);
       try {
@@ -1019,15 +1099,6 @@ async function handleInteraction(i) {
     const mine = t.customer_id === i.user.id;
     if (!mine && !isCS(i.member)) return denyEph(i, '只有開單者或客服可以操作這張單。');
 
-    if (act === 'addon') {
-      const picked = i.values.filter(v => v !== '不加購');
-      db.prepare('UPDATE tickets SET addons=? WHERE id=?').run(picked.join(','), tid);
-      return i.update(draftPayload(i.guildId, tid));
-    }
-    if (act === 'clear') {
-      db.prepare("UPDATE tickets SET addons='' WHERE id=?").run(tid);
-      return i.update(draftPayload(i.guildId, tid));
-    }
     if (act === 'cancel') {
       db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
       await i.update({ embeds: [ok(i.guildId, '訂單已取消', '頻道將於 5 秒後關閉。')], components: [] });
