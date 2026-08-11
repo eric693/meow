@@ -925,7 +925,7 @@ async function handleInteraction(i) {
     }
   }
 
-  // ---- 點單系統（服務類型 → 性別 → 需求單 → 專屬包廂 → 附加選項 → 發布）----
+  // ---- 點單系統（服務類型 →〔子類型〕→ 技術／娛樂 → 性別 → 附加選項 → 需求單 → 專屬包廂 → 發布）----
   if (id === 'order:start') {
     const over = checkOrderQuota(i);
     if (over) return eph(i, err(i.guildId, over));
