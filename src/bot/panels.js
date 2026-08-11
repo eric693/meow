@@ -312,7 +312,7 @@ async function createPrivateChannel(guild, member, { prefix, name, categoryKey, 
 const REPORT_LABEL = { self: '自主報單', cross: '跨服報單 1 號', cross2: '唱歌單跨服報單' };
 
 // 下單選單的選項，皆可用後台設定覆蓋（逗號分隔）
-const DEFAULT_GENDERS = ['男女都可', '女生陪玩', '男生陪玩'];
+const DEFAULT_GENDERS = ['不限男女', '限女生', '限男生'];
 const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '唱歌單曲', '語聊'];
 // 加購選項可標價，格式「名稱=每局加價」
 const DEFAULT_ADDONS = ['指定/甜蜜=50', '聲優=50', '無=0'];
@@ -345,7 +345,8 @@ function ticketLabel(guildId, service) {
     const [k, v] = pair.split('=').map(x => (x || '').trim());
     if (k && v) map[k] = v;
   }
-  return map[service] || '娛樂單';
+  // 已經是分類名稱（例：娛樂）時直接補「單」字
+  return map[service] || (service ? `${service}單` : '娛樂單');
 }
 
 /** 全店連號的單號 */
@@ -964,8 +965,7 @@ async function handleInteraction(i) {
            rank, play_at, duration, publish)
           VALUES (?,?,?,?,'order',?,?,?,?,?,?,?,'draft')`)
         .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, sess.service, seq,
-             `${sess.category || ''}${sess.service ? '・' + sess.service : ''}`.replace(/^・/, ''),
-             sess.gender, f('rank'), f('play_at'), f('duration'));
+             sess.category || sess.service, sess.gender, f('rank'), f('play_at'), f('duration'));
       if (sess.addons?.length)
         db.prepare('UPDATE tickets SET addons=? WHERE id=?').run(sess.addons.join(','), info.lastInsertRowid);
       if (f('note')) db.prepare('UPDATE tickets SET content=? WHERE id=?').run(f('note'), info.lastInsertRowid);
@@ -1025,7 +1025,7 @@ async function handleInteraction(i) {
         // 匿名單：另開名片專區給陪玩，老闆的包廂維持隱密
         cardCh = await createPrivateChannel(i.guild, i.member, {
           name: `🎫│${ticketLabel(i.guildId, t.service)}│${t.seq}│名片專區`,
-          categoryKey: anon ? 'category_order_anon' : 'category_order_public',
+          categoryKey: 'category_order_public',   // 名片專區要讓陪玩看得到，放公開單分類
           extraRoleKeys: ['role_cs', 'role_admin', 'role_player']
         });
         db.prepare('UPDATE tickets SET card_channel_id=? WHERE id=?').run(cardCh.id, tid);
