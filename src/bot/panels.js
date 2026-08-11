@@ -26,7 +26,16 @@ const input = (id, label, { style = TextInputStyle.Short, required = true, ph = 
 
 const adminOnly = msg => { if (!isAdmin(msg.member)) throw new Error('面板建置僅限管理員使用。'); };
 const post = async (msg, payload) => {
-  await msg.channel.send(payload);
+  try {
+    await msg.channel.send(payload);
+  } catch (e) {
+    // Discord 的 50013 只回 Missing Permissions，翻成看得懂的指引
+    if (e.code === 50013) {
+      throw new Error(`機器人在 ${msg.channel} 沒有發送訊息的權限。\n`
+        + '請到「編輯頻道 → 權限」把 **喚雨機器喵** 加進去，並允許：檢視頻道、發送訊息、嵌入連結、管理訊息。');
+    }
+    throw e;
+  }
   if (msg.deletable) await msg.delete().catch(() => {});
 };
 
@@ -290,7 +299,9 @@ const REPORT_LABEL = { self: '自主報單', cross: '跨服報單 1 號', cross2
 const DEFAULT_GENDERS = ['男女都可', '女生陪玩', '男生陪玩'];
 const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '唱歌單曲', '語聊'];
 // 加購選項可標價，格式「名稱=每局加價」
-const DEFAULT_ADDONS = ['甜蜜/指定稱呼=50', '聲優陪=50'];
+const DEFAULT_ADDONS = ['指定/甜蜜=50', '聲優=50', '無=0'];
+// 服務分類（技術／娛樂）
+const DEFAULT_CATEGORIES = ['技術', '娛樂'];
 // 服務類型 → 頻道名稱用的單別，可用設定 order_type_labels 覆蓋（格式：服務=單別,服務=單別）
 const DEFAULT_TYPE_LABELS = {
   '雨幣儲值': '儲值單', '特戰英豪': '娛樂單', 'Steam 小遊戲': 'steam單',
@@ -845,6 +856,15 @@ async function handleInteraction(i) {
     if (step === 'service') {
       S.update(sid, { service: i.values[0] });
       return i.update({
+        content: '請選擇服務分類：',
+        components: [selectRow(`ord:cat:${sid}`, '請選擇服務分類（技術／娛樂）',
+          optionList(i.guildId, 'order_categories', DEFAULT_CATEGORIES))]
+      });
+    }
+
+    if (step === 'cat') {
+      S.update(sid, { category: i.values[0] });
+      return i.update({
         content: '請選擇您偏好的性別：',
         components: [selectRow(`ord:gender:${sid}`, '請選擇您偏好的性別',
           optionList(i.guildId, 'order_genders', DEFAULT_GENDERS))]
@@ -853,13 +873,27 @@ async function handleInteraction(i) {
 
     if (step === 'gender') {
       S.update(sid, { gender: i.values[0] });
+      const addons = addonOptions(i.guildId);
+      return i.update({
+        content: '請選擇附加選項（可複選）：',
+        components: [new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder().setCustomId(`ord:addon:${sid}`)
+            .setPlaceholder('請選擇附加選項（可複選）')
+            .setMinValues(1).setMaxValues(addons.length)
+            .addOptions(addons.map(a => ({ label: a.label.slice(0, 100), value: a.name.slice(0, 100) }))))]
+      });
+    }
+
+    if (step === 'addon') {
+      const picked = i.values.filter(v => v !== '無');
+      S.update(sid, { addons: picked });
       const d = S.get(sid);
       return i.showModal(new ModalBuilder().setCustomId(`ord:final:${sid}`)
-        .setTitle(`📝 ${d.service}${d.gender} - 需求單`.slice(0, 45))
+        .setTitle(`📝 ${d.category || ''}${d.gender} - 需求單`.slice(0, 45))
         .addComponents(
           input('rank', '您的目前段位？(無則填無)', { value: '無' }),
           input('play_at', '希望時段 (例如: 今晚 20:00 後 / 現在)'),
-          input('duration', '預計時長 (例如: 1小時 / 2小時)'),
+          input('duration', '預計時長、場次', { ph: '例如：1小時 / 2場 / 不確定' }),
           input('note', '其他需求或備註', { required: false, style: TextInputStyle.Paragraph, ph: '填寫於此' })
         ));
     }
@@ -870,7 +904,7 @@ async function handleInteraction(i) {
       await i.deferReply({ ephemeral: true });
       const f = k => (i.fields.getTextInputValue(k) || '').trim();
       const seq = nextTicketSeq(i.guildId);
-      const label = ticketLabel(i.guildId, sess.service);
+      const label = (sess.category ? sess.category + '單' : ticketLabel(i.guildId, sess.service));
 
       const ch = await createPrivateChannel(i.guild, i.member, {
         name: `🎫│${label}│${seq}`,
@@ -882,7 +916,10 @@ async function handleInteraction(i) {
            rank, play_at, duration, publish)
           VALUES (?,?,?,?,'order',?,?,?,?,?,?,?,'draft')`)
         .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, sess.service, seq,
-             sess.service, sess.gender, f('rank'), f('play_at'), f('duration'));
+             `${sess.category || ''}${sess.service ? '・' + sess.service : ''}`.replace(/^・/, ''),
+             sess.gender, f('rank'), f('play_at'), f('duration'));
+      if (sess.addons?.length)
+        db.prepare('UPDATE tickets SET addons=? WHERE id=?').run(sess.addons.join(','), info.lastInsertRowid);
       if (f('note')) db.prepare('UPDATE tickets SET content=? WHERE id=?').run(f('note'), info.lastInsertRowid);
 
       const csRole = getSetting('role_cs', '', i.guildId);

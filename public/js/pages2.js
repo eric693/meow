@@ -688,7 +688,8 @@ Pages.settings = async view => {
       <div class="grid c2">
         <label class="f"><span>偏好性別</span><input name="order_genders" value="${UI.esc(v.order_genders || '')}" placeholder="男女都可,女生陪玩,男生陪玩"></label>
         <label class="f"><span>服務類型</span><input name="order_services" value="${UI.esc(v.order_services || '')}" placeholder="雨幣儲值,特戰英豪,Steam 小遊戲,唱歌單曲,語聊"></label>
-        <label class="f"><span>加購選項（名稱=加價）</span><input name="order_addons" value="${UI.esc(v.order_addons || '')}" placeholder="甜蜜/指定稱呼=50,聲優陪=50"></label>
+        <label class="f"><span>服務分類</span><input name="order_categories" value="${UI.esc(v.order_categories || '')}" placeholder="技術,娛樂"></label>
+        <label class="f"><span>加購選項（名稱=加價）</span><input name="order_addons" value="${UI.esc(v.order_addons || '')}" placeholder="指定/甜蜜=50,聲優=50,無=0"></label>
         <label class="f"><span>單別名稱（服務=單別）</span><input name="order_type_labels" value="${UI.esc(v.order_type_labels || '')}" placeholder="特戰英豪=娛樂單,Steam 小遊戲=steam單"></label>
         <label class="f"><span>單號起始值</span><input name="ticket_seq_start" type="number" value="${UI.esc(v.ticket_seq_start || '1001')}"></label>
         <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '100')}"></label>
