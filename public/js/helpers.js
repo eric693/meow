@@ -29,8 +29,9 @@ const H = {
   },
   saveFilters(id, v) { localStorage.setItem('meow_f_' + id, JSON.stringify(v)); },
 
-  /** 篩選列：欄位定義 [{id,label,type,options,placeholder,width}] */
-  filters(id, fields) {
+  /** 篩選列：欄位定義 [{id,label,type,options,placeholder,width}]
+   *  opts.exportPath 有給的話，右下角會出現三種格式的匯出鈕（帶著目前的篩選條件）*/
+  filters(id, fields, opts = {}) {
     const saved = H.savedFilters(id);
     const f = x => {
       const w = x.width ? ` style="min-width:${x.width}px"` : '';
@@ -51,6 +52,12 @@ const H = {
       <div class="row" style="margin-top:10px">
         <div class="fit"><button class="btn" id="${id}_go">🔍 查詢</button></div>
         <div class="fit"><button class="btn secondary" id="${id}_reset">清除條件</button></div>
+        ${opts.exportPath ? `<div class="fit export-group">
+          <span class="muted" style="font-size:12px">匯出</span>
+          <button class="btn secondary sm" id="${id}_ex_csv">CSV</button>
+          <button class="btn secondary sm" id="${id}_ex_xlsx">Excel</button>
+          <button class="btn secondary sm" id="${id}_ex_pdf">PDF</button>
+        </div>` : ''}
         <div class="grow muted" id="${id}_count" style="align-self:center;text-align:right"></div>
         <div class="fit"><button class="btn secondary sm" id="${id}_prev">← 上一頁</button></div>
         <div class="fit"><button class="btn secondary sm" id="${id}_next">下一頁 →</button></div>
@@ -59,7 +66,7 @@ const H = {
   },
 
   /** 把篩選列接起來：回傳 { values() } */
-  bindFilters(id, fields, load, state) {
+  bindFilters(id, fields, load, state, opts = {}) {
     const el = k => document.getElementById(`${id}_${k}`);
     const raw = () => Object.fromEntries(
       fields.map(x => [x.id, (el(x.id)?.value || '').trim()]).filter(([, v]) => v !== ''));
@@ -77,6 +84,16 @@ const H = {
       if (e.tagName === 'SELECT') e.onchange = go;
       else e.onkeydown = ev => { if (ev.key === 'Enter') go(); };
     });
+    // 匯出走瀏覽器下載，網址帶上目前生效的篩選條件
+    if (opts.exportPath) {
+      for (const f of ['csv', 'xlsx', 'pdf']) {
+        const b = el(`ex_${f}`);
+        if (b) b.onclick = () => {
+          const qs = new URLSearchParams({ ...raw(), format: f });
+          location.href = `/api${opts.exportPath}?${qs}`;
+        };
+      }
+    }
     // 條件標籤上的 × 可以單獨移除一個條件
     document.getElementById(`${id}_chips`).onclick = ev => {
       const k = ev.target.closest('[data-chip]')?.dataset.chip;

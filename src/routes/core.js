@@ -2,6 +2,7 @@
 const express = require('express');
 const { db, monthPrefix, addCoins, getCustomer, refreshVip, audit } = require('../db');
 const { requireAuth, guardModule } = require('../auth');
+const { sendExport } = require('../util/export');
 const M = require('../util/money');
 const R = require('../util/reports');
 
@@ -19,6 +20,8 @@ const orderBy = (req, allowed, fallback) => {
   return `${col} ${req.query.dir === 'asc' ? 'ASC' : 'DESC'}`;
 };
 const num = v => (v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+const EXPORT_FORMATS = ['csv', 'xlsx', 'pdf'];
+const exportFormat = req => (EXPORT_FORMATS.includes(req.query.format) ? req.query.format : 'csv');
 
 // ---------------- 總覽 ----------------
 router.get('/dashboard', (req, res) => {
@@ -74,8 +77,8 @@ router.post('/orders/:no/refund', (req, res) =>
 
 // ---------------- 地下金庫（雨幣）----------------
 router.use('/bank', guardModule('bank'));
-router.get('/bank', (req, res) => {
-  const { limit, offset } = page(req);
+/** 雨幣流水的查詢條件，列表與匯出共用 */
+function bankWhere(req) {
   const q = req.query;
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (q.user_id) { cond.push('user_id = ?'); args.push(q.user_id); }
@@ -85,7 +88,33 @@ router.get('/bank', (req, res) => {
   if (q.from) { cond.push('created_at >= ?'); args.push(q.from); }
   if (q.to) { cond.push('created_at <= ?'); args.push(q.to + ' 23:59:59'); }
   if (num(q.min_amount) != null) { cond.push('ABS(delta) >= ?'); args.push(num(q.min_amount)); }
-  const where = cond.join(' AND ');
+  return { where: cond.join(' AND '), args };
+}
+// 依目前的篩選條件匯出
+router.get('/bank/export', async (req, res) => {
+  const { where, args } = bankWhere(req);
+  const rows = db.prepare(`SELECT * FROM coin_tx WHERE ${where} ORDER BY id DESC`).all(...args);
+  const io = rows.reduce((a, r) => (r.delta > 0 ? { ...a, in: a.in + r.delta } : { ...a, out: a.out - r.delta }),
+                         { in: 0, out: 0 });
+  await sendExport(res, exportFormat(req), {
+    columns: [
+      { key: 'created_at', label: '時間', width: 18 },
+      { key: 'user_id', label: '對象', width: 22 },
+      { key: 'delta', label: '異動', width: 12, num: 1 },
+      { key: 'balance', label: '異動後餘額', width: 14, num: 1 },
+      { key: 'reason', label: '事由', width: 28 },
+      { key: 'ref', label: '關聯單號', width: 18 },
+      { key: 'operator', label: '經手人', width: 16 }
+    ],
+    rows,
+    filename: `雨幣流水_${new Date().toISOString().slice(0, 10)}`,
+    title: '雨幣流水帳',
+    summary: `共 ${rows.length} 筆｜流入 ${io.in.toLocaleString('en-US')}｜流出 ${io.out.toLocaleString('en-US')}`
+  });
+});
+router.get('/bank', (req, res) => {
+  const { limit, offset } = page(req);
+  const { where, args } = bankWhere(req);
   // 近 30 天雨幣流入／流出，與持有排行
   const flow = db.prepare(`SELECT substr(created_at,6,5) d,
                                   COALESCE(SUM(CASE WHEN delta > 0 THEN delta END),0) inflow,
@@ -143,23 +172,50 @@ router.post('/salary/withdraw/:id/:status', (req, res) => {
 
 // ---------------- 老闆與 VIP ----------------
 router.use('/customers', guardModule('customers'));
-router.get('/customers', (req, res) => {
-  const { limit, offset } = page(req);
+/** 老闆列表的查詢條件，列表與匯出共用 */
+function customerQuery(req) {
   const q = req.query;
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (q.q) { cond.push('(user_id LIKE ? OR name LIKE ?)'); args.push(`%${q.q}%`, `%${q.q}%`); }
-  if (q.vip !== '' && q.vip != null && num(q.vip) != null) { cond.push('vip_level = ?'); args.push(num(q.vip)); }
+  if (num(q.vip) != null) { cond.push('vip_level = ?'); args.push(num(q.vip)); }
   if (num(q.min_coins) != null) { cond.push('coins >= ?'); args.push(num(q.min_coins)); }
   if (num(q.max_coins) != null) { cond.push('coins <= ?'); args.push(num(q.max_coins)); }
   if (num(q.min_spend) != null) { cond.push('total_spend >= ?'); args.push(num(q.min_spend)); }
   if (q.locked === '1') cond.push('vip_locked = 1');
   if (q.locked === '0') cond.push('vip_locked = 0');
-  const where = cond.join(' AND ');
-  const order = orderBy(req, ['total_spend', 'coins', 'vip_level', 'territory', 'name'], 'total_spend');
+  return {
+    where: cond.join(' AND '), args,
+    order: orderBy(req, ['total_spend', 'coins', 'vip_level', 'territory', 'name'], 'total_spend')
+  };
+}
+router.get('/customers', (req, res) => {
+  const { limit, offset } = page(req);
+  const { where, args, order } = customerQuery(req);
   res.json({
     total: db.prepare(`SELECT COUNT(*) c FROM customers WHERE ${where}`).get(...args).c,
     rows: db.prepare(`SELECT * FROM customers WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`)
       .all(...args, limit, offset)
+  });
+});
+// 依目前的篩選條件匯出（不分頁，全部撈）
+router.get('/customers/export', async (req, res) => {
+  const { where, args, order } = customerQuery(req);
+  const rows = db.prepare(`SELECT * FROM customers WHERE ${where} ORDER BY ${order}`).all(...args);
+  await sendExport(res, exportFormat(req), {
+    columns: [
+      { key: 'user_id', label: 'Discord ID', width: 22 },
+      { key: 'name', label: '名稱', width: 18 },
+      { key: 'coins', label: '雨幣餘額', width: 12, num: 1 },
+      { key: 'total_spend', label: '累計消費', width: 14, num: 1 },
+      { key: 'vip_level', label: 'VIP 等級', width: 10, map: v => `Lv.${v}` },
+      { key: 'vip_locked', label: 'VIP 鎖定', width: 10, map: v => (v ? '是' : '') },
+      { key: 'territory', label: '地盤', width: 8 }
+    ],
+    rows,
+    filename: `老闆名單_${new Date().toISOString().slice(0, 10)}`,
+    title: '老闆名單',
+    summary: `共 ${rows.length} 位｜雨幣合計 ${rows.reduce((a, r) => a + r.coins, 0).toLocaleString('en-US')}`
+           + `｜累計消費 ${rows.reduce((a, r) => a + r.total_spend, 0).toLocaleString('en-US')}`
   });
 });
 router.get('/customers/:id', (req, res) => {
@@ -186,8 +242,8 @@ router.put('/customers/:id', (req, res) => {
 
 // ---------------- 人事 ----------------
 router.use('/staff', guardModule('hr'));
-// 舊版回傳純陣列，前端還在用；帶 paged=1 時才回 { total, rows }
-router.get('/staff', (req, res) => {
+/** 員工列表的查詢條件，列表與匯出共用 */
+function staffRows(req) {
   const q = req.query;
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (q.q) { cond.push('(code LIKE ? OR name LIKE ? OR user_id LIKE ?)'); args.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`); }
@@ -196,14 +252,40 @@ router.get('/staff', (req, res) => {
   if (q.card === '1') cond.push("card_url != ''");
   if (q.card === '0') cond.push("card_url = ''");
   if (num(q.min_income) != null) { cond.push('income >= ?'); args.push(num(q.min_income)); }
-  const where = cond.join(' AND ');
-  const order = req.query.sort
+  const order = q.sort
     ? orderBy(req, ['income', 'pending_income', 'joined_at', 'code', 'name'], 'income')
     : 'active DESC, kind, code';
-  const rows = db.prepare(`SELECT * FROM staff WHERE ${where} ORDER BY ${order}`).all(...args);
-  if (!q.paged) return res.json(rows);
+  return db.prepare(`SELECT * FROM staff WHERE ${cond.join(' AND ')} ORDER BY ${order}`).all(...args);
+}
+// 舊版回傳純陣列，前端還在用；帶 paged=1 時才回 { total, rows }
+router.get('/staff', (req, res) => {
+  const rows = staffRows(req);
+  if (!req.query.paged) return res.json(rows);
   const { limit, offset } = page(req);
   res.json({ total: rows.length, rows: rows.slice(offset, offset + limit) });
+});
+// 依目前的篩選條件匯出
+router.get('/staff/export', async (req, res) => {
+  const rows = staffRows(req);
+  await sendExport(res, exportFormat(req), {
+    columns: [
+      { key: 'code', label: '代號', width: 12 },
+      { key: 'name', label: '藝名', width: 16 },
+      { key: 'user_id', label: 'Discord ID', width: 22 },
+      { key: 'kind', label: '職務', width: 8, map: v => (v === 'cs' ? '客服' : '陪玩') },
+      { key: 'active', label: '狀態', width: 8, map: v => (v ? '在職' : '離職') },
+      { key: 'income', label: '可提領', width: 12, num: 1 },
+      { key: 'pending_income', label: '暫存薪水', width: 12, num: 1 },
+      { key: 'total_income', label: '歷史入帳', width: 14, num: 1 },
+      { key: 'card_url', label: '影音名片', width: 30 },
+      { key: 'joined_at', label: '入職日', width: 18 }
+    ],
+    rows,
+    filename: `員工名單_${new Date().toISOString().slice(0, 10)}`,
+    title: '員工名單',
+    summary: `共 ${rows.length} 位｜可提領合計 ${rows.reduce((a, r) => a + r.income, 0).toLocaleString('en-US')}`
+           + `｜暫存薪水合計 ${rows.reduce((a, r) => a + r.pending_income, 0).toLocaleString('en-US')}`
+  });
 });
 router.post('/staff', (req, res) => {
   const { user_id, code, name, card_url = '', kind = 'player' } = req.body || {};

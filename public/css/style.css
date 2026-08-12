@@ -168,6 +168,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .filter-chips .chip span { color: var(--muted); margin-left: 2px; font-weight: 700; }
 .filter-chips .chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
 
+.export-group { display: inline-flex; align-items: center; gap: 4px; }
+.export-group .btn { padding-inline: 8px; }
+
 /* 載入中：表格淡出並鎖住點擊，避免連點造成競態 */
 .is-loading { opacity: .5; pointer-events: none; transition: opacity .15s; }
 

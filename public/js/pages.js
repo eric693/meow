@@ -98,10 +98,10 @@ Pages.bank = async view => {
     <div class="card"><div class="row"><div class="grow"></div>
       <div class="fit"><button class="btn" id="badj">💰 儲值 / 扣款</button></div>
     </div></div>
-    ${H.filters('bn', F)}
+    ${H.filters('bn', F, { exportPath: '/bank/export' })}
     <div class="card" id="btable"><div class="empty">載入中…</div></div>`;
 
-  const bind = H.bindFilters('bn', F, () => load(), ST);
+  const bind = H.bindFilters('bn', F, () => load(), ST, { exportPath: '/bank/export' });
   document.getElementById('badj').onclick = () => UI.modal({
     title: '雨幣調整',
     bodyHTML: `<label class="f"><span>老闆 Discord ID</span><input name="user_id"></label>
@@ -263,9 +263,9 @@ Pages.customers = async view => {
       });
     });
   };
-  view.innerHTML = `${H.filters('cu', F)}
+  view.innerHTML = `${H.filters('cu', F, { exportPath: '/customers/export' })}
     <div class="card" id="ctable"><div class="empty">載入中…</div></div>`;
-  const bind = H.bindFilters('cu', F, () => load(), ST);
+  const bind = H.bindFilters('cu', F, () => load(), ST, { exportPath: '/customers/export' });
   load();
 };
 
@@ -363,8 +363,8 @@ Pages.hr = async view => {
   };
   view.innerHTML = `<div class="card"><div class="row"><div class="grow"></div>
       <div class="fit"><button class="btn" id="hnew">＋ 新增員工</button></div></div></div>
-    ${H.filters('hr', F)}
+    ${H.filters('hr', F, { exportPath: '/staff/export' })}
     <div class="card" id="htable"><div class="empty">載入中…</div></div>`;
-  const bind = H.bindFilters('hr', F, () => load(), ST);
+  const bind = H.bindFilters('hr', F, () => load(), ST, { exportPath: '/staff/export' });
   load();
 };
