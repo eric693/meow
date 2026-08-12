@@ -174,8 +174,8 @@ function reportOrder(guildId, orderNo, { reporterId = '', item = null, qty = nul
   const o = getOrder(guildId, orderNo);
   if (!o) throw new Error(`查無訂單 ${orderNo}，請向客服確認結帳時提供的編號`);
   if (o.status === 'refunded') throw new Error(`訂單 ${o.order_no} 已退單，無法報單`);
+  // 核銷前允許重報（陪玩填錯可以自己更正），核銷後才鎖定
   if (o.status === 'settled') throw new Error(`訂單 ${o.order_no} 已核銷完畢，不需再報單`);
-  if (o.reported_at) throw new Error(`訂單 ${o.order_no} 已於 ${o.reported_at} 報過單了`);
 
   db.prepare(`UPDATE orders SET reporter_id=?, reported_at=?, item=COALESCE(?, item),
               qty=COALESCE(?, qty), note=? WHERE id=?`)
