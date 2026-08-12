@@ -54,8 +54,19 @@ Pages.dashboard = async view => {
 
 // ---------------- 地下金庫 ----------------
 Pages.bank = async view => {
-  const load = async (userId = '') => {
-    const d = await GET('/bank?' + new URLSearchParams(userId ? { user_id: userId } : {}));
+  const ST = { offset: 0, limit: 50 };
+  const F = [
+    { id: 'user_id', label: '老闆 Discord ID' },
+    { id: 'q', label: '關鍵字（事由／關聯／經手人）' },
+    { id: 'dir_', label: '流向', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'in', t: '只看流入' }, { v: 'out', t: '只看流出' }] },
+    { id: 'from', label: '起始日', type: 'date' },
+    { id: 'to', label: '結束日', type: 'date' },
+    { id: 'min_amount', label: '異動金額 ≥', type: 'number' }
+  ];
+  const load = async () => {
+    const d = await GET('/bank?' + new URLSearchParams({ ...bind.values(), limit: ST.limit, offset: ST.offset }));
+    H.pager('bn', d.total, ST);
     document.getElementById('bstat').innerHTML = `
       ${H.stat('流通雨幣總額', H.n(d.summary.c), { accent: true })}
       ${H.stat('持有人數', d.summary.n)}
@@ -77,19 +88,20 @@ Pages.bank = async view => {
       d.rows.map(t => `<tr><td>${H.date(t.created_at)}</td><td>${H.user(t.user_id)}</td>
         <td class="num" style="color:${t.delta >= 0 ? 'var(--ok)' : 'var(--err)'}">${t.delta >= 0 ? '+' : ''}${H.n(t.delta)}</td>
         <td class="num">${H.n(t.balance)}</td><td>${UI.esc(t.reason)}</td>
-        <td>${UI.esc(t.ref)}</td><td>${UI.esc(t.operator)}</td></tr>`));
+        <td>${UI.esc(t.ref)}</td><td>${UI.esc(t.operator)}</td></tr>`),
+      '沒有符合條件的紀錄');
   };
 
   view.innerHTML = `
     <div class="grid c3" id="bstat" style="margin-bottom:16px"></div>
     <div id="bcharts"></div>
-    <div class="card"><div class="row">
-      <label class="f"><span>只看某位老闆</span><input id="bu" placeholder="Discord ID，留空看全部"></label>
+    <div class="card"><div class="row"><div class="grow"></div>
       <div class="fit"><button class="btn" id="badj">💰 儲值 / 扣款</button></div>
     </div></div>
+    ${H.filters('bn', F)}
     <div class="card" id="btable"><div class="empty">載入中…</div></div>`;
 
-  document.getElementById('bu').oninput = (() => { let t; return e => { clearTimeout(t); t = setTimeout(() => load(e.target.value.trim()), 350); }; })();
+  const bind = H.bindFilters('bn', F, () => load(), ST);
   document.getElementById('badj').onclick = () => UI.modal({
     title: '雨幣調整',
     bodyHTML: `<label class="f"><span>老闆 Discord ID</span><input name="user_id"></label>
@@ -99,7 +111,7 @@ Pages.bank = async view => {
       await POST('/bank/adjust', {
         user_id: UI.val(back, 'user_id'), delta: Number(UI.val(back, 'delta')), reason: UI.val(back, 'reason')
       });
-      UI.ok('已調整'); load(document.getElementById('bu').value.trim());
+      UI.ok('已調整'); load();
     }
   });
   load();
@@ -180,8 +192,25 @@ Pages.salary = async view => {
 
 // ---------------- 老闆與 VIP ----------------
 Pages.customers = async view => {
-  const load = async (q = '') => {
-    const d = await GET('/customers?' + new URLSearchParams(q ? { q } : {}));
+  const ST = { offset: 0, limit: 50 };
+  const F = [
+    { id: 'q', label: '關鍵字（Discord ID／名稱）' },
+    { id: 'vip', label: 'VIP 等級', type: 'select',
+      options: [{ v: '', t: '全部' }, ...Array.from({ length: 8 }, (_, i) => ({ v: String(i), t: `Lv.${i}` }))] },
+    { id: 'locked', label: 'VIP 鎖定', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: '1', t: '只看已鎖定' }, { v: '0', t: '只看未鎖定' }] },
+    { id: 'min_coins', label: '雨幣餘額 ≥', type: 'number' },
+    { id: 'max_coins', label: '雨幣餘額 ≤', type: 'number' },
+    { id: 'min_spend', label: '累計消費 ≥', type: 'number' },
+    { id: 'sort', label: '排序依據', type: 'select',
+      options: [{ v: 'total_spend', t: '累計消費' }, { v: 'coins', t: '雨幣餘額' },
+                { v: 'vip_level', t: 'VIP 等級' }, { v: 'territory', t: '地盤步數' }, { v: 'name', t: '名稱' }] },
+    { id: 'dir', label: '排序方向', type: 'select',
+      options: [{ v: 'desc', t: '由大到小' }, { v: 'asc', t: '由小到大' }] }
+  ];
+  const load = async () => {
+    const d = await GET('/customers?' + new URLSearchParams({ ...bind.values(), limit: ST.limit, offset: ST.offset }));
+    H.pager('cu', d.total, ST);
     document.getElementById('ctable').innerHTML = H.table(
       ['Discord ID', '名稱', { label: '雨幣', num: 1 }, { label: '累計消費', num: 1 }, 'VIP', '地盤', '操作'],
       d.rows.map(c => `<tr><td><code>${c.user_id}</code></td><td>${UI.esc(c.name)}</td>
@@ -189,8 +218,8 @@ Pages.customers = async view => {
         <td><span class="tag">Lv.${c.vip_level}${c.vip_locked ? ' 🔒' : ''}</span></td>
         <td>${c.territory}/21</td>
         <td><button class="btn secondary sm" data-view="${c.user_id}">明細</button>
-            <button class="btn sm" data-edit="${c.user_id}" data-json='${UI.esc(JSON.stringify(c))}'>編輯</button></td></tr>`))
-      + `<div class="muted" style="margin-top:10px">共 ${d.total} 位</div>`;
+            <button class="btn sm" data-edit="${c.user_id}" data-json='${UI.esc(JSON.stringify(c))}'>編輯</button></td></tr>`),
+      '沒有符合條件的老闆');
 
     document.querySelectorAll('[data-view]').forEach(b => b.onclick = async () => {
       const d2 = await GET('/customers/' + b.dataset.view);
@@ -229,21 +258,39 @@ Pages.customers = async view => {
             name: UI.val(back, 'name'), vip_level: Number(UI.val(back, 'vip_level')),
             territory: Number(UI.val(back, 'territory')), vip_locked: UI.val(back, 'vip_locked')
           });
-          UI.ok('已更新'); load(document.getElementById('cq').value.trim());
+          UI.ok('已更新'); load();
         }
       });
     });
   };
-  view.innerHTML = `<div class="card"><label class="f"><span>搜尋</span><input id="cq" placeholder="Discord ID 或名稱"></label></div>
+  view.innerHTML = `${H.filters('cu', F)}
     <div class="card" id="ctable"><div class="empty">載入中…</div></div>`;
-  document.getElementById('cq').oninput = (() => { let t; return e => { clearTimeout(t); t = setTimeout(() => load(e.target.value.trim()), 350); }; })();
+  const bind = H.bindFilters('cu', F, () => load(), ST);
   load();
 };
 
 // ---------------- 人事 ----------------
 Pages.hr = async view => {
+  const ST = { offset: 0, limit: 50 };
+  const F = [
+    { id: 'q', label: '關鍵字（代號／藝名／ID）' },
+    { id: 'kind', label: '職務', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'player', t: '陪玩' }, { v: 'cs', t: '客服' }] },
+    { id: 'active', label: '在職狀態', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: '1', t: '在職' }, { v: '0', t: '離職' }] },
+    { id: 'card', label: '影音名片', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: '1', t: '已綁定' }, { v: '0', t: '未綁定' }] },
+    { id: 'min_income', label: '可提領 ≥', type: 'number' },
+    { id: 'sort', label: '排序依據', type: 'select',
+      options: [{ v: '', t: '預設（在職→職務→代號）' }, { v: 'income', t: '可提領' },
+                { v: 'pending_income', t: '暫存薪水' }, { v: 'joined_at', t: '入職日' }, { v: 'code', t: '代號' }] },
+    { id: 'dir', label: '排序方向', type: 'select',
+      options: [{ v: 'desc', t: '由大到小' }, { v: 'asc', t: '由小到大' }] }
+  ];
   const load = async () => {
-    const rows = await GET('/staff');
+    const d = await GET('/staff?' + new URLSearchParams({ ...bind.values(), paged: 1, limit: ST.limit, offset: ST.offset }));
+    const rows = d.rows;
+    H.pager('hr', d.total, ST);
     document.getElementById('htable').innerHTML = H.table(
       ['代號', '藝名', 'Discord ID', '職務', '影音名片', '狀態', { label: '可提領', num: 1 }, '入職日', '操作'],
       rows.map(s => `<tr><td>${UI.esc(s.code)}</td><td>${UI.esc(s.name)}</td>
@@ -253,7 +300,8 @@ Pages.hr = async view => {
         <td class="num">${H.n(s.income)}</td><td>${H.date(s.joined_at)}</td>
         <td><button class="btn sm" data-e="${s.id}" data-json='${UI.esc(JSON.stringify(s))}'>編輯</button>
             <button class="btn secondary sm" data-d="${s.id}">業績</button>
-            <button class="btn danger sm" data-x="${s.id}" data-name="${UI.esc(s.name)}">離職</button></td></tr>`));
+            <button class="btn danger sm" data-x="${s.id}" data-name="${UI.esc(s.name)}">離職</button></td></tr>`),
+      '沒有符合條件的員工');
 
     const form = json => `
       <div class="row">
@@ -315,6 +363,8 @@ Pages.hr = async view => {
   };
   view.innerHTML = `<div class="card"><div class="row"><div class="grow"></div>
       <div class="fit"><button class="btn" id="hnew">＋ 新增員工</button></div></div></div>
+    ${H.filters('hr', F)}
     <div class="card" id="htable"><div class="empty">載入中…</div></div>`;
+  const bind = H.bindFilters('hr', F, () => load(), ST);
   load();
 };

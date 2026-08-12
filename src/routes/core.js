@@ -13,6 +13,12 @@ const page = req => {
   const offset = Math.max(0, Number(req.query.offset) || 0);
   return { limit, offset };
 };
+/** 只允許白名單內的欄位排序，避免把使用者輸入直接接進 SQL */
+const orderBy = (req, allowed, fallback) => {
+  const col = allowed.includes(req.query.sort) ? req.query.sort : fallback;
+  return `${col} ${req.query.dir === 'asc' ? 'ASC' : 'DESC'}`;
+};
+const num = v => (v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v));
 
 // ---------------- 總覽 ----------------
 router.get('/dashboard', (req, res) => {
@@ -70,8 +76,15 @@ router.post('/orders/:no/refund', (req, res) =>
 router.use('/bank', guardModule('bank'));
 router.get('/bank', (req, res) => {
   const { limit, offset } = page(req);
+  const q = req.query;
   const cond = ['guild_id = ?'], args = [req.orgId];
-  if (req.query.user_id) { cond.push('user_id = ?'); args.push(req.query.user_id); }
+  if (q.user_id) { cond.push('user_id = ?'); args.push(q.user_id); }
+  if (q.q) { cond.push('(reason LIKE ? OR ref LIKE ? OR operator LIKE ?)'); args.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`); }
+  if (q.dir_ === 'in') cond.push('delta > 0');
+  if (q.dir_ === 'out') cond.push('delta < 0');
+  if (q.from) { cond.push('created_at >= ?'); args.push(q.from); }
+  if (q.to) { cond.push('created_at <= ?'); args.push(q.to + ' 23:59:59'); }
+  if (num(q.min_amount) != null) { cond.push('ABS(delta) >= ?'); args.push(num(q.min_amount)); }
   const where = cond.join(' AND ');
   // 近 30 天雨幣流入／流出，與持有排行
   const flow = db.prepare(`SELECT substr(created_at,6,5) d,
@@ -132,12 +145,20 @@ router.post('/salary/withdraw/:id/:status', (req, res) => {
 router.use('/customers', guardModule('customers'));
 router.get('/customers', (req, res) => {
   const { limit, offset } = page(req);
+  const q = req.query;
   const cond = ['guild_id = ?'], args = [req.orgId];
-  if (req.query.q) { cond.push('(user_id LIKE ? OR name LIKE ?)'); args.push(`%${req.query.q}%`, `%${req.query.q}%`); }
+  if (q.q) { cond.push('(user_id LIKE ? OR name LIKE ?)'); args.push(`%${q.q}%`, `%${q.q}%`); }
+  if (q.vip !== '' && q.vip != null && num(q.vip) != null) { cond.push('vip_level = ?'); args.push(num(q.vip)); }
+  if (num(q.min_coins) != null) { cond.push('coins >= ?'); args.push(num(q.min_coins)); }
+  if (num(q.max_coins) != null) { cond.push('coins <= ?'); args.push(num(q.max_coins)); }
+  if (num(q.min_spend) != null) { cond.push('total_spend >= ?'); args.push(num(q.min_spend)); }
+  if (q.locked === '1') cond.push('vip_locked = 1');
+  if (q.locked === '0') cond.push('vip_locked = 0');
   const where = cond.join(' AND ');
+  const order = orderBy(req, ['total_spend', 'coins', 'vip_level', 'territory', 'name'], 'total_spend');
   res.json({
     total: db.prepare(`SELECT COUNT(*) c FROM customers WHERE ${where}`).get(...args).c,
-    rows: db.prepare(`SELECT * FROM customers WHERE ${where} ORDER BY total_spend DESC LIMIT ? OFFSET ?`)
+    rows: db.prepare(`SELECT * FROM customers WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`)
       .all(...args, limit, offset)
   });
 });
@@ -165,8 +186,24 @@ router.put('/customers/:id', (req, res) => {
 
 // ---------------- 人事 ----------------
 router.use('/staff', guardModule('hr'));
+// 舊版回傳純陣列，前端還在用；帶 paged=1 時才回 { total, rows }
 router.get('/staff', (req, res) => {
-  res.json(db.prepare(`SELECT * FROM staff WHERE guild_id=? ORDER BY active DESC, kind, code`).all(req.orgId));
+  const q = req.query;
+  const cond = ['guild_id = ?'], args = [req.orgId];
+  if (q.q) { cond.push('(code LIKE ? OR name LIKE ? OR user_id LIKE ?)'); args.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`); }
+  if (q.kind === 'cs' || q.kind === 'player') { cond.push('kind = ?'); args.push(q.kind); }
+  if (q.active === '1' || q.active === '0') { cond.push('active = ?'); args.push(Number(q.active)); }
+  if (q.card === '1') cond.push("card_url != ''");
+  if (q.card === '0') cond.push("card_url = ''");
+  if (num(q.min_income) != null) { cond.push('income >= ?'); args.push(num(q.min_income)); }
+  const where = cond.join(' AND ');
+  const order = req.query.sort
+    ? orderBy(req, ['income', 'pending_income', 'joined_at', 'code', 'name'], 'income')
+    : 'active DESC, kind, code';
+  const rows = db.prepare(`SELECT * FROM staff WHERE ${where} ORDER BY ${order}`).all(...args);
+  if (!q.paged) return res.json(rows);
+  const { limit, offset } = page(req);
+  res.json({ total: rows.length, rows: rows.slice(offset, offset + limit) });
 });
 router.post('/staff', (req, res) => {
   const { user_id, code, name, card_url = '', kind = 'player' } = req.body || {};

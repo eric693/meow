@@ -156,6 +156,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .filter-card .row { flex-wrap: wrap; gap: 8px; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 
+/* 生效中的條件標籤，點 × 移除單一條件 */
+.filter-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 8px; vertical-align: middle; }
+.filter-chips .chip {
+  font: inherit; font-size: 12px; line-height: 1.4;
+  background: var(--brand-soft); color: var(--text);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 9px; cursor: pointer; transition: background .12s, border-color .12s;
+}
+.filter-chips .chip:hover { background: var(--panel-2); border-color: var(--brand-2); }
+.filter-chips .chip span { color: var(--muted); margin-left: 2px; font-weight: 700; }
+.filter-chips .chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+/* 載入中：表格淡出並鎖住點擊，避免連點造成競態 */
+.is-loading { opacity: .5; pointer-events: none; transition: opacity .15s; }
+
 /* ---------- 設定頁分區 ---------- */
 .section-title {
   display: flex; align-items: center; gap: 8px;
