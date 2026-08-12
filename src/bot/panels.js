@@ -573,9 +573,11 @@ function unsettledPage(guildId, page = 0) {
 
 /** 歸檔時的頻道名稱：有服務類型就用「單別│單號│狀態」，否則保留原名再加狀態 */
 function archivedName(channel, t, suffix) {
+  // 頻道物件偶爾拿不到 guild（未進快取），退回用單別對照表的預設值，別讓結單整個炸掉
+  const gid = channel?.guild?.id || t.guild_id;
   const base = t.service && t.seq
-    ? `🎫│${ticketLabel(channel.guild.id, t.service)}│${t.seq}`
-    : channel.name.replace(/│(已結帳|已結單)$/, '');
+    ? `🎫│${ticketLabel(gid, t.service)}│${t.seq}`
+    : (channel?.name || '').replace(/│(已結帳|已結單)$/, '');
   return `${base}│${suffix}`.slice(0, 90);
 }
 
@@ -662,7 +664,7 @@ async function archiveTicketChannel(i) {
     })],
     components: [row(btn(`ticket:close:${t.id}`, '關閉訂單', ButtonStyle.Danger, '🔒'))]
   }).catch(() => {});
-  await i.channel.setName(archivedName(i.channel, t, '已結帳')).catch(() => {});
+  if (i.channel) await i.channel.setName(archivedName(i.channel, t, '已結帳')).catch(() => {});
   const done = getSetting('category_order_done', '', i.guildId);
   if (done) await i.channel.setParent(done, { lockPermissions: false }).catch(() => {});
 }
@@ -847,27 +849,28 @@ async function handleInteraction(i) {
     // 老闆欄位不限格式：填數字 ID 就自動對到帳號，填名字就原樣留著交給客服人工核對
     const customerRaw = f('customer');
     const customerId = (customerRaw.match(/\d{15,25}/) || [])[0] || '';
-    const staff = findStaff(i.guildId, f('staff'));
-    if (!staff) return eph(i, err(i.guildId, `查無陪玩「${f('staff')}」`));
+    // 陪玩欄位同樣不限格式：對得到就帶出資料，對不到就照填的字送出
+    const staffRaw = f('staff');
+    const staff = findStaff(i.guildId, staffRaw);
     const { item, qty } = parseSlots(f('slots'));
 
     let o;
     try {
       if (kind === 'self') {
+        // 唯一的限制：這張訂單只有結帳時登記的那位陪玩本人能報
         const exist = M.getOrder(i.guildId, f('order_no'));
-        if (exist && exist.staff_id !== staff.user_id)
+        if (exist && exist.staff_id && exist.staff_id !== i.user.id)
           return eph(i, err(i.guildId,
-            `訂單 ${exist.order_no} 的服務陪玩是 <@${exist.staff_id}>，與你填寫的「${f('staff')}」不符，請向客服確認。`));
-        if (exist && customerId && exist.customer_id !== customerId)
-          return eph(i, err(i.guildId,
-            `訂單 ${exist.order_no} 的消費金主是 <@${exist.customer_id}>，與你填寫的老闆 id 不符，請向客服確認。`));
+            `訂單 ${exist.order_no} 的服務陪玩是 <@${exist.staff_id}>，只有本人可以報這張單。`));
         o = M.reportOrder(i.guildId, f('order_no'), { reporterId: i.user.id, item, qty });
       } else {
         const price = Number(f('price'));
         if (!Number.isFinite(qty) || !Number.isFinite(price))
           return eph(i, err(i.guildId, '場次與單價必須含數字。'));
+        // 跨服單當下才建帳，分潤要有對象：對不到就算在報單者自己頭上
         o = M.createOrder({
-          guildId: i.guildId, customerId, customerName: f('boss_dc') || customerRaw, staffId: staff.user_id,
+          guildId: i.guildId, customerId, customerName: f('boss_dc') || customerRaw,
+          staffId: staff ? staff.user_id : i.user.id,
           csId: isCS(i.member) ? i.user.id : '', item, qty, unitPrice: price,
           source: kind, operator: i.user.tag
         });
@@ -880,14 +883,14 @@ async function handleInteraction(i) {
         `訂單編號：\`${o.order_no}\``,
         `老闆dc：${f('boss_dc')}`,
         `老闆id：${customerId || `${customerRaw}　⚠️ 非數字 ID，請客服人工核對`}`,
-        `陪玩id：${staff.name || staff.code}`,
+        `陪玩id：${staff ? (staff.name || staff.code) : `${staffRaw}　⚠️ 名單內查無此人，請客服人工核對`}`,
         `報單場次/小時：${f('slots')}`,
         '',
         '*(請在下方補充對局截圖)*'
       ].join('\n')
     });
     const csRole = getSetting('role_cs', '', i.guildId);
-    const content = [mention(staff.user_id), csRole ? `<@&${csRole}>` : '', '您的報單已產生：']
+    const content = [mention(staff ? staff.user_id : i.user.id), csRole ? `<@&${csRole}>` : '', '您的報單已產生：']
       .filter(Boolean).join(' ');
     await i.reply({ embeds: [ok(i.guildId, '報單已成功發布！', null)], ephemeral: true });
     await sendToChannel(i.guild, 'channel_order_log', { content, embeds: [body] });
@@ -1295,11 +1298,11 @@ async function handleInteraction(i) {
     // 結單＝搬到結單分類並鎖住發言，頻道保留供日後查閱
     const target = getSetting('category_order_closed', '', i.guildId)
                 || getSetting('category_ticket', '', i.guildId);
-    if (target) await i.channel.setParent(target, { lockPermissions: false }).catch(() => {});
+    if (target && i.channel) await i.channel.setParent(target, { lockPermissions: false }).catch(() => {});
     for (const rid of [t.customer_id, ...getSetting('role_player', '', i.guildId).split(',').map(x => x.trim())]) {
-      if (rid) await i.channel.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
+      if (rid && i.channel) await i.channel.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
     }
-    await i.channel.setName(archivedName(i.channel, t, '已結單')).catch(() => {});
+    if (i.channel) await i.channel.setName(archivedName(i.channel, t, '已結單')).catch(() => {});
 
     return i.reply({ embeds: [ok(i.guildId, '訂單已結單',
       '本頻道已移至結單分類並鎖定發言，紀錄保留供日後查閱。')] });
