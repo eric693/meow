@@ -877,20 +877,25 @@ async function handleInteraction(i) {
       }
     } catch (e) { return eph(i, err(i.guildId, e.message)); }
 
+    // 陪玩以訂單上登記的為準（手填的只是參考，填錯不該蓋掉正確資料也不該 tag 錯人）
+    const staffId = o.staff_id || (staff ? staff.user_id : i.user.id);
+    const staffShown = o.staff_name || (staff ? (staff.name || staff.code) : '');
     const body = emb(i.guildId, {
       title: '📄 報單明細',
       desc: [
         `訂單編號：\`${o.order_no}\``,
         `老闆dc：${f('boss_dc')}`,
         `老闆id：${customerId || `${customerRaw}　⚠️ 非數字 ID，請客服人工核對`}`,
-        `陪玩id：${staff ? (staff.name || staff.code) : `${staffRaw}　⚠️ 名單內查無此人，請客服人工核對`}`,
+        `陪玩id：${staffShown || `${staffRaw}　⚠️ 名單內查無此人，請客服人工核對`}`,
+        // 手填的跟訂單登記的不一樣時，把原文留著讓客服看得到
+        ...(staffShown && staffRaw && staffShown !== staffRaw ? [`（報單者填寫：${staffRaw}）`] : []),
         `報單場次/小時：${f('slots')}`,
         '',
         '*(請在下方補充對局截圖)*'
       ].join('\n')
     });
     const csRole = getSetting('role_cs', '', i.guildId);
-    const content = [mention(staff ? staff.user_id : i.user.id), csRole ? `<@&${csRole}>` : '', '您的報單已產生：']
+    const content = [mention(staffId), csRole ? `<@&${csRole}>` : '', '您的報單已產生：']
       .filter(Boolean).join(' ');
     await i.reply({ embeds: [ok(i.guildId, '報單已成功發布！', null)], ephemeral: true });
     await sendToChannel(i.guild, 'channel_order_log', { content, embeds: [body] });
