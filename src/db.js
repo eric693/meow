@@ -61,11 +61,11 @@ ensureColumns('exams', [
   ['grade',     "TEXT NOT NULL DEFAULT ''"],
   ['gender',    "TEXT NOT NULL DEFAULT ''"]
 ]);
-// 舊資料補算原價與淨利
+db.exec(fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8'));
+
+// 舊資料補算原價與淨利（要等 schema 建好表才能跑，全新資料庫也才不會炸）
 db.exec("UPDATE orders SET list_price = amount WHERE list_price = 0 AND amount <> 0");
 db.exec("UPDATE orders SET net = amount - staff_share WHERE net = 0 AND amount <> 0");
-
-db.exec(fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8'));
 
 const SECRET = process.env.JWT_SECRET || 'meow-dev-secret-change-me';
 const HOME_GUILD = process.env.GUILD_ID || '';

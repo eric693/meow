@@ -138,6 +138,8 @@ function usableCoupons(guildId, userId, amount) {
 /** 這張券對這筆金額實際能折多少（不會超過訂單金額） */
 function couponDiscount(coupon, amount) {
   if (!coupon) return 0;
+  // 沒達到低消門檻就不折抵（呼叫端多半已用 usableCoupons 過濾，這裡再擋一次）
+  if (coupon.min_spend && amount < coupon.min_spend) return 0;
   const off = coupon.percent > 0
     ? Math.floor(amount * coupon.percent / 100)
     : coupon.value;
