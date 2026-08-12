@@ -1,7 +1,7 @@
 // 後台 API：報表匯出、系統設定、帳號權限、Discord 資源（頻道／身分組）
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { db, monthPrefix, getSetting, setSetting, audit, DEFAULT_VIP,
+const { db, monthPrefix, getSetting, setSetting, audit, DEFAULT_VIP, HOME_GUILD,
         orgOf, bindOrg, orgGuilds, migrateOrgData } = require('../db');
 const { requireAuth, guardModule, MODULE_KEYS, parsePermissions } = require('../auth');
 const R = require('../util/reports');
@@ -133,7 +133,9 @@ router.get('/logs', guardModule('logs'), (req, res) => {
 // ---------------- Discord 資源 ----------------
 router.get('/discord/guilds', (req, res) => {
   const rows = db.prepare('SELECT * FROM guilds WHERE active=1').all()
-    .filter(g => req.allowedGuilds.includes(g.guild_id));
+    .filter(g => req.allowedGuilds.includes(g.guild_id))
+    // 主營運伺服器排最前面，後台第一次開就停在它
+    .sort((a, b) => (b.guild_id === HOME_GUILD) - (a.guild_id === HOME_GUILD));
   res.json({ guilds: rows, current: req.guildId, bot_online: bot.isReady() });
 });
 router.get('/discord/resources', async (req, res) => {

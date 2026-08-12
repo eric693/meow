@@ -86,7 +86,9 @@ function clearAuthCookie(res) {
 }
 
 function allowedGuildsFor(user) {
-  const active = db.prepare('SELECT guild_id FROM guilds WHERE active = 1').all().map(r => r.guild_id);
+  const active = db.prepare('SELECT guild_id FROM guilds WHERE active = 1').all().map(r => r.guild_id)
+    // 主營運伺服器排最前面：沒指定 x-guild-id 時就用它當預設
+    .sort((a, b) => (b === HOME_GUILD) - (a === HOME_GUILD));
   if (user.role === 'admin') return active.length ? active : [HOME_GUILD];
   const bound = parsePermissions(user.guild_ids);
   if (!bound.length) return active.includes(HOME_GUILD) ? [HOME_GUILD] : active.slice(0, 1);
