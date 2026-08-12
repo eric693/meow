@@ -184,6 +184,19 @@ function reportOrder(guildId, orderNo, { reporterId = '', item = null, qty = nul
   return db.prepare('SELECT * FROM orders WHERE id=?').get(o.id);
 }
 
+/** 取消報單：把報單紀錄清掉，訂單回到「未報單」狀態（核銷後不可） */
+function unreportOrder(guildId, orderNo, operator = '') {
+  guildId = orgOf(guildId);
+  const o = getOrder(guildId, orderNo);
+  if (!o) throw new Error(`查無訂單 ${orderNo}`);
+  if (o.status === 'settled') throw new Error(`訂單 ${o.order_no} 已核銷完畢，無法取消報單`);
+  if (!o.reported_at) throw new Error(`訂單 ${o.order_no} 目前沒有報單紀錄`);
+
+  db.prepare("UPDATE orders SET reporter_id='', reported_at=NULL WHERE id=?").run(o.id);
+  audit(operator, '取消報單', o.order_no, guildId, { source: 'orders' });
+  return o;
+}
+
 /** 核銷：暫存薪水 → 可提領薪水 */
 function settleOrder(guildId, orderNo, operator = '') {
   guildId = orgOf(guildId);
@@ -288,7 +301,7 @@ function reviewWithdraw(guildId, id, status, operator = '') {
 }
 
 module.exports = {
-  createOrder, updateOrder, deleteOrder, getOrder, reportOrder, settleOrder, refundOrder,
+  createOrder, updateOrder, deleteOrder, getOrder, reportOrder, unreportOrder, settleOrder, refundOrder,
   requestWithdraw, reviewWithdraw, payoutStaff,
   shareRate, intimacyRate, KINDS, STATUS, kindLabel
 };

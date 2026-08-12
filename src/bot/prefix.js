@@ -281,6 +281,20 @@ const handlers = {
     await msg.reply({ embeds: [ok(msg.guild.id, '扣款完成', `${mention(target)} -${n(amount)} 雨幣\n目前餘額：**${n(bal)}**`)] });
   },
 
+  // 報錯單時把報單紀錄清掉，讓陪玩重新報一次
+  async 取消報單(msg, args) {
+    const no = (args.trim().split(/\s+/)[0] || '').toUpperCase();
+    if (!no) throw new Error('用法：`!取消報單 ORD-16072444`');
+    const o = M.getOrder(msg.guild.id, no);
+    if (!o) throw new Error(`查無訂單 ${no}`);
+    // 客服／管理員，或這張單的陪玩、原報單者本人
+    const mine = [o.staff_id, o.reporter_id].filter(Boolean).includes(msg.author.id);
+    if (!mine && !isCS(msg.member)) throw new Error('只有這張單的陪玩本人或客服可以取消報單。');
+    M.unreportOrder(msg.guild.id, no, msg.author.tag);
+    await msg.reply({ embeds: [ok(msg.guild.id, '報單已取消',
+      `訂單 \`${o.order_no}\` 的報單紀錄已清除，可以重新報單了。`)] });
+  },
+
   // 用法：!發券 @老闆 名稱 100 [滿1000] [到2026-12-31]
   // 金額寫「20%」就是打折券；同名的券會累加張數
   async 發券(msg, args) {
