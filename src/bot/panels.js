@@ -516,7 +516,7 @@ function reportModal(kind) {
     return m.addComponents(
       input('order_no', '訂單編號（ORD-XXXXXXXX）', { ph: '結帳時客服提供' }),
       input('boss_dc', '老闆 DC_ID', { ph: '例：tsuki_.32' }),
-      input('customer', '老闆 遊戲ID', { ph: '例：123456789012345678' }),
+      input('customer', '老闆 遊戲ID', { ph: '例：tsuki_.32 或 123456789012345678' }),
       input('staff', '陪玩 遊戲ID', { ph: '例：一坨羊毛毛#0712 或 R01' }),
       input('slots', '報單類別及場次/小時', { ph: '例：娛樂4場' })
     );
@@ -532,7 +532,7 @@ function reportModal(kind) {
   // 跨服單沒有主群結帳流程，報單當下才建帳
   return m.addComponents(
     input('boss_dc', '老闆 dc', { ph: '例：tsuki_.32' }),
-    input('customer', '老闆 id', { ph: '例：123456789012345678' }),
+    input('customer', '老闆 id', { ph: '例：tsuki_.32 或 123456789012345678' }),
     input('staff', '陪玩 id', { ph: '例：一坨羊毛毛#0712 或 R01' }),
     input('slots', '報單場次／小時', { ph: '例：娛樂4場' }),
     input('price', '單價（雨幣）', { ph: '例：300' })
@@ -844,8 +844,9 @@ async function handleInteraction(i) {
       return i.channel.send({ content: content0, embeds: [body] });
     }
 
-    const customerId = (f('customer').match(/\d{15,25}/) || [])[0];
-    if (!customerId) return eph(i, err(i.guildId, '老闆 id 格式不正確（需為 Discord 數字 ID）。'));
+    // 老闆欄位不限格式：填數字 ID 就自動對到帳號，填名字就原樣留著交給客服人工核對
+    const customerRaw = f('customer');
+    const customerId = (customerRaw.match(/\d{15,25}/) || [])[0] || '';
     const staff = findStaff(i.guildId, f('staff'));
     if (!staff) return eph(i, err(i.guildId, `查無陪玩「${f('staff')}」`));
     const { item, qty } = parseSlots(f('slots'));
@@ -857,7 +858,7 @@ async function handleInteraction(i) {
         if (exist && exist.staff_id !== staff.user_id)
           return eph(i, err(i.guildId,
             `訂單 ${exist.order_no} 的服務陪玩是 <@${exist.staff_id}>，與你填寫的「${f('staff')}」不符，請向客服確認。`));
-        if (exist && exist.customer_id !== customerId)
+        if (exist && customerId && exist.customer_id !== customerId)
           return eph(i, err(i.guildId,
             `訂單 ${exist.order_no} 的消費金主是 <@${exist.customer_id}>，與你填寫的老闆 id 不符，請向客服確認。`));
         o = M.reportOrder(i.guildId, f('order_no'), { reporterId: i.user.id, item, qty });
@@ -866,7 +867,7 @@ async function handleInteraction(i) {
         if (!Number.isFinite(qty) || !Number.isFinite(price))
           return eph(i, err(i.guildId, '場次與單價必須含數字。'));
         o = M.createOrder({
-          guildId: i.guildId, customerId, customerName: f('boss_dc'), staffId: staff.user_id,
+          guildId: i.guildId, customerId, customerName: f('boss_dc') || customerRaw, staffId: staff.user_id,
           csId: isCS(i.member) ? i.user.id : '', item, qty, unitPrice: price,
           source: kind, operator: i.user.tag
         });
@@ -878,7 +879,7 @@ async function handleInteraction(i) {
       desc: [
         `訂單編號：\`${o.order_no}\``,
         `老闆dc：${f('boss_dc')}`,
-        `老闆id：${customerId}`,
+        `老闆id：${customerId || `${customerRaw}　⚠️ 非數字 ID，請客服人工核對`}`,
         `陪玩id：${staff.name || staff.code}`,
         `報單場次/小時：${f('slots')}`,
         '',
