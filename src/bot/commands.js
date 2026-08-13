@@ -115,6 +115,32 @@ const commands = [
     .addStringOption(o => o.setName('標題').setDescription('投票主題').setRequired(true))
     .addStringOption(o => o.setName('選項').setDescription('用「、」或「,」分隔，最多 10 個').setRequired(true)),
 
+  // ---- 冠名與身份組期限 ----
+  b('冠名', '登記冠名期限，到期自動在播報頻道提醒')
+    .addStringOption(o => o.setName('名稱').setDescription('冠名名稱，例：往後餘生 幸虧有泥').setRequired(true))
+    .addUserOption(o => o.setName('客人').setDescription('出資的老闆').setRequired(true))
+    .addUserOption(o => o.setName('陪玩').setDescription('被冠名的陪玩').setRequired(true))
+    .addIntegerOption(o => o.setName('天數').setDescription('冠名天數').setRequired(true).setMinValue(1))
+    .addBooleanOption(o => o.setName('接棒').setDescription('排在該陪玩目前最晚一筆之後才開始'))
+    .addStringOption(o => o.setName('開始').setDescription('自訂開始時間，例：2026-08-13 01:09（不填＝現在）'))
+    .addStringOption(o => o.setName('備註').setDescription('例：月冠+冠名卷')),
+
+  b('身份組', '登記限時身份組期限，到期自動提醒')
+    .addStringOption(o => o.setName('名稱').setDescription('身份組名稱，例：甜度超標使者').setRequired(true))
+    .addUserOption(o => o.setName('對象').setDescription('取得身份組的人').setRequired(true))
+    .addIntegerOption(o => o.setName('天數').setDescription('持有天數').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('開始').setDescription('自訂開始時間，例：2026-08-13 01:09（不填＝現在）'))
+    .addStringOption(o => o.setName('備註').setDescription('例：1314禮物')),
+
+  b('冠名列表', '查詢進行中的冠名與身份組期限')
+    .addStringOption(o => o.setName('類別').setDescription('只看某一類')
+      .addChoices({ name: '冠名', value: 'title' }, { name: '身份組', value: 'role' }))
+    .addStringOption(o => o.setName('關鍵字').setDescription('名稱、對象或備註'))
+    .addBooleanOption(o => o.setName('含已結束').setDescription('連已經結束的也一起列出')),
+
+  b('結束冠名', '提前結束一筆冠名或身份組期限')
+    .addIntegerOption(o => o.setName('編號').setDescription('用 /冠名列表 查編號').setRequired(true).setMinValue(1)),
+
   // ---- 人事 ----
   b('入職', '錄取陪玩並綁定對應的影音名片')
     .addUserOption(o => o.setName('對象').setDescription('請選擇陪玩師的 Discord 帳號').setRequired(true))

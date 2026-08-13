@@ -389,6 +389,64 @@ const handlers = {
   },
 
   // ---------- 人事 ----------
+  // ---------- 冠名與身份組期限 ----------
+  async 冠名(i) {
+    if (!isCS(i.member)) return deny(i);
+    const T = require('../util/titles');
+    const customer = i.options.getUser('客人'), staff = i.options.getUser('陪玩');
+    const t = T.addTitle(i.guildId, {
+      kind: 'title', name: i.options.getString('名稱'),
+      days: i.options.getInteger('天數'),
+      startAt: i.options.getString('開始') || null,
+      queueAfter: !!i.options.getBoolean('接棒'),
+      customerId: customer.id, customerName: customer.username,
+      staffId: staff.id, staffName: staff.username,
+      note: i.options.getString('備註') || '',
+      operator: i.user.tag, srcGuild: i.guildId
+    });
+    await i.reply({ embeds: [ok(i.guildId, `🏷️ 冠名已登記（#${t.id}）`, T.titleBlock(t))] });
+  },
+
+  async 身份組(i) {
+    if (!isCS(i.member)) return deny(i);
+    const T = require('../util/titles');
+    const u = i.options.getUser('對象');
+    const t = T.addTitle(i.guildId, {
+      kind: 'role', name: i.options.getString('名稱'),
+      days: i.options.getInteger('天數'),
+      startAt: i.options.getString('開始') || null,
+      targetId: u.id, targetName: u.username,
+      note: i.options.getString('備註') || '',
+      operator: i.user.tag, srcGuild: i.guildId
+    });
+    await i.reply({ embeds: [ok(i.guildId, `🎯 身份組期限已登記（#${t.id}）`, T.titleBlock(t))] });
+  },
+
+  async 冠名列表(i) {
+    const T = require('../util/titles');
+    const { rows, total } = T.listTitles(i.guildId, {
+      kind: i.options.getString('類別') || '',
+      status: i.options.getBoolean('含已結束') ? '' : 'live',
+      q: i.options.getString('關鍵字') || '',
+      limit: 25
+    });
+    if (!rows.length)
+      return i.reply({ embeds: [ok(i.guildId, '沒有符合條件的紀錄', '　')], ephemeral: true });
+    const body = rows.map(t => `\`#${t.id}\`\n${T.titleBlock(t)}`).join('\n' + '─'.repeat(28) + '\n');
+    await i.reply({ embeds: [emb(i.guildId, {
+      title: `🏷️ 冠名／身份組（${total} 筆${total > 25 ? '，顯示前 25 筆' : ''}）`,
+      desc: body.slice(0, 4000)
+    })] });
+  },
+
+  async 結束冠名(i) {
+    if (!isCS(i.member)) return deny(i);
+    const T = require('../util/titles');
+    const id = i.options.getInteger('編號');
+    const t = T.endTitle(i.guildId, id, i.user.tag);
+    await i.reply({ embeds: [ok(i.guildId, '已提前結束', `#${id}　${t.name}`)] });
+  },
+
   async 入職(i) {
     if (!isAdmin(i.member)) return deny(i);
     const u = i.options.getUser('對象');
