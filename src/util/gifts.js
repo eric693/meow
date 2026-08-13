@@ -89,11 +89,16 @@ function sendGift({ guildId, customerId, customerName = '', staffId, giftKey, qt
   // 親密度依實付金額計算，與結帳同一套成數（預設 1 元 = 1 點）
   const gain = Math.round(amount * require('./money').intimacyRate(guildId) / 100);
 
+  // 送禮不必報單核銷：分潤依「禮物定價」計算，結帳當下就直接進陪玩的可提領薪資
+  const M = require('./money');
+  const staffShare = Math.round(list * M.giftShareRate(guildId) / 100);
+
   // 送禮同樣是一筆營收，寫進 orders 流水帳（交易類型＝贈送禮物），才會進財務報表與匯出檔
-  const order = require('./money').createOrder({
+  const order = M.createOrder({
     guildId, customerId, customerName, staffId, staffName: staff.name || staff.code,
     csId, csName, kind: 'gift', item: `${g.emoji} ${g.name}`, qty: n, unitPrice: g.price,
-    listPrice: list, amount, source: 'gift', operator, orderPrefix: 'GFT',
+    listPrice: list, amount, staffShare, status: 'settled',
+    source: 'gift', operator, orderPrefix: 'GFT',
     payMethod, skipWallet, intimacy: gain, note: note || `送禮 ${g.name}×${n}`
   });
 
@@ -104,7 +109,8 @@ function sendGift({ guildId, customerId, customerName = '', staffId, giftKey, qt
   const points = getIntimacy(guildId, customerId, staffId);
 
   audit(operator || customerId, '送禮', `${g.name}×${n} = ${amount}`, guildId, { source: 'gifts' });
-  return { gift: g, qty: n, list, amount, discount: list - amount, gain, points, rank: rankOf(points), order };
+  return { gift: g, qty: n, list, amount, discount: list - amount, staffShare,
+           gain, points, rank: rankOf(points), order };
 }
 
 // ---------- 背包 ----------

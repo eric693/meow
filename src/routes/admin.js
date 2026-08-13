@@ -37,7 +37,7 @@ router.get('/reports/export/withdrawals', (req, res) =>
 
 // ---------------- 系統設定 ----------------
 // 集團層設定：整個集團共用一份（品牌、分潤、VIP 門檻）
-const ORG_KEYS = ['brand_name', 'staff_share_rate', 'vip_thresholds', 'vip_names',
+const ORG_KEYS = ['brand_name', 'staff_share_rate', 'gift_share_rate', 'vip_thresholds', 'vip_names',
   'order_intimacy_rate', 'high_income_threshold'];
 // 單一伺服器設定：每台群組各自不同（身分組、頻道、分類、機器人狀態）
 const GUILD_KEYS = [

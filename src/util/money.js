@@ -19,6 +19,8 @@ const STATUS = { pending: '暫存中', settled: '已核銷', refunded: '已退�
 
 // 陪玩分潤成數（%），可在後台「系統設定」調整
 const shareRate = guildId => getNum('staff_share_rate', 80, orgOf(guildId));
+// 送禮分潤成數（%）：禮物定價 × 此比例 = 陪玩實拿，其餘為平台抽成
+const giftShareRate = guildId => getNum('gift_share_rate', 70, orgOf(guildId));
 // 結帳親密度成數（%）：實收金額 × 此比例 = 本單增加的羈絆點數
 const intimacyRate = guildId => getNum('order_intimacy_rate', 100, orgOf(guildId));
 
@@ -303,5 +305,5 @@ function reviewWithdraw(guildId, id, status, operator = '') {
 module.exports = {
   createOrder, updateOrder, deleteOrder, getOrder, reportOrder, unreportOrder, settleOrder, refundOrder,
   requestWithdraw, reviewWithdraw, payoutStaff,
-  shareRate, intimacyRate, KINDS, STATUS, kindLabel
+  shareRate, giftShareRate, intimacyRate, KINDS, STATUS, kindLabel
 };

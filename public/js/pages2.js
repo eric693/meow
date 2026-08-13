@@ -626,6 +626,7 @@ Pages.settings = async view => {
       </div>
       <div class="row">
         <label class="f"><span>陪玩分潤成數（%）</span><input name="staff_share_rate" type="number" min="0" max="100" value="${UI.esc(v.staff_share_rate)}"></label>
+        <label class="f"><span>送禮分潤成數（%，陪玩實拿）</span><input name="gift_share_rate" type="number" min="0" max="100" value="${UI.esc(v.gift_share_rate || '70')}"></label>
         <label class="f"><span>VIP 門檻（Lv1~Lv7 累計消費，逗號分隔）</span><input name="vip_thresholds" value="${UI.esc(v.vip_thresholds)}"></label>
       </div>
       <label class="f"><span>VIP 等級名稱（Lv0~Lv7 共 8 個，逗號分隔；報表與匯出檔會用這組名稱）</span>
