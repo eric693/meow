@@ -593,11 +593,16 @@ async function archiveCardChannel(guild, t) {
       .reverse();
     if (!msgs.length) return;
 
+    // 圖片另外收起來重新上傳；Discord CDN 連結會過期，只貼網址存底日後會失效
+    const images = [];
     const lines = msgs.map(m => {
       const who = m.member?.displayName || m.author.username;
       const text = m.content || m.embeds[0]?.description || '（附件）';
-      const files = [...m.attachments.values()].map(a => a.url).join(' ');
-      return `**${who}**：${text}${files ? '\n' + files : ''}`;
+      const atts = [...m.attachments.values()];
+      for (const a of atts) if (isImageUrl(a.url) || /^image\//.test(a.contentType || '')) images.push(a.url);
+      for (const e of m.embeds) if (e.image?.url) images.push(e.image.url);
+      const others = atts.filter(a => !isImageUrl(a.url) && !/^image\//.test(a.contentType || ''));
+      return `**${who}**：${text}${others.length ? '\n' + others.map(a => a.url).join(' ') : ''}`;
     });
 
     // Discord 描述上限 4096，超過就分批送
@@ -618,6 +623,14 @@ async function archiveCardChannel(guild, t) {
           footer: idx === chunks.length - 1 ? '名片專區已關閉，以上為完整對話紀錄' : undefined
         })]
       }).catch(() => {});
+    }
+
+    // 圖片重新上傳一份（一則最多 10 張），存底才不會因為原連結過期而消失
+    const uniq = [...new Set(images)];
+    for (let k = 0; k < uniq.length; k += 10) {
+      const batch = uniq.slice(k, k + 10);
+      await boss.send({ content: k === 0 ? '📎 名片專區的圖片存底：' : undefined, files: batch })
+        .catch(() => boss.send({ content: batch.join('\n') }).catch(() => {}));
     }
   } catch (e) {
     console.warn('名片專區存底失敗：', e.message);
