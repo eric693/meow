@@ -1235,8 +1235,25 @@ async function handleInteraction(i) {
           await i.channel.permissionOverwrites.edit(rid, { ViewChannel: false }).catch(() => {});
         }
       }
-      if (act === 'end') db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
-      const msg = act === 'end' ? '訂單已結束，名片專區已關閉。' : '名片專區已關閉，陪玩不會再看到這張單。';
+      // 結單：老闆的包廂搬到結單分類、鎖住發言、改名歸檔，紀錄保留供日後查閱
+      if (act === 'end') {
+        db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
+        const boss = t.channel_id === i.channelId
+          ? i.channel
+          : await i.guild.channels.fetch(t.channel_id).catch(() => null);
+        if (boss) {
+          const parent = getSetting('category_order_closed', '', i.guildId)
+                      || getSetting('category_ticket', '', i.guildId);
+          if (parent) await boss.setParent(parent, { lockPermissions: false }).catch(() => {});
+          for (const rid of [t.customer_id, ...getSetting('role_player', '', i.guildId).split(',').map(x => x.trim())]) {
+            if (rid) await boss.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
+          }
+          await boss.setName(archivedName(boss, t, '已結單')).catch(() => {});
+        }
+      }
+      const msg = act === 'end'
+        ? '訂單已結束，頻道已移到結單分類並鎖定發言，紀錄保留供日後查閱。'
+        : '名片專區已關閉，陪玩不會再看到這張單。';
       if (i.channel.id === t.card_channel_id) return i.reply({ embeds: [ok(i.guildId, '已關閉', msg)] });
       return eph(i, ok(i.guildId, '已關閉', msg));
     }
