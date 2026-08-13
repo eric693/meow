@@ -4,7 +4,7 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder
 } = require('discord.js');
 const { db, getSetting, getNum, getCustomer, findStaff, getStaff, now, audit, orgOf } = require('../db');
-const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
+const { emb, ok, err, money, COLOR, n, mention, isImageUrl } = require('../util/embed');
 const M = require('../util/money');
 const G = require('../util/gifts');
 const { checkoutMessage } = require('../util/checkout');
@@ -1205,12 +1205,15 @@ async function handleInteraction(i) {
       const boss = await i.guild.channels.fetch(t.channel_id).catch(() => null);
       if (!boss) return eph(i, err(i.guildId, '找不到老闆的訂單頻道，請聯絡客服。'));
 
+      // 圖片直接內嵌在名片裡（貼成訊息內容只會顯示成一條檔案連結）；影片等其他連結才另外附上
+      const isImg = isImageUrl(staff.card_url);
       const card = {
-        content: staff.card_url || undefined,
+        content: staff.card_url && !isImg ? staff.card_url : undefined,
         embeds: [emb(i.guildId, {
           title: `✨ 專屬名片：${name}`,
           desc: `老闆您好，我是 **${name}**！請看看我的專屬音卡 👋`,
           color: COLOR.ok,
+          image: isImg ? staff.card_url : undefined,
           footer: staff.card_url ? undefined : '這位陪玩還沒綁定影音名片，請管理用 /入職 補上'
         })]
       };
