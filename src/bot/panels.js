@@ -4,7 +4,7 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder
 } = require('discord.js');
 const { db, getSetting, getNum, getCustomer, findStaff, getStaff, now, audit, orgOf } = require('../db');
-const { emb, ok, err, money, COLOR, n, mention, isImageUrl } = require('../util/embed');
+const { emb, ok, err, money, COLOR, n, mention, isImageUrl, isVideoUrl } = require('../util/embed');
 const M = require('../util/money');
 const G = require('../util/gifts');
 const { checkoutMessage } = require('../util/checkout');
@@ -593,15 +593,17 @@ async function archiveCardChannel(guild, t) {
       .reverse();
     if (!msgs.length) return;
 
-    // 圖片另外收起來重新上傳；Discord CDN 連結會過期，只貼網址存底日後會失效
-    const images = [];
+    // 圖片與影片另外收起來重新上傳；Discord CDN 連結會過期，只貼網址存底日後會失效
+    const media = [];
+    const isMedia = a => isImageUrl(a.name || a.url) || isVideoUrl(a.name || a.url)
+                      || /^(image|video)\//.test(a.contentType || '');
     const lines = msgs.map(m => {
       const who = m.member?.displayName || m.author.username;
       const text = m.content || m.embeds[0]?.description || '（附件）';
       const atts = [...m.attachments.values()];
-      for (const a of atts) if (isImageUrl(a.url) || /^image\//.test(a.contentType || '')) images.push(a.url);
-      for (const e of m.embeds) if (e.image?.url) images.push(e.image.url);
-      const others = atts.filter(a => !isImageUrl(a.url) && !/^image\//.test(a.contentType || ''));
+      for (const a of atts) if (isMedia(a)) media.push(a.url);
+      for (const e of m.embeds) if (e.image?.url) media.push(e.image.url);
+      const others = atts.filter(a => !isMedia(a));
       return `**${who}**：${text}${others.length ? '\n' + others.map(a => a.url).join(' ') : ''}`;
     });
 
@@ -625,11 +627,11 @@ async function archiveCardChannel(guild, t) {
       }).catch(() => {});
     }
 
-    // 圖片重新上傳一份（一則最多 10 張），存底才不會因為原連結過期而消失
-    const uniq = [...new Set(images)];
+    // 圖片與影片重新上傳一份（一則最多 10 個），存底才不會因為原連結過期而消失
+    const uniq = [...new Set(media)];
     for (let k = 0; k < uniq.length; k += 10) {
       const batch = uniq.slice(k, k + 10);
-      await boss.send({ content: k === 0 ? '📎 名片專區的圖片存底：' : undefined, files: batch })
+      await boss.send({ content: k === 0 ? '📎 名片專區的圖片／影片存底：' : undefined, files: batch })
         .catch(() => boss.send({ content: batch.join('\n') }).catch(() => {}));
     }
   } catch (e) {
@@ -1218,21 +1220,26 @@ async function handleInteraction(i) {
       const boss = await i.guild.channels.fetch(t.channel_id).catch(() => null);
       if (!boss) return eph(i, err(i.guildId, '找不到老闆的訂單頻道，請聯絡客服。'));
 
-      // 圖片直接內嵌在名片裡（貼成訊息內容只會顯示成一條檔案連結）；影片等其他連結才另外附上
-      const isImg = isImageUrl(staff.card_url);
+      // 圖片內嵌進 embed；影片改成附件重新上傳，Discord 才會給原生播放器；
+      // 其他連結（YouTube 等）維持貼網址，由 Discord 自己展開
+      const url = staff.card_url;
+      const isImg = isImageUrl(url), isVid = isVideoUrl(url);
       const card = {
-        content: staff.card_url && !isImg ? staff.card_url : undefined,
+        content: url && !isImg && !isVid ? url : undefined,
         embeds: [emb(i.guildId, {
           title: `✨ 專屬名片：${name}`,
           desc: `老闆您好，我是 **${name}**！請看看我的專屬音卡 👋`,
           color: COLOR.ok,
-          image: isImg ? staff.card_url : undefined,
-          footer: staff.card_url ? undefined : '這位陪玩還沒綁定影音名片，請管理用 /入職 補上'
+          image: isImg ? url : undefined,
+          footer: url ? undefined : '這位陪玩還沒綁定影音名片，請管理用 /入職 補上'
         })]
       };
-      await boss.send(card);
+      // 影片太大傳不上去時（Discord 有檔案大小上限），退回附上連結
+      const send = ch => ch.send(isVid ? { ...card, files: [url] } : card)
+        .catch(() => ch.send({ ...card, content: url }));
+      await send(boss);
       // 在名片專區也公開一份，讓其他陪玩與客服看得到誰報名了
-      if (i.channelId !== boss.id) await i.channel?.send(card).catch(() => {});
+      if (i.channelId !== boss.id && i.channel) await send(i.channel).catch(() => {});
       return eph(i, ok(i.guildId, '影片名片已成功遞交！', '老闆將在頻道收到您的名片！'));
     }
 
