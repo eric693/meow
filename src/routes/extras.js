@@ -101,6 +101,56 @@ router.delete('/backpack/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------------- 冠名／身份組期限 ----------------
+router.use('/titles', guardModule('titles'));
+router.get('/titles', (req, res) => {
+  const T = require('../util/titles');
+  const q = req.query;
+  res.json(T.listTitles(req.orgId, {
+    kind: q.kind || '', status: q.status ?? 'live', q: q.q || '',
+    ...page(req)
+  }));
+});
+router.post('/titles', (req, res) => {
+  const T = require('../util/titles');
+  const b = req.body || {};
+  try {
+    const t = T.addTitle(req.orgId, {
+      kind: b.kind, name: b.name, days: Number(b.days) || 0,
+      startAt: b.start_at || null, endAt: b.end_at || null,
+      customerId: b.customer_id || '', customerName: b.customer_name || '',
+      staffId: b.staff_id || '', staffName: b.staff_name || '',
+      targetId: b.target_id || '', targetName: b.target_name || '',
+      note: b.note || '', queueAfter: !!b.queue_after,
+      operator: req.user.name || req.user.username, srcGuild: req.guildId
+    });
+    res.json(t);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+router.put('/titles/:id', (req, res) => {
+  const b = req.body || {};
+  const T = require('../util/titles');
+  const t = db.prepare('SELECT * FROM titles WHERE id=? AND guild_id=?').get(req.params.id, req.orgId);
+  if (!t) return res.status(404).json({ error: '查無這筆紀錄' });
+  const start = b.start_at ? T.parseTime(b.start_at) : t.start_at;
+  const end = b.end_at ? T.parseTime(b.end_at)
+            : (b.days ? T.addDays(start, Number(b.days)) : t.end_at);
+  if (!start || !end) return res.status(400).json({ error: '時間格式不正確' });
+  db.prepare(`UPDATE titles SET name=?, customer_name=?, staff_name=?, target_name=?,
+              days=?, start_at=?, end_at=?, note=?, status=?,
+              notified_end=CASE WHEN ?>end_at THEN 0 ELSE notified_end END WHERE id=?`)
+    .run(b.name ?? t.name, b.customer_name ?? t.customer_name, b.staff_name ?? t.staff_name,
+         b.target_name ?? t.target_name, Number(b.days) || t.days, start, end,
+         b.note ?? t.note, b.status || t.status, end, t.id);
+  audit(req.user.name, '修改冠名／身份組', `#${t.id} ${b.name || t.name}`, req.orgId, { source: 'web' });
+  res.json(db.prepare('SELECT * FROM titles WHERE id=?').get(t.id));
+});
+router.delete('/titles/:id', (req, res) => {
+  db.prepare('DELETE FROM titles WHERE id=? AND guild_id=?').run(req.params.id, req.orgId);
+  audit(req.user.name, '刪除冠名／身份組', `#${req.params.id}`, req.orgId, { source: 'web' });
+  res.json({ ok: true });
+});
+
 // ---------------- 客服單 / 考核 / 意見箱 ----------------
 router.use(['/tickets', '/exams', '/suggestions'], guardModule('tickets'));
 router.get('/tickets', (req, res) => {

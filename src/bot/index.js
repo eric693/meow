@@ -28,6 +28,34 @@ async function registerFor(guildId) {
   await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, guildId), { body: commands });
 }
 
+/** 冠名／身份組到期提醒：每分鐘掃一次，到期與接棒開始各發一則到播報頻道 */
+function startTitleWatcher(c) {
+  const T = require('../util/titles');
+  const { emb } = require('../util/embed');
+  const tick = async () => {
+    for (const [gid, guild] of c.guilds.cache) {
+      try {
+        const { started, ended } = T.dueReminders(orgOf(gid));
+        if (!started.length && !ended.length) continue;
+        const chId = T.announceChannel(gid);
+        const ch = chId ? await guild.channels.fetch(chId).catch(() => null) : null;
+        // 同一個集團的多台伺服器只由設有播報頻道的那台發，避免重複提醒
+        if (!ch) continue;
+        for (const t of started) {
+          await ch.send({ embeds: [emb(gid, { title: `🟢 ${T.KINDS[t.kind]}開始`, desc: T.titleBlock(t) })] })
+            .then(() => T.markStarted(t.id)).catch(() => {});
+        }
+        for (const t of ended) {
+          await ch.send({ embeds: [emb(gid, { title: `⏰ ${T.KINDS[t.kind]}到期`, desc: T.titleBlock(t) })] })
+            .then(() => T.markEnded(t.id)).catch(() => {});
+        }
+      } catch (e) { console.error('冠名提醒失敗：', e.message); }
+    }
+  };
+  tick();
+  setInterval(tick, 60 * 1000);
+}
+
 /** 重新整理人事名單（!刷新人事） */
 function refreshRoster(guildId) {
   const r = db.prepare(`SELECT kind, COUNT(*) c FROM staff WHERE guild_id=? AND active=1 GROUP BY kind`).all(orgOf(guildId));
@@ -52,6 +80,7 @@ async function start() {
     }
     const activity = getSetting('bot_activity', '☔ 喚雨接單中');
     try { c.user.setActivity(activity); } catch (e) { console.warn('狀態設定失敗：', e.message); }
+    startTitleWatcher(c);
   });
 
   client.on(Events.GuildCreate, async g => {

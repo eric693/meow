@@ -819,3 +819,103 @@ Pages.users = async view => {
     <div class="card" id="ut"><div class="empty">載入中…</div></div>`;
   load();
 };
+
+// ---------------- 冠名與身份組期限 ----------------
+Pages.titles = async view => {
+  const ST = { offset: 0, limit: 50 };
+  const F = [
+    { id: 'q', label: '關鍵字（名稱／對象／備註）' },
+    { id: 'kind', label: '類別', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'title', t: '冠名' }, { v: 'role', t: '身份組' }] },
+    { id: 'status', label: '狀態', type: 'select',
+      options: [{ v: 'live', t: '進行中＋排隊中' }, { v: '', t: '全部（含已結束）' },
+                { v: 'active', t: '只看進行中' }, { v: 'queued', t: '只看排隊中' },
+                { v: 'ended', t: '只看已結束' }] }
+  ];
+  const KIND = { title: '冠名', role: '身份組' };
+  const left = end => {
+    const ms = new Date(end.replace(' ', 'T')) - new Date();
+    if (ms <= 0) return '<span class="tag err">已到期</span>';
+    const d = Math.floor(ms / 86400000), h = Math.floor(ms % 86400000 / 3600000);
+    return `<span class="tag ${d < 1 ? 'warn' : 'ok'}">剩 ${d} 天 ${h} 小時</span>`;
+  };
+
+  const load = async () => {
+    const d = await GET('/titles?' + new URLSearchParams({ ...bind.values(), limit: ST.limit, offset: ST.offset }));
+    H.pager('ti', d.total, ST);
+    document.getElementById('ttable').innerHTML = H.table(
+      ['#', '類別', '名稱', '對象', { label: '天數', num: 1 }, '開始', '結束', '剩餘', '狀態', '備註', '操作'],
+      d.rows.map(t => `<tr><td>${t.id}</td><td>${KIND[t.kind]}</td><td><b>${UI.esc(t.name)}</b></td>
+        <td>${t.kind === 'role'
+              ? UI.esc(t.target_name || t.target_id)
+              : `${UI.esc(t.customer_name || t.customer_id)} → ${UI.esc(t.staff_name || t.staff_id)}`}</td>
+        <td class="num">${t.days}</td><td>${H.date(t.start_at)}</td><td>${H.date(t.end_at)}</td>
+        <td>${t.status === 'ended' ? '<span class="muted">—</span>' : left(t.end_at)}</td>
+        <td>${t.status === 'queued' ? '<span class="tag warn">排隊中</span>'
+             : t.status === 'ended' ? '<span class="tag">已結束</span>' : '<span class="tag ok">進行中</span>'}</td>
+        <td>${UI.esc(t.note || '')}</td>
+        <td><button class="btn sm" data-te='${UI.esc(JSON.stringify(t))}'>編輯</button>
+            ${t.status !== 'ended' ? `<button class="btn secondary sm" data-tend="${t.id}">提前結束</button>` : ''}
+            <button class="btn danger sm" data-tdel="${t.id}">刪除</button></td></tr>`),
+      '沒有符合條件的紀錄');
+
+    document.querySelectorAll('[data-te]').forEach(b => b.onclick = () => {
+      const t = JSON.parse(b.dataset.te);
+      UI.modal({ title: `編輯 #${t.id}`, bodyHTML: form(t), onOk: async back => {
+        await PUT('/titles/' + t.id, vals(back));
+        UI.ok('已更新'); load();
+      } });
+    });
+    document.querySelectorAll('[data-tend]').forEach(b => b.onclick = async () => {
+      if (!await UI.confirm('確定要提前結束這筆嗎？結束後不會再發到期提醒。')) return;
+      await PUT('/titles/' + b.dataset.tend, { status: 'ended' }); UI.ok('已結束'); load();
+    });
+    document.querySelectorAll('[data-tdel]').forEach(b => b.onclick = async () => {
+      if (!await UI.confirm('刪除後無法復原，確定嗎？')) return;
+      await DEL('/titles/' + b.dataset.tdel); UI.ok('已刪除'); load();
+    });
+  };
+
+  const form = t => `
+    <div class="row">
+      <label class="f"><span>類別</span><select name="kind" ${t ? 'disabled' : ''}>
+        <option value="title" ${t?.kind !== 'role' ? 'selected' : ''}>冠名</option>
+        <option value="role" ${t?.kind === 'role' ? 'selected' : ''}>身份組</option></select></label>
+      <label class="f"><span>天數</span><input name="days" type="number" value="${t?.days || 30}"></label>
+    </div>
+    <label class="f"><span>名稱</span><input name="name" value="${UI.esc(t?.name || '')}"></label>
+    <div class="row">
+      <label class="f"><span>客人（冠名用）</span><input name="customer_name" value="${UI.esc(t?.customer_name || '')}"></label>
+      <label class="f"><span>陪玩（冠名用）</span><input name="staff_name" value="${UI.esc(t?.staff_name || '')}"></label>
+    </div>
+    <label class="f"><span>身份組對象</span><input name="target_name" value="${UI.esc(t?.target_name || '')}"></label>
+    <div class="row">
+      <label class="f"><span>開始時間（留空＝現在）</span><input name="start_at" value="${UI.esc(t?.start_at || '')}" placeholder="2026-08-13 01:09"></label>
+      <label class="f"><span>結束時間（留空＝依天數推算）</span><input name="end_at" value="${UI.esc(t?.end_at || '')}" placeholder="2026-09-13 01:09"></label>
+    </div>
+    <label class="f"><span>備註</span><input name="note" value="${UI.esc(t?.note || '')}"></label>
+    ${t ? '' : `<label class="f"><input type="checkbox" name="queue_after" style="width:auto">
+      接棒：排在該陪玩／對象目前最晚一筆之後開始</label>`}`;
+
+  const vals = back => ({
+    kind: UI.val(back, 'kind'), name: UI.val(back, 'name'), days: Number(UI.val(back, 'days')),
+    customer_name: UI.val(back, 'customer_name'), staff_name: UI.val(back, 'staff_name'),
+    target_name: UI.val(back, 'target_name'), start_at: UI.val(back, 'start_at'),
+    end_at: UI.val(back, 'end_at'), note: UI.val(back, 'note'),
+    queue_after: UI.val(back, 'queue_after')
+  });
+
+  view.innerHTML = `
+    <div class="card"><div class="row"><div class="grow">
+      <span class="muted">到期會自動發提醒到「專屬冠名播報」頻道（沒設就發到訂單通知頻道），每分鐘檢查一次。</span>
+    </div><div class="fit"><button class="btn" id="tnew">＋ 新增</button></div></div></div>
+    ${H.filters('ti', F)}
+    <div class="card" id="ttable"><div class="empty">載入中…</div></div>`;
+
+  document.getElementById('tnew').onclick = () => UI.modal({
+    title: '新增冠名／身份組期限', bodyHTML: form(null),
+    onOk: async back => { await POST('/titles', vals(back)); UI.ok('已建立'); load(); }
+  });
+  const bind = H.bindFilters('ti', F, () => load(), ST);
+  load();
+};

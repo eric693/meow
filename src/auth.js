@@ -14,6 +14,7 @@ const MODULES = [
   { key: 'hr',        label: '人事（陪玩／客服）' },
   { key: 'gifts',     label: '禮物與親密度' },
   { key: 'backpack',  label: '背包與折價券' },
+  { key: 'titles',    label: '冠名與身份組期限' },
   { key: 'tickets',   label: '客服單與考核' },
   { key: 'polls',     label: '投票與意見箱' },
   { key: 'reports',   label: '報表與匯出' },

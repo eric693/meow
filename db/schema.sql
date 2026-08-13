@@ -294,3 +294,28 @@ CREATE TABLE IF NOT EXISTS cs_stats (
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_cs ON cs_stats (guild_id, created_at);
+
+-- ---------- 冠名／身份組期限（到期自動提醒，可接棒排隊）----------
+CREATE TABLE IF NOT EXISTS titles (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id      TEXT NOT NULL,                    -- 集團 org id
+  src_guild     TEXT NOT NULL DEFAULT '',         -- 建立當下的伺服器
+  kind          TEXT NOT NULL DEFAULT 'title',    -- title 冠名 / role 身份組
+  name          TEXT NOT NULL,                    -- 冠名名稱／身份組名稱
+  customer_id   TEXT NOT NULL DEFAULT '',         -- 客人（冠名用）
+  customer_name TEXT NOT NULL DEFAULT '',
+  staff_id      TEXT NOT NULL DEFAULT '',         -- 陪玩（冠名用）
+  staff_name    TEXT NOT NULL DEFAULT '',
+  target_id     TEXT NOT NULL DEFAULT '',         -- 身份組對象
+  target_name   TEXT NOT NULL DEFAULT '',
+  days          INTEGER NOT NULL DEFAULT 0,
+  start_at      TEXT NOT NULL,
+  end_at        TEXT NOT NULL,
+  note          TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'active',   -- queued 等待開始 / active 進行中 / ended 已結束
+  notified_start INTEGER NOT NULL DEFAULT 0,
+  notified_end   INTEGER NOT NULL DEFAULT 0,
+  operator      TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_titles_end ON titles (guild_id, status, end_at);

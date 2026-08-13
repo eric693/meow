@@ -281,6 +281,80 @@ const handlers = {
     await msg.reply({ embeds: [ok(msg.guild.id, '扣款完成', `${mention(target)} -${n(amount)} 雨幣\n目前餘額：**${n(bal)}**`)] });
   },
 
+  // ---------- 冠名／身份組期限 ----------
+  // !冠名 名稱 @客人 @陪玩 30天 [備註...]　　!身份組 名稱 @對象 30天 [備註...]
+  async 冠名(msg, args) {
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    const T = require('../util/titles');
+    const users = [...msg.mentions.users.values()];
+    const rest = args.replace(/<@!?\d+>/g, ' ').trim().split(/\s+/).filter(Boolean);
+    const usage = '用法：`!冠名 往後餘生 @客人 @陪玩 30天 [備註]`\n'
+                + '接棒（排在該陪玩目前最晚一筆之後）加上 `接棒`';
+    if (users.length < 2) throw new Error(usage);
+
+    let days = 0, queue = false; const words = [];
+    for (const w of rest) {
+      const m = w.match(/^(\d+)\s*天?$/);
+      if (m && !days) days = Number(m[1]);
+      else if (/^接棒$/.test(w)) queue = true;
+      else words.push(w);
+    }
+    const name = words.shift();
+    if (!name || !days) throw new Error(usage);
+    const t = T.addTitle(msg.guild.id, {
+      kind: 'title', name, days, queueAfter: queue,
+      customerId: users[0].id, customerName: users[0].username,
+      staffId: users[1].id, staffName: users[1].username,
+      note: words.join(' '), operator: msg.author.tag, srcGuild: msg.guild.id
+    });
+    await msg.reply({ embeds: [ok(msg.guild.id, `冠名已建立（#${t.id}）`, T.titleBlock(t))] });
+  },
+
+  async 身份組(msg, args) {
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    const T = require('../util/titles');
+    const u = msg.mentions.users.first();
+    const rest = args.replace(/<@!?\d+>/g, ' ').trim().split(/\s+/).filter(Boolean);
+    const usage = '用法：`!身份組 甜度超標使者 @對象 3天 [備註]`';
+    if (!u) throw new Error(usage);
+    let days = 0; const words = [];
+    for (const w of rest) {
+      const m = w.match(/^(\d+)\s*天?$/);
+      if (m && !days) days = Number(m[1]); else words.push(w);
+    }
+    const name = words.shift();
+    if (!name || !days) throw new Error(usage);
+    const t = T.addTitle(msg.guild.id, {
+      kind: 'role', name, days, targetId: u.id, targetName: u.username,
+      note: words.join(' '), operator: msg.author.tag, srcGuild: msg.guild.id
+    });
+    await msg.reply({ embeds: [ok(msg.guild.id, `身份組期限已建立（#${t.id}）`, T.titleBlock(t))] });
+  },
+
+  // !冠名列表 [冠名|身份組] [關鍵字]
+  async 冠名列表(msg, args) {
+    const T = require('../util/titles');
+    const a = args.trim();
+    const kind = /身份組/.test(a) ? 'role' : (/冠名/.test(a) ? 'title' : '');
+    const q = a.replace(/冠名|身份組/g, '').trim();
+    const { rows, total } = T.listTitles(msg.guild.id, { kind, q, limit: 25 });
+    if (!rows.length) return msg.reply({ embeds: [ok(msg.guild.id, '目前沒有進行中的紀錄', '　')] });
+    const body = rows.map(t => `\`#${t.id}\`\n${T.titleBlock(t)}`).join('\n' + '─'.repeat(28) + '\n');
+    await msg.reply({ embeds: [emb(msg.guild.id, {
+      title: `🏷️ 冠名／身份組（進行中 ${total} 筆${total > 25 ? '，顯示前 25 筆' : ''}）`,
+      desc: body.slice(0, 4000)
+    })] });
+  },
+
+  async 結束冠名(msg, args) {
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    const T = require('../util/titles');
+    const id = Number((args.match(/\d+/) || [])[0]);
+    if (!id) throw new Error('用法：`!結束冠名 12`（編號用 `!冠名列表` 查）');
+    const t = T.endTitle(msg.guild.id, id, msg.author.tag);
+    await msg.reply({ embeds: [ok(msg.guild.id, '已提前結束', `#${id}　${t.name}`)] });
+  },
+
   // 報錯單時把報單紀錄清掉，讓陪玩重新報一次
   async 取消報單(msg, args) {
     const no = (args.trim().split(/\s+/)[0] || '').toUpperCase();
