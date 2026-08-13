@@ -1216,12 +1216,14 @@ async function handleInteraction(i) {
       };
       await boss.send(card);
       // 在名片專區也公開一份，讓其他陪玩與客服看得到誰報名了
-      if (i.channel.id !== boss.id) await i.channel.send(card).catch(() => {});
+      if (i.channelId !== boss.id) await i.channel?.send(card).catch(() => {});
       return eph(i, ok(i.guildId, '影片名片已成功遞交！', '老闆將在頻道收到您的名片！'));
     }
 
     // 關閉名片專區（徵滿了）／結束此訂單
     if (act === 'closecard' || act === 'end') {
+      // 名片專區等一下會被刪掉，i.channel 會變成 null，所以先把身分記下來
+      const inCardChannel = i.channelId === t.card_channel_id;
       if (t.card_channel_id) {
         const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
         if (cc) {
@@ -1232,13 +1234,13 @@ async function handleInteraction(i) {
       } else {
         // 公開單沒有獨立頻道，改成收回陪玩的檢視權限
         for (const rid of getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean)) {
-          await i.channel.permissionOverwrites.edit(rid, { ViewChannel: false }).catch(() => {});
+          if (i.channel) await i.channel.permissionOverwrites.edit(rid, { ViewChannel: false }).catch(() => {});
         }
       }
       // 結單：老闆的包廂搬到結單分類、鎖住發言、改名歸檔，紀錄保留供日後查閱
       if (act === 'end') {
         db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
-        const boss = t.channel_id === i.channelId
+        const boss = (t.channel_id === i.channelId && i.channel)
           ? i.channel
           : await i.guild.channels.fetch(t.channel_id).catch(() => null);
         if (boss) {
@@ -1254,8 +1256,8 @@ async function handleInteraction(i) {
       const msg = act === 'end'
         ? '訂單已結束，頻道已移到結單分類並鎖定發言，紀錄保留供日後查閱。'
         : '名片專區已關閉，陪玩不會再看到這張單。';
-      if (i.channel.id === t.card_channel_id) return i.reply({ embeds: [ok(i.guildId, '已關閉', msg)] });
-      return eph(i, ok(i.guildId, '已關閉', msg));
+      // 按鈕若按在名片專區，那個頻道已經被刪掉了，一律用 ephemeral 回覆才不會送到死掉的頻道
+      return eph(i, ok(i.guildId, '已關閉', msg + (inCardChannel ? '\n（本頻道已移除，紀錄已存到老闆的包廂）' : '')));
     }
 
   }
