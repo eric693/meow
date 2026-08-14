@@ -13,7 +13,9 @@ function attach(client) {
       if (hub && after.channelId === hub && after.member) {
         const parent = getSetting('category_voice', '', after.guild.id) || after.channel.parentId;
         const room = await after.guild.channels.create({
-          name: `${after.member.displayName} 老闆的專屬語音`.slice(0, 90),
+          // 名稱格式可在後台改（voice_room_name），{name} 會換成使用者暱稱
+          name: (getSetting('voice_room_name', '', after.guild.id) || '{name} 老闆的專屬語音')
+            .replace('{name}', after.member.displayName).slice(0, 90),
           type: ChannelType.GuildVoice,
           parent: parent || undefined,
           permissionOverwrites: [

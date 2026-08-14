@@ -58,7 +58,7 @@ const GUILD_KEYS = [
   'channel_order_entry', 'channel_exam_entry', 'channel_intro',
   'channel_command_log', 'channel_money_log',
   // 語音房
-  'channel_voice_hub', 'category_voice',
+  'channel_voice_hub', 'category_voice', 'voice_room_name',
   // 下單選單選項（逗號分隔）
   'order_genders', 'order_services', 'order_categories', 'order_addons',
   'order_type_labels', 'ticket_seq_start', 'order_max_open', 'order_cooldown_sec',
@@ -146,16 +146,18 @@ router.get('/discord/guilds', (req, res) => {
 });
 router.get('/discord/resources', async (req, res) => {
   const client = bot.getClient();
-  if (!client || !bot.isReady()) return res.json({ roles: [], channels: [], categories: [] });
+  if (!client || !bot.isReady()) return res.json({ roles: [], channels: [], categories: [], voices: [] });
   const g = await client.guilds.fetch(req.guildId).catch(() => null);
-  if (!g) return res.json({ roles: [], channels: [], categories: [] });
+  if (!g) return res.json({ roles: [], channels: [], categories: [], voices: [] });
   const roles = (await g.roles.fetch()).filter(r => r.name !== '@everyone')
     .map(r => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name));
   const chans = await g.channels.fetch();
   res.json({
     roles,
     channels: chans.filter(c => c && c.type === 0).map(c => ({ id: c.id, name: c.name })),
-    categories: chans.filter(c => c && c.type === 4).map(c => ({ id: c.id, name: c.name }))
+    categories: chans.filter(c => c && c.type === 4).map(c => ({ id: c.id, name: c.name })),
+    // 語音頻道（給「創建語音房」大廳用）
+    voices: chans.filter(c => c && c.type === 2).map(c => ({ id: c.id, name: c.name }))
   });
 });
 router.get('/discord/member/:id', async (req, res) => {

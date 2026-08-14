@@ -688,7 +688,8 @@ Pages.settings = async view => {
       </div>
       <h4 style="margin:14px 0 6px">自動語音房</h4>
       <div class="grid c2">
-        <label class="f"><span>「創建語音房」語音頻道 ID</span><input name="channel_voice_hub" value="${UI.esc(v.channel_voice_hub || '')}" placeholder="貼上語音頻道 ID"></label>
+        <label class="f"><span>「創建語音房」大廳語音頻道</span><select name="channel_voice_hub">${opts(res.voices || [], v.channel_voice_hub)}</select></label>
+        <label class="f"><span>語音房名稱格式（{name} 會換成使用者暱稱）</span><input name="voice_room_name" value="${UI.esc(v.voice_room_name || '')}" placeholder="{name} 老闆的專屬語音"></label>
         <label class="f"><span>語音房建立在哪個分類</span><select name="category_voice">${opts(res.categories, v.category_voice)}</select></label>
       </div>
       <h4 style="margin:14px 0 6px">下單選單選項（逗號分隔，留空用預設）</h4>
