@@ -1074,6 +1074,13 @@ async function handleInteraction(i) {
     if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以送禮。');
     const [, act, sid, pay] = id.split(':');
     if (act === 'cancel') { S.drop(sid); return i.update({ content: '已取消送禮，沒有扣款。', embeds: [], components: [] }); }
+    // 選完折價券再進付款預覽
+    if (act === 'pick') {
+      if (!S.get(sid)) return eph(i, err(i.guildId, '這次送禮已逾時（超過 15 分鐘），請重新執行 /送禮。'));
+      const picked = i.values[0];
+      S.update(sid, { couponKey: picked === 'none' ? '' : picked });
+      return i.update(GF.preview(sid, S.get(sid)));
+    }
     if (act === 'pay') {
       let r;
       try { r = GF.finish(sid, pay); }

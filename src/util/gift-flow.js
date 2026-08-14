@@ -1,5 +1,5 @@
 // 互動式送禮：選折價券 → 結帳預覽 → 選付款方式 → 成立禮物單（GFT-）
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const { getCustomer, orgOf } = require('../db');
 const { emb, COLOR, mention } = require('./embed');
 const G = require('./gifts');
@@ -44,9 +44,33 @@ function preview(sid, sess) {
   };
 }
 
+/** 折價券選單：不使用 + 背包裡可用的券（送禮沒有手動折扣） */
+function couponPayload(sid, sess) {
+  const coins = getCustomer(orgOf(sess.guildId), sess.customerId).coins;
+  const list = G.usableCoupons(sess.guildId, sess.customerId, sess.list).slice(0, 24);
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`gf:pick:${sid}`)
+    .setPlaceholder('🏷️ 請在此選單中選擇代金券或折價券')
+    .addOptions(
+      { label: '💵 不使用折價券', value: 'none' },
+      ...list.map(c => {
+        const o = G.couponOption(c, sess.list);
+        return { label: o.label.slice(0, 100), value: c.item_key, description: o.description.slice(0, 100) };
+      })
+    );
+  return {
+    content: `🎁 正在為 ${mention(sess.customerId)} 準備送給 ${sess.staffId ? mention(sess.staffId) : sess.staffName}`
+           + ` 的禮物，總額：\`${sess.list}\` 元。\n💰 客戶目前雨幣餘額：\`${coins}\` 雨幣`,
+    embeds: [],
+    components: [new ActionRowBuilder().addComponents(menu)]
+  };
+}
+
+/** 沒有任何可用券就直接進付款預覽，有券才多問一步 */
 function start(sess) {
   const sid = S.put(sess);
-  return { sid, payload: preview(sid, sess) };
+  const has = G.usableCoupons(sess.guildId, sess.customerId, sess.list).length;
+  return { sid, payload: has ? couponPayload(sid, sess) : preview(sid, sess) };
 }
 
 /** 成立禮物單 */
@@ -86,4 +110,4 @@ function finish(sid, pay) {
   };
 }
 
-module.exports = { start, preview, finish };
+module.exports = { start, preview, couponPayload, finish };
