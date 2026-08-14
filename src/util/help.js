@@ -25,6 +25,10 @@ const SECTIONS = [
   { name: '📤 報表與匯出（管理員）',
     value: '`!財務報表` `!匯出報表` `!匯出消費總表` `!匯出提領報表`' },
 
+  { name: '🔮 喚雨星象（全員）',
+    value: '`!抽籤` / `/抽籤` — 每天一次的運勢抽籤，抽中吉籤會掉折價券進背包\n'
+         + '（管理員：`!setup-lottery` 建面板，獎項與機率在後台「投票與意見箱」頁調整）' },
+
   { name: '🧑‍💼 營運與人事',
     value: '`!結單` `!刷新人事`（客服）　`!離職 名稱` `!清空客服業績`（管理員）\n'
          + '`!指令` `!手冊` — 全員可用' },
@@ -50,6 +54,7 @@ const SECTIONS = [
          + '`!setup-exam` 考核入職　`!setup-member` 會員服務中心　`!setup-bank` 地下金庫\n'
          + '`!setup-intimacy` 愛戀藏館\n'
          + '`!setup-suggestion` 意見箱　`!setup-staff-suggestion` 員工輔導室\n'
+         + '`!setup-lottery` 喚雨星象抽籤\n'
          + '`!setup-identity` 身份大廳　`!sendrole` 身分組領取　`!sendorder` 下單前提醒' },
 
   { name: '🧾 結帳流程',

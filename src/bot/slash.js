@@ -276,6 +276,16 @@ const handlers = {
     await i.reply({ ...payload, ephemeral: true });
   },
 
+  // ---------- 喚雨星象 ----------
+  async 抽籤(i) {
+    const L = require('../util/lottery');
+    const P = require('./panels');
+    let r;
+    try { r = L.draw(i.guildId, i.user.id, i.user.tag); }
+    catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
+    await i.reply({ embeds: [P.lotteryEmbed(i.guildId, r)], ephemeral: true });
+  },
+
   async 愛戀查詢(i) {
     const staff = resolveStaff(i);
     const cust = i.options.getUser('客人') || i.user;

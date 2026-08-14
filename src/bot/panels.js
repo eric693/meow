@@ -235,6 +235,24 @@ const PANELS = {
     })
   },
 
+  'setup-lottery': {
+    label: '喚雨星象（每日抽籤）',
+    build: guildId => ({
+      embeds: [emb(guildId, {
+        title: '🔮 喚雨星象｜每日抽籤',
+        desc: [
+          '每天一次，讓星象替你看看今天的運勢 ✨',
+          '',
+          '🎊 抽中吉籤還會掉**折價券**，直接進你的背包，',
+          '　 下單結帳或送禮時就能折抵。',
+          '',
+          '🕛 每日 0 點（台北時間）重置，明天記得再來。'
+        ].join('\n')
+      })],
+      components: [row(btn('lot:draw', '抽今日運勢', ButtonStyle.Primary, '🔮'))]
+    })
+  },
+
   'setup-suggestion': {
     label: '意見投訴與建議箱',
     build: guildId => ({
@@ -812,6 +830,25 @@ async function backupToFinance(i, r) {
     content: `📦 **[系統自動備份]** 結帳方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}`,
     embeds: [r.detail]
   }).catch(() => {});
+}
+
+/** 抽籤結果卡片（按鈕與 !抽籤 共用） */
+function lotteryEmbed(guildId, { prize, coupon }) {
+  const lines = [`**${prize.emoji || '🔮'} ${prize.name}**`, '', prize.text || ''];
+  if (coupon) {
+    const off = coupon.percent > 0 ? `打 ${100 - coupon.percent} 折` : `折抵 ${coupon.value} 元`;
+    lines.push('',
+      `🎟️ 獲得 **${coupon.name}** ×1（${off}`
+      + `${coupon.minSpend ? `・滿 ${coupon.minSpend}` : ''}`
+      + `${coupon.expires ? `・${coupon.expires} 到期` : ''}）`,
+      '結帳或送禮時請客服幫你套用，或到「地下金庫 → 查詢餘額」看背包。');
+  }
+  return emb(guildId, {
+    title: '🔮 喚雨星象｜今日運勢',
+    desc: lines.filter(x => x !== undefined).join('\n'),
+    color: coupon ? COLOR.ok : COLOR.main,
+    footer: '每天可抽一次，台北時間 0 點重置'
+  });
 }
 
 async function handleInteraction(i) {
@@ -1573,6 +1610,15 @@ async function handleInteraction(i) {
     return setTimeout(() => i.channel.delete().catch(() => {}), 5000);
   }
 
+  // ---- 喚雨星象：每日抽籤 ----
+  if (id === 'lot:draw') {
+    const L = require('../util/lottery');
+    let r;
+    try { r = L.draw(i.guildId, i.user.id, i.user.tag); }
+    catch (e) { return eph(i, err(i.guildId, e.message)); }
+    return eph(i, lotteryEmbed(i.guildId, r));
+  }
+
   // ---- 意見箱 ----
   if (id.startsWith('sug:')) {
     const kind = id.split(':')[1];
@@ -1629,4 +1675,4 @@ async function handleInteraction(i) {
   }
 }
 
-module.exports = { commands, handleInteraction, PANELS, unsettledPage };
+module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEmbed };

@@ -244,6 +244,13 @@ const handlers = {
     if (msg.deletable) await msg.delete().catch(() => {});
   },
 
+  // ---------- 喚雨星象 ----------
+  async 抽籤(msg) {
+    const L = require('../util/lottery');
+    const r = L.draw(msg.guild.id, msg.author.id, msg.author.tag);
+    await msg.reply({ embeds: [panels.lotteryEmbed(msg.guild.id, r)] });
+  },
+
   async 離職(msg, args) {
     if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
     const key = args.trim();

@@ -317,7 +317,53 @@ Pages.polls = async view => {
     });
   };
 
+  // ---- 喚雨星象：每日抽籤獎池 ----
+  const prizeRow = p => `<tr data-lp="${p.id}">
+    <td><input value="${UI.esc(p.emoji || '')}" data-f="emoji" style="width:46px"></td>
+    <td><input value="${UI.esc(p.name)}" data-f="name" style="width:90px"></td>
+    <td><select data-f="type">
+      <option value="fortune" ${p.type === 'fortune' ? 'selected' : ''}>純籤詩</option>
+      <option value="coupon" ${p.type === 'coupon' ? 'selected' : ''}>發折價券</option>
+    </select></td>
+    <td><input type="number" value="${p.value}" data-f="value" style="width:70px"></td>
+    <td><input type="number" value="${p.percent}" data-f="percent" style="width:60px"></td>
+    <td><input type="number" value="${p.min_spend}" data-f="min_spend" style="width:70px"></td>
+    <td><input type="number" value="${p.expire_days}" data-f="expire_days" style="width:60px"></td>
+    <td><input value="${UI.esc(p.text || '')}" data-f="text" style="width:260px"></td>
+    <td><input type="number" value="${p.weight}" data-f="weight" style="width:60px"></td>
+    <td class="num">${p.chance}%</td>
+    <td><input type="checkbox" data-f="enabled" ${p.enabled ? 'checked' : ''}></td>
+    <td><button class="btn sm" data-lps="${p.id}">儲存</button>
+        <button class="btn danger sm" data-lpd="${p.id}">刪除</button></td></tr>`;
+
+  const readRow = tr => {
+    const o = {};
+    tr.querySelectorAll('[data-f]').forEach(el => {
+      o[el.dataset.f] = el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value;
+    });
+    return o;
+  };
+
+  const loadLottery = async () => {
+    const d = await GET('/lottery/prizes');
+    document.getElementById('lp').innerHTML =
+      H.table(['圖示', '籤名', '類型', '折抵', '折扣%', '低消', '有效天', '籤詩', '權重', '機率', '啟用', '操作'],
+              d.rows.map(prizeRow), '尚無獎項')
+      + `<div class="muted" style="margin-top:8px">機率＝該項權重 ÷ 所有啟用項權重總和。「發折價券」才會用到折抵／折扣／低消／有效天；折抵與折扣二擇一。今日已抽 ${d.draws_today} 次。</div>`;
+    document.querySelectorAll('[data-lps]').forEach(b => b.onclick = async () => {
+      await PUT('/lottery/prizes/' + b.dataset.lps, readRow(b.closest('tr')));
+      UI.ok('已儲存'); loadLottery();
+    });
+    document.querySelectorAll('[data-lpd]').forEach(b => b.onclick = async () => {
+      if (!confirm('確定刪除這個獎項？')) return;
+      await DEL('/lottery/prizes/' + b.dataset.lpd); UI.ok('已刪除'); loadLottery();
+    });
+  };
+
   view.innerHTML = `<div id="pl"></div>
+    <div class="card"><h3>🔮 喚雨星象・每日抽籤獎池</h3>
+      <div id="lp"><div class="empty">載入中…</div></div>
+      <button class="btn sm" id="lpAdd" style="margin-top:10px">＋ 新增獎項</button></div>
     <div class="card"><h3>意見投訴與建議箱</h3></div>
     ${H.filters('sg', sgF)}
     <div class="card"><div id="sg"><div class="empty">載入中…</div></div></div>
@@ -325,9 +371,14 @@ Pages.polls = async view => {
     ${H.filters('st', stF)}
     <div class="card"><div id="sgs"><div class="empty">載入中…</div></div></div>`;
 
+  document.getElementById('lpAdd').onclick = async () => {
+    await POST('/lottery/prizes', { name: '新籤', emoji: '🔮', type: 'fortune', weight: 10, enabled: 1 });
+    loadLottery();
+  };
+
   const sgBind = H.bindFilters('sg', sgF, () => loadSug(), SG);
   const stBind = H.bindFilters('st', stF, () => loadStaffSug(), ST);
-  loadPolls(); loadSug(); loadStaffSug();
+  loadPolls(); loadSug(); loadStaffSug(); loadLottery();
 };
 
 // ---------------- 報表與匯出 ----------------
@@ -461,6 +512,7 @@ const PANEL_DOC = [
     ['!setup-bank', '建立「地下金庫餘額查詢」面板'],
     ['!setup-intimacy', '建立「愛戀藏館查詢」面板'],
     ['!setup-suggestion', '建立「意見投訴與建議箱」面板'],
+    ['!setup-lottery', '建立「喚雨星象・每日抽籤」面板'],
     ['!setup-staff-suggestion', '建立「員工輔導室」面板（獨立通道，送至專屬後台）']
   ]],
   ['💰 查詢與統計（報表類）', [
@@ -485,6 +537,7 @@ const PANEL_DOC = [
     ['!核銷 [訂單編號]', '客服專用。核銷成功後，將陪玩的「暫存薪水 PendingIncome」轉入「可提領 Income」'],
     ['!未銷', '列出前 25 筆尚未核銷的訂單列表'],
     ['!結單', '發送「目前已結單，請停止下單和聊天」的停止線圖文公告'],
+    ['!抽籤', '喚雨星象：每日一次運勢抽籤，抽中吉籤掉折價券（全員可用）'],
     ['!退單 [訂單編號] [原因]', '退還老闆全額雨幣並扣回陪玩分潤'],
     ['!儲值 [@老闆] [金額]', '為老闆儲值雨幣（客服／管理員）'],
     ['!扣款 [@老闆] [金額]', '扣除老闆雨幣（客服／管理員）'],

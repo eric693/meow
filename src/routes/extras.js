@@ -209,6 +209,59 @@ router.put('/suggestions/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------------- 喚雨星象：每日抽籤獎池 ----------------
+router.use('/lottery', guardModule('polls'));
+router.get('/lottery/prizes', (req, res) => {
+  const L = require('../util/lottery');
+  L.seed(req.orgId);
+  const rows = db.prepare('SELECT * FROM lottery_prizes WHERE guild_id=? ORDER BY sort, id').all(req.orgId);
+  const total = rows.filter(r => r.enabled && r.weight > 0).reduce((a, b) => a + b.weight, 0) || 1;
+  res.json({
+    rows: rows.map(r => ({ ...r, chance: r.enabled && r.weight > 0 ? +(r.weight / total * 100).toFixed(1) : 0 })),
+    draws_today: db.prepare('SELECT COUNT(*) c FROM lottery_draws WHERE guild_id=? AND day=?')
+      .get(req.orgId, L.today()).c
+  });
+});
+const prizeFields = b => ({
+  name: String(b.name || '').slice(0, 40),
+  emoji: String(b.emoji || '').slice(0, 8),
+  type: b.type === 'coupon' ? 'coupon' : 'fortune',
+  value: Math.max(0, Math.round(Number(b.value) || 0)),
+  percent: Math.min(100, Math.max(0, Math.round(Number(b.percent) || 0))),
+  min_spend: Math.max(0, Math.round(Number(b.min_spend) || 0)),
+  expire_days: Math.max(0, Math.round(Number(b.expire_days) || 0)),
+  text: String(b.text || '').slice(0, 300),
+  weight: Math.max(0, Math.round(Number(b.weight) || 0)),
+  sort: Math.round(Number(b.sort) || 0),
+  enabled: b.enabled ? 1 : 0
+});
+router.post('/lottery/prizes', (req, res) => {
+  const f = prizeFields(req.body || {});
+  if (!f.name) return res.status(400).json({ error: '請填籤名' });
+  const r = db.prepare(`INSERT INTO lottery_prizes
+    (guild_id,name,emoji,type,value,percent,min_spend,expire_days,text,weight,sort,enabled)
+    VALUES (@guild_id,@name,@emoji,@type,@value,@percent,@min_spend,@expire_days,@text,@weight,@sort,@enabled)`)
+    .run({ ...f, guild_id: req.orgId });
+  audit(req.user.name, '新增抽籤獎項', f.name, req.orgId, { source: 'web' });
+  res.json({ ok: true, id: r.lastInsertRowid });
+});
+router.put('/lottery/prizes/:id', (req, res) => {
+  const f = prizeFields(req.body || {});
+  if (!f.name) return res.status(400).json({ error: '請填籤名' });
+  db.prepare(`UPDATE lottery_prizes SET name=@name, emoji=@emoji, type=@type, value=@value,
+              percent=@percent, min_spend=@min_spend, expire_days=@expire_days, text=@text,
+              weight=@weight, sort=@sort, enabled=@enabled
+              WHERE id=@id AND guild_id=@guild_id`)
+    .run({ ...f, id: Number(req.params.id), guild_id: req.orgId });
+  audit(req.user.name, '修改抽籤獎項', f.name, req.orgId, { source: 'web' });
+  res.json({ ok: true });
+});
+router.delete('/lottery/prizes/:id', (req, res) => {
+  db.prepare('DELETE FROM lottery_prizes WHERE id=? AND guild_id=?').run(req.params.id, req.orgId);
+  audit(req.user.name, '刪除抽籤獎項', `#${req.params.id}`, req.orgId, { source: 'web' });
+  res.json({ ok: true });
+});
+
 // ---------------- 投票 ----------------
 router.use('/polls', guardModule('polls'));
 router.get('/polls', (req, res) => {

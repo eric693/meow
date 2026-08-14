@@ -240,6 +240,32 @@ CREATE TABLE IF NOT EXISTS tickets (
 );
 CREATE INDEX IF NOT EXISTS idx_ticket ON tickets (guild_id, kind, created_at DESC);
 
+-- ---------- 喚雨星象 · 每日抽籤 ----------
+CREATE TABLE IF NOT EXISTS lottery_prizes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id    TEXT NOT NULL,                   -- 集團 ID（同集團共用獎池）
+  name        TEXT NOT NULL,                   -- 籤名（大吉／中吉…）
+  emoji       TEXT NOT NULL DEFAULT '',
+  type        TEXT NOT NULL DEFAULT 'fortune', -- coupon 發折價券 / fortune 純籤詩
+  value       INTEGER NOT NULL DEFAULT 0,      -- 折抵金額
+  percent     INTEGER NOT NULL DEFAULT 0,      -- 折扣百分比（與折抵金額二擇一）
+  min_spend   INTEGER NOT NULL DEFAULT 0,      -- 低消門檻
+  expire_days INTEGER NOT NULL DEFAULT 0,      -- 券的有效天數（0＝不過期）
+  text        TEXT NOT NULL DEFAULT '',        -- 運勢籤詩
+  weight      INTEGER NOT NULL DEFAULT 10,     -- 權重（機率＝權重/總權重）
+  sort        INTEGER NOT NULL DEFAULT 0,
+  enabled     INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS lottery_draws (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id   TEXT NOT NULL,
+  user_id    TEXT NOT NULL,
+  day        TEXT NOT NULL,
+  prize      TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  UNIQUE (guild_id, user_id, day)
+);
+
 -- ---------- 投票 ----------
 CREATE TABLE IF NOT EXISTS polls (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
