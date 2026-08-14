@@ -11,7 +11,7 @@ function preview(sid, sess) {
   const coupon = sess.couponKey
     ? G.usableCoupons(sess.guildId, sess.customerId, sess.list).find(c => c.item_key === sess.couponKey)
     : null;
-  const discount = G.couponDiscount(coupon, sess.list);
+  const discount = G.couponDiscount(coupon, sess.list) + (sess.manualDiscount || 0);
   const payable = Math.max(0, sess.list - discount);
   const coins = getCustomer(orgOf(sess.guildId), sess.customerId).coins;
   const enough = coins >= payable;
@@ -44,15 +44,16 @@ function preview(sid, sess) {
   };
 }
 
-/** 折價券選單：不使用 + 背包裡可用的券（送禮沒有手動折扣） */
+/** 折價券選單：手動折扣 + 不使用 + 背包裡可用的券 */
 function couponPayload(sid, sess) {
   const coins = getCustomer(orgOf(sess.guildId), sess.customerId).coins;
-  const list = G.usableCoupons(sess.guildId, sess.customerId, sess.list).slice(0, 24);
+  const list = G.usableCoupons(sess.guildId, sess.customerId, sess.list).slice(0, 23);
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`gf:pick:${sid}`)
     .setPlaceholder('🏷️ 請在此選單中選擇代金券或折價券')
     .addOptions(
-      { label: '💵 不使用折價券', value: 'none' },
+      { label: '✍️ 手動輸入額外折扣金額', value: 'manual', description: '點擊後將彈出輸入框' },
+      { label: `💵 無使用折價券 (${sess.manualDiscount || 0})`, value: 'none' },
       ...list.map(c => {
         const o = G.couponOption(c, sess.list);
         return { label: o.label.slice(0, 100), value: c.item_key, description: o.description.slice(0, 100) };
@@ -66,11 +67,10 @@ function couponPayload(sid, sess) {
   };
 }
 
-/** 沒有任何可用券就直接進付款預覽，有券才多問一步 */
+/** 送禮第一步一律是選券（沒券也還是要讓客服選「無使用」或手動折扣） */
 function start(sess) {
   const sid = S.put(sess);
-  const has = G.usableCoupons(sess.guildId, sess.customerId, sess.list).length;
-  return { sid, payload: has ? couponPayload(sid, sess) : preview(sid, sess) };
+  return { sid, payload: couponPayload(sid, sess) };
 }
 
 /** 成立禮物單 */
@@ -84,7 +84,7 @@ function finish(sid, pay) {
       .find(c => c.item_key === sess.couponKey);
     if (!coupon) throw new Error('選用的折價券已失效或不在背包裡，請重新送禮。');
   }
-  const discount = G.couponDiscount(coupon, sess.list);
+  const discount = G.couponDiscount(coupon, sess.list) + (sess.manualDiscount || 0);
   const payable = Math.max(0, sess.list - discount);
   if (payable === 0) throw new Error('折抵後實付為 0 元，請改用其他方式處理。');
 
