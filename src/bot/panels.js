@@ -750,6 +750,33 @@ function archivedName(channel, t, suffix) {
 /** 結單後幾天自動刪除頻道（設定 ticket_delete_days，預設 1 天；設 0 為不自動刪） */
 const deleteDays = guildId => cfgNum('ticket_delete_days', 1, guildId);
 
+/**
+ * 結單：收掉名片專區、把包廂搬到結單分類、鎖住發言、改名歸檔。
+ * 按鈕（ticket:close / tk:end）與 !結單 共用同一套。
+ */
+async function closeTicket(guild, channel, t) {
+  db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), t.id);
+  // 名片專區一併收掉（收掉前先把對話存底到包廂）
+  if (t.card_channel_id) {
+    const cc = await guild.channels.fetch(t.card_channel_id).catch(() => null);
+    if (cc) { await archiveCardChannel(guild, t); await cc.delete().catch(() => {}); }
+    db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(t.id);
+  }
+  if (!channel) return;
+  const target = getSetting('category_order_closed', '', guild.id)
+              || getSetting('category_ticket', '', guild.id);
+  if (target) await channel.setParent(target, { lockPermissions: false }).catch(() => {});
+  for (const rid of [t.customer_id, ...getSetting('role_player', '', guild.id).split(',').map(x => x.trim())]) {
+    if (rid) await channel.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
+  }
+  await channel.setName(archivedName(channel, t, '已結單')).catch(() => {});
+}
+
+/** 這個頻道對應的訂單（!結單 用來判斷是不是在包廂裡下的指令） */
+const ticketOfChannel = (guildId, channelId) =>
+  db.prepare("SELECT * FROM tickets WHERE guild_id=? AND channel_id=? AND status!='closed' ORDER BY id DESC LIMIT 1")
+    .get(orgOf(guildId), channelId);
+
 /** 結單完成卡片：說明保留期限，並附「關閉頻道」讓客服直接收掉 */
 function closedNotice(guildId, tid) {
   const d = deleteDays(guildId);
@@ -1546,23 +1573,7 @@ async function handleInteraction(i) {
     if (t.customer_id !== i.user.id && !isCS(i.member))
       return denyEph(i, '只有開單者或客服可以關閉。');
 
-    db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
-    // 名片專區一併收掉（收掉前先把對話存底到包廂）
-    if (t.card_channel_id) {
-      const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
-      if (cc) { await archiveCardChannel(i.guild, t); await cc.delete().catch(() => {}); }
-      db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(tid);
-    }
-
-    // 結單＝搬到結單分類並鎖住發言，頻道保留供日後查閱
-    const target = getSetting('category_order_closed', '', i.guildId)
-                || getSetting('category_ticket', '', i.guildId);
-    if (target && i.channel) await i.channel.setParent(target, { lockPermissions: false }).catch(() => {});
-    for (const rid of [t.customer_id, ...getSetting('role_player', '', i.guildId).split(',').map(x => x.trim())]) {
-      if (rid && i.channel) await i.channel.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
-    }
-    if (i.channel) await i.channel.setName(archivedName(i.channel, t, '已結單')).catch(() => {});
-
+    await closeTicket(i.guild, i.channel, t);
     return i.reply(closedNotice(i.guildId, tid));
   }
 
@@ -1689,4 +1700,5 @@ async function handleInteraction(i) {
   }
 }
 
-module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEmbed };
+module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEmbed,
+                   closeTicket, closedNotice, ticketOfChannel };

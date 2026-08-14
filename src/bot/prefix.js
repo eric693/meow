@@ -234,8 +234,16 @@ const handlers = {
     await msg.reply(panels.unsettledPage(msg.guild.id, 0));
   },
 
+  // 在訂單包廂裡打 !結單＝收掉這張單；在其他頻道打＝發今日已結單的公告
   async 結單(msg) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    const t = panels.ticketOfChannel(msg.guild.id, msg.channelId);
+    if (t) {
+      await panels.closeTicket(msg.guild, msg.channel, t);
+      await msg.channel.send(panels.closedNotice(msg.guild.id, t.id));
+      if (msg.deletable) await msg.delete().catch(() => {});
+      return;
+    }
     await msg.channel.send({ embeds: [emb(msg.guild.id, {
       title: '🛑 目前已結單',
       desc: '**請停止下單和聊天。**\n\n今日營業已結束，感謝各位老闆的支持 💜\n有任何問題請等待下次開單或私訊客服。',
