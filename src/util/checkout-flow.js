@@ -70,6 +70,12 @@ function start(sess) {
   return { sid, payload: couponPayload(sid, sess) };
 }
 
+/** 身分組結帳：沒有折價券流程，直接進付款方式選擇 */
+function startRole(sess) {
+  const sid = S.put(sess);
+  return { sid, payload: preview(sid, sess) };
+}
+
 /** 選券畫面 */
 function couponPayload(sid, sess) {
   const coins = getCustomer(orgOf(sess.guildId), sess.customerId).coins;
@@ -113,6 +119,9 @@ function finish(sid, pay) {
     item: sess.item, qty: sess.qty,
     unitPrice: Math.round(payable / (sess.qty || 1)),
     listPrice: sess.list, amount: payable,
+    // 身分組結帳走 kind='role' 且免核銷，直接入可提領
+    ...(sess.kind ? { kind: sess.kind } : {}),
+    ...(sess.status ? { status: sess.status } : {}),
     source: 'ticket', operator: sess.csName,
     payMethod: cash ? PAY_CASH : PAY_COIN,
     // 現金／轉帳是場外收款，不能再動客人的雨幣餘額
@@ -128,4 +137,4 @@ function finish(sid, pay) {
   };
 }
 
-module.exports = { start, preview, couponPayload, finish, PAY_CASH, PAY_COIN };
+module.exports = { start, startRole, preview, couponPayload, finish, PAY_CASH, PAY_COIN };

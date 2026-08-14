@@ -70,22 +70,17 @@ const handlers = {
     const item = i.options.getString('項目');
     const unit = i.options.getInteger('單價');
     const qty = i.options.getInteger('數量') || 1;
-    const amount = unit * qty;
-    const o = M.createOrder({
-      guildId: i.guildId, customerId: u.id, customerName: u.username,
-      staffId: s.user_id, csId: i.user.id, csName: i.user.tag,
-      kind: 'role', item, qty, unitPrice: unit, amount,
-      source: 'ticket', status: 'settled', operator: i.user.tag,
+    // 跟 /結帳 一樣先問付款方式（現金／雨幣／取消），只是沒有折價券這一步
+    const { payload } = CF.startRole({
+      guildId: i.guildId,
+      customerId: u.id, customerName: u.username,
+      staffId: s.user_id, staffName: s.name || s.code,
+      csId: i.user.id, csName: i.user.tag,
+      item, qty, list: unit * qty,
+      kind: 'role', status: 'settled',
       note: i.options.getString('備註') || ''
     });
-    await i.reply({ embeds: [money(i.guildId, '💳 身分組結帳完成', `訂單編號 \`${o.order_no}\`（免核銷）`, [
-      { name: '消費金主', value: mention(u.id), inline: true },
-      { name: '服務陪玩', value: s.name || s.code, inline: true },
-      { name: '項目', value: `${item} ×${qty}`, inline: true },
-      { name: '客人實付', value: `${n(amount)} 雨幣`, inline: true },
-      { name: '陪玩分潤', value: `${n(o.staff_share)}（已直接入可提領）`, inline: true },
-      { name: '增加羈絆', value: `+${n(o.intimacy)}`, inline: true }
-    ])] });
+    await i.reply({ ...payload, ephemeral: true });
   },
 
   async 伺服器冠名結帳(i) {
