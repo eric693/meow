@@ -321,11 +321,22 @@ async function createPrivateChannel(guild, member, { prefix, name, categoryKey, 
 
 const REPORT_LABEL = { self: '自主報單', cross: '跨服報單 1 號', cross2: '唱歌單跨服報單' };
 
+/**
+ * 這幾個數字設定後台是存在「單一伺服器」底下（GUILD_KEYS），
+ * 但綁了集團後 orgOf(guildId) 會變成別的 ID，只讀集團就永遠讀不到，
+ * 所以一律先讀本伺服器，沒設定才退回集團的值。
+ */
+const cfgNum = (key, def, guildId) => {
+  const own = getSetting(key, '', guildId);
+  if (own !== '') { const v = Number(own); return Number.isNaN(v) ? def : v; }
+  return getNum(key, def, orgOf(guildId));
+};
+
 // 開單防呆：同時進行的張數上限與冷卻時間（後台可調，設 0 表示不限）
 const lastOrderAt = new Map();
 function checkOrderQuota(i) {
   const org = orgOf(i.guildId);
-  const max = getNum('order_max_open', 5, org);
+  const max = cfgNum('order_max_open', 5, i.guildId);
   if (max > 0) {
     const open = db.prepare(`SELECT COUNT(*) c FROM tickets
                              WHERE guild_id=? AND customer_id=? AND kind='order' AND status!='closed'`)
@@ -334,7 +345,7 @@ function checkOrderQuota(i) {
       return `你目前有 ${open} 張進行中的單，已達上限 ${max} 張。\n請先結束其中一張（按頻道裡的「🔒 關閉訂單」）再開新單。`;
     }
   }
-  const cd = getNum('order_cooldown_sec', 30, org);
+  const cd = cfgNum('order_cooldown_sec', 30, i.guildId);
   if (cd > 0) {
     const key = `${i.guildId}:${i.user.id}`;
     const last = lastOrderAt.get(key) || 0;
@@ -555,7 +566,7 @@ function examinerRoles(guild) {
 /** 全店連號的單號 */
 function nextTicketSeq(guildId) {
   const org = orgOf(guildId);
-  const start = getNum('ticket_seq_start', 1001, org);
+  const start = cfgNum('ticket_seq_start', 1001, guildId);
   const max = db.prepare('SELECT COALESCE(MAX(seq),0) m FROM tickets WHERE guild_id=?').get(org).m;
   return Math.max(start, max + 1);
 }
@@ -719,7 +730,7 @@ function archivedName(channel, t, suffix) {
 }
 
 /** 結單後幾天自動刪除頻道（設定 ticket_delete_days，預設 1 天；設 0 為不自動刪） */
-const deleteDays = guildId => getNum('ticket_delete_days', 1, orgOf(guildId));
+const deleteDays = guildId => cfgNum('ticket_delete_days', 1, guildId);
 
 /** 結單完成卡片：說明保留期限，並附「關閉頻道」讓客服直接收掉 */
 function closedNotice(guildId, tid) {
@@ -1086,7 +1097,7 @@ async function handleInteraction(i) {
       try { r = GF.finish(sid, pay); }
       catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
       await i.update({ content: r.detail, embeds: [], components: [] });
-      return i.channel.send(r.message);
+      return i.channel.send(r.message).catch(() => {});
     }
   }
 
@@ -1125,7 +1136,7 @@ async function handleInteraction(i) {
                + '**[客服專屬機密]** 帳務紀錄已同步至資料庫：',
         embeds: [r.detail], components: []
       });
-      await i.channel.send(r.message);
+      await i.channel.send(r.message).catch(() => {});
       return backupToFinance(i, r);
       // 同一個包廂可能要結好幾次帳（不同陪玩／同一位老闆多筆），
       // 所以結帳不再自動結單歸檔，一律由客服按「結單」或關閉訂單

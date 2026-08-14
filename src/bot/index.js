@@ -1,6 +1,6 @@
 // Discord 機器人核心
 const { Client, GatewayIntentBits, Partials, REST, Routes, Events } = require('discord.js');
-const { db, upsertGuild, activeGuildIds, getSetting, orgOf } = require('../db');
+const { db, upsertGuild, activeGuildIds, getSetting, orgOf, HOME_GUILD } = require('../db');
 const { commands } = require('./commands');
 const { err } = require('../util/embed');
 const { logAction, slashArgs, modalArgs } = require('../util/log');
@@ -59,17 +59,27 @@ function startTitleWatcher(c) {
 /** 結單頻道自動清理：結單滿 N 天（設定 ticket_delete_days，預設 1）就把頻道刪掉 */
 function startTicketCleaner(c) {
   const { getNum } = require('../db');
+  // 設定存在單一伺服器底下，綁集團後才退回集團的值
+  const days = gid => {
+    const own = getSetting('ticket_delete_days', '', gid);
+    if (own !== '') { const v = Number(own); return Number.isNaN(v) ? 1 : v; }
+    return getNum('ticket_delete_days', 1, orgOf(gid));
+  };
   const tick = async () => {
     for (const [gid, guild] of c.guilds.cache) {
       try {
-        const days = getNum('ticket_delete_days', 1, orgOf(gid));
-        if (days <= 0) continue;
+        const d = days(gid);
+        if (d <= 0) continue;
+        // 只清「剛過期」的單：上限 30 天，避免第一次啟用就把久遠的歷史頻道整批刪掉；
+        // 每輪最多 20 間，免得撞上 Discord 的刪頻道速率限制
         const rows = db.prepare(`SELECT id, channel_id FROM tickets
                                   WHERE (src_guild=? OR (src_guild='' AND guild_id=?))
                                     AND status='closed' AND channel_id!=''
                                     AND closed_at IS NOT NULL
-                                    AND closed_at <= datetime('now','localtime',?)`)
-          .all(gid, orgOf(gid), `-${days} days`);
+                                    AND closed_at <= datetime('now','localtime',?)
+                                    AND closed_at >= datetime('now','localtime','-30 days')
+                                  ORDER BY closed_at LIMIT 20`)
+          .all(gid, orgOf(gid), `-${d} days`);
         for (const r of rows) {
           const ch = await guild.channels.fetch(r.channel_id).catch(() => null);
           if (ch) await ch.delete('結單超過保留期限，自動清理').catch(() => {});
@@ -104,7 +114,9 @@ async function start() {
       G.seedGifts(id);
       await registerFor(id).catch(e => console.error(`指令註冊失敗 ${g.name}：`, e.message));
     }
-    const activity = getSetting('bot_activity', '☔ 喚雨接單中');
+    // bot_activity 是存在各伺服器底下的設定，優先讀主伺服器那份，再退回全域值
+    const activity = getSetting('bot_activity', '', HOME_GUILD)
+                  || getSetting('bot_activity', '☔ 喚雨接單中');
     try { c.user.setActivity(activity); } catch (e) { console.warn('狀態設定失敗：', e.message); }
     startTitleWatcher(c);
     startTicketCleaner(c);

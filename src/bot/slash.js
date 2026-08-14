@@ -468,6 +468,7 @@ const handlers = {
 
 // 送禮款式自動完成
 async function autocomplete(i) {
+  if (!i.guildId) return i.respond([]);
   const focused = i.options.getFocused(true);
   const q = String(focused?.value || '').toLowerCase().replace(/^@/, '');
 
