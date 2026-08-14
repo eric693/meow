@@ -187,17 +187,17 @@ const handlers = {
   },
 
   // ---------- 日常操作與管理 ----------
-  // !結帳 @老闆 陪玩 原價 [折抵] [支付方式]
+  // !結帳 @老闆 陪玩 原價 [折抵]
   async 結帳(msg, args) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
-    // 第一個 mention／長數字是老闆，其餘依序是 陪玩 原價 折抵 支付方式
+    // 第一個 mention／長數字是老闆，其餘依序是 陪玩 原價 折抵
     // （不能用整串 replace：陪玩若填 Discord ID 會被誤刪）
     const tokens = args.trim().split(/\s+/).filter(Boolean);
     const bossAt = tokens.findIndex(t => /^<@!?\d{15,25}>$/.test(t) || /^\d{15,25}$/.test(t));
     const target = bossAt < 0 ? null : tokens[bossAt].replace(/\D/g, '');
-    const [staffKey, listRaw, discountRaw, ...payParts] = tokens.filter((_, i) => i !== bossAt);
+    const [staffKey, listRaw, discountRaw] = tokens.filter((_, i) => i !== bossAt);
     if (!target || !staffKey || listRaw === undefined)
-      throw new Error('用法：`!結帳 @老闆 陪玩代號 訂單原價 [折抵] [支付方式]`');
+      throw new Error('用法：`!結帳 @老闆 陪玩代號 訂單原價 [折抵]`（支付方式改由按鈕選）');
     const s = findStaff(msg.guild.id, staffKey);
     if (!s) throw new Error(`查無陪玩「${staffKey}」`);
     const list = Number(listRaw);
@@ -205,14 +205,17 @@ const handlers = {
     if (!Number.isFinite(list) || !Number.isFinite(discount)) throw new Error('訂單原價與折抵必須是數字。');
     if (discount > list) throw new Error('折抵金額不可大於訂單原價。');
 
-    const o = M.createOrder({
-      guildId: msg.guild.id, customerId: target, staffId: s.user_id,
-      csId: msg.author.id, csName: msg.author.tag, item: '陪玩服務', qty: 1,
-      unitPrice: list - discount, listPrice: list, amount: list - discount,
-      source: 'ticket', operator: msg.author.tag,
-      payMethod: payParts.join(' ') || '雨幣扣款'
+    // 跟 /結帳 走同一套流程：選券 → 預覽 → 現金／雨幣／取消
+    const CF = require('../util/checkout-flow');
+    const { payload } = CF.start({
+      guildId: msg.guild.id,
+      customerId: target, customerName: msg.mentions.users.first()?.username || '',
+      staffId: s.user_id, staffName: s.name || s.code,
+      csId: msg.author.id, csName: msg.author.tag,
+      item: '陪玩服務', qty: 1, list, manualDiscount: discount,
+      prefix: true   // 前綴指令的流程是公開訊息，成立後不公開拆帳明細
     });
-    await msg.channel.send(checkoutMessage(msg.guild.id, o));
+    await msg.channel.send(payload);
     if (msg.deletable) await msg.delete().catch(() => {});
   },
 

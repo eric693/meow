@@ -488,7 +488,9 @@ async function autocomplete(i) {
       return [s.name, s.code, s.user_id, m?.displayName, m?.user?.username]
         .some(x => String(x || '').toLowerCase().includes(q));
     }).slice(0, 25);
-    return i.respond(hit.map(s => ({ name: label(s), value: s.user_id || s.code })));
+    // 沒綁 Discord 帳號的員工 user_id 不是數字，改回傳代號／藝名，findStaff 才對得到
+    const value = s => (/^\d{15,25}$/.test(String(s.user_id || '')) ? s.user_id : (s.code || s.name || ''));
+    return i.respond(hit.filter(s => value(s)).map(s => ({ name: label(s), value: value(s) })));
   }
 
   const list = G.listGifts(i.guildId)

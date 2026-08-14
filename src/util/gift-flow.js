@@ -59,7 +59,7 @@ function couponPayload(sid, sess) {
       })
     );
   return {
-    content: `🎁 正在為 ${mention(sess.customerId)} 準備送給 ${sess.staffId ? mention(sess.staffId) : sess.staffName}`
+    content: `🎁 正在為 ${mention(sess.customerId)} 準備送給 ${/^\d{15,25}$/.test(String(sess.staffId || '')) ? mention(sess.staffId) : (sess.staffName || sess.staffId)}`
            + ` 的禮物，總額：\`${sess.list}\` 元。\n💰 客戶目前雨幣餘額：\`${coins}\` 雨幣`,
     embeds: [],
     components: [new ActionRowBuilder().addComponents(menu)]

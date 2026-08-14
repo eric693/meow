@@ -1128,14 +1128,19 @@ async function handleInteraction(i) {
       return i.update({ content: '', embeds: [ok(i.guildId, '已取消結帳', '沒有建立任何訂單，折價券也未扣除。')], components: [] });
     }
     if (act === 'pay') {
+      // !結帳 的流程訊息是公開的，拆帳明細不能貼在包廂裡
+      const viaPrefix = !!sess.prefix;
       let r;
       try { r = CF.finish(sid, pay); }
       catch (e) { return i.update({ content: '', embeds: [err(i.guildId, e.message)], components: [] }); }
-      await i.update({
-        content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）\n`
-               + '**[客服專屬機密]** 帳務紀錄已同步至資料庫：',
-        embeds: [r.detail], components: []
-      });
+      await i.update(viaPrefix
+        ? { content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）`
+                   + '\n拆帳明細已備份到財務頻道。', embeds: [], components: [] }
+        : {
+          content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）\n`
+                 + '**[客服專屬機密]** 帳務紀錄已同步至資料庫：',
+          embeds: [r.detail], components: []
+        });
       await i.channel.send(r.message).catch(() => {});
       return backupToFinance(i, r);
       // 同一個包廂可能要結好幾次帳（不同陪玩／同一位老闆多筆），
