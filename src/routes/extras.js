@@ -195,7 +195,10 @@ router.get('/suggestions', (req, res) => {
   }
   if (req.query.from) { cond.push('date(created_at) >= date(?)'); args.push(req.query.from); }
   if (req.query.to) { cond.push('date(created_at) <= date(?)'); args.push(req.query.to); }
-  if (req.query.q) { cond.push('content LIKE ?'); args.push(`%${req.query.q}%`); }
+  if (req.query.q) {
+    cond.push('(content LIKE ? OR name LIKE ?)');
+    args.push(`%${req.query.q}%`, `%${req.query.q}%`);
+  }
   const where = cond.join(' AND ');
   res.json(listed(`SELECT * FROM suggestions WHERE ${where} ORDER BY id DESC`,
                   `SELECT COUNT(*) c FROM suggestions WHERE ${where}`, args, req));

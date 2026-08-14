@@ -53,7 +53,8 @@ ensureColumns('tickets', [
   ['addons',    "TEXT NOT NULL DEFAULT ''"],
   ['publish',   "TEXT NOT NULL DEFAULT 'draft'"],
   ['published_at', 'TEXT'],
-  ['card_channel_id', "TEXT NOT NULL DEFAULT ''"]
+  ['card_channel_id', "TEXT NOT NULL DEFAULT ''"],
+  ['want_rank', "TEXT NOT NULL DEFAULT ''"]
 ]);
 ensureColumns('exams', [
   ['src_guild', "TEXT NOT NULL DEFAULT ''"],
@@ -61,6 +62,7 @@ ensureColumns('exams', [
   ['grade',     "TEXT NOT NULL DEFAULT ''"],
   ['gender',    "TEXT NOT NULL DEFAULT ''"]
 ]);
+ensureColumns('suggestions', [['name', "TEXT NOT NULL DEFAULT ''"]]);
 db.exec(fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8'));
 
 // 舊資料補算原價與淨利（要等 schema 建好表才能跑，全新資料庫也才不會炸）

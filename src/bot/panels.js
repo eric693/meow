@@ -272,8 +272,14 @@ async function sendToChannel(guild, settingKey, payload) {
   if (!id) return false;
   const ch = await guild.channels.fetch(id).catch(() => null);
   if (!ch) return false;
-  await ch.send(payload);
-  return true;
+  // 機器人看不到／不能發言的頻道（Missing Access）不該讓整個互動失敗，回 false 交給呼叫端說明
+  try {
+    await ch.send(payload);
+    return true;
+  } catch (e) {
+    console.warn(`送到 ${settingKey} 失敗：`, e.message);
+    return false;
+  }
 }
 
 /** 建立頻道後若後續動作失敗，把頻道與資料列一起收掉，避免殘留擋住使用者 */
@@ -282,7 +288,7 @@ async function rollbackChannel(channel, table, id) {
   if (table && id) db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
 }
 
-async function createPrivateChannel(guild, member, { prefix, name, categoryKey, extraRoleKeys = [] }) {
+async function createPrivateChannel(guild, member, { prefix, name, categoryKey, extraRoleKeys = [], extraRoleIds = [] }) {
   const parent = getSetting(categoryKey, '', guild.id) || null;
   const overwrites = [
     { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
@@ -300,6 +306,10 @@ async function createPrivateChannel(guild, member, { prefix, name, categoryKey, 
       overwrites.push({ id: rid, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages,
                                          PermissionsBitField.Flags.ReadMessageHistory] });
     }
+  }
+  for (const rid of extraRoleIds.filter(Boolean)) {
+    overwrites.push({ id: rid, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages,
+                                       PermissionsBitField.Flags.ReadMessageHistory] });
   }
   return guild.channels.create({
     name: (name || `${prefix}-${member.user.username}`.toLowerCase()).slice(0, 90),
@@ -346,6 +356,21 @@ const SKIP_CATEGORY = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊',
 const SKIP_ADDON = ['唱歌單曲'];
 // 需求單不問段位的服務（沒有段位可言）
 const SKIP_RANK = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊'];
+// 技術單要老闆指定陪玩定級的服務（可用設定 order_rank_services 覆蓋）
+const DEFAULT_RANK_SERVICES = ['特戰英豪'];
+// 指定定級的選項；限女生時沒有「頂尖賦能」這個定級，所以分成兩份
+// （可用設定 order_want_ranks／order_want_ranks_female 覆蓋）
+const DEFAULT_WANT_RANKS = ['頂尖賦能 (600分以上)', '賦能', '神話', '超凡'];
+const DEFAULT_WANT_RANKS_F = ['賦能', '神話', '超凡'];
+
+/** 依老闆選的性別給定級選項（限女生少一個頂尖賦能） */
+const wantRankOptions = (guildId, gender) =>
+  /限女/.test(String(gender || '')) && !/不限/.test(String(gender || ''))
+    ? optionList(guildId, 'order_want_ranks_female', DEFAULT_WANT_RANKS_F)
+    : optionList(guildId, 'order_want_ranks', DEFAULT_WANT_RANKS);
+
+/** 定級選項可能帶說明（「頂尖賦能 (600分以上)」），比對身分組時只取前面的定級名 */
+const rankKey = r => String(r || '').replace(/[（(].*$/, '').trim();
 // 加購選項可標價，格式「名稱=每局加價」
 const DEFAULT_ADDONS = ['指定/甜蜜=50', '聲優=50', '無=0'];
 // 服務分類（技術／娛樂）
@@ -383,6 +408,27 @@ function askCategoryOrGender(guildId, sid, service) {
   };
 }
 
+/** 技術類的特戰單才要老闆指定陪玩定級 */
+function needWantRank(guildId, d) {
+  const svcs = optionList(guildId, 'order_rank_services', DEFAULT_RANK_SERVICES);
+  return d.category === '技術' && svcs.includes(d.service);
+}
+
+/** 選完（定級）之後：有加購選項就先問加購，沒有就直接進需求單 */
+function askAddonOrModal(i, sid) {
+  const sess = S.get(sid);
+  if (SKIP_ADDON.includes(sess.service)) return i.showModal(finalModal(sid, sess));
+  const addons = addonOptions(i.guildId);
+  return i.update({
+    content: '請選擇附加選項（可複選，沒有需求請選「無」）：',
+    components: [new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(`ord:addon:${sid}`)
+        .setPlaceholder('＋ 選擇附加選項（可複選）')
+        .setMinValues(1).setMaxValues(addons.length)
+        .addOptions(addons.map(a => ({ label: a.label.slice(0, 100), value: a.name.slice(0, 100) }))))]
+  });
+}
+
 /** 需求單表單，欄位依服務類型調整（Discord 上限 5 欄） */
 function finalModal(sid, d) {
   // 「其他遊戲」要先問是哪款、想玩什麼，欄位滿了就不再問段位
@@ -418,6 +464,94 @@ function ticketLabel(guildId, service) {
   return map[service] || (service ? `${service}單` : '娛樂單');
 }
 
+/**
+ * 沒設定 order_role_routes 時的自動配對：直接照身分組名稱挑人。
+ *   唱歌單 → 名稱含「歌手」
+ *   技術單 → 名稱含「賦能／神話／超凡／VAL」，再依性別與指定定級篩選
+ *   其餘（娛樂／語聊／其他）→ 名稱含「娛樂／聲優」，再依性別篩選
+ * 例：娛樂單限女生 → 喚雨娛樂女陪、聲優女陪；技術單限女生神話 → VAL女神話
+ */
+function autoPlayerRoles(guild, t) {
+  const label = ticketLabel(guild.id, t.service);
+  const g = String(t.gender || '');
+  const anyGender = /不限/.test(g);
+  const onlyF = !anyGender && /限女/.test(g);
+  const onlyM = !anyGender && /限男/.test(g);
+  const genderOk = n => (onlyF ? n.includes('女') : onlyM ? n.includes('男') : true);
+
+  const rank = rankKey(t.want_rank);
+  const byRank = n => (!rank || /不限/.test(rank) ? true : n.includes(rank));
+
+  let pick;
+  if (/唱歌|歌手/.test(label + t.service)) pick = n => n.includes('歌手');
+  else if (String(t.subject || '') === '技術')
+    pick = n => /賦能|神話|超凡|VAL|Val|val/.test(n) && genderOk(n) && byRank(n);
+  else pick = n => /娛樂|聲優/.test(n) && genderOk(n);
+
+  return guild.roles.cache
+    .filter(r => !r.managed && r.id !== guild.id && pick(r.name))
+    .map(r => r.id);
+}
+
+/**
+ * 這張單該讓哪些陪玩身分組看到（設定 order_role_routes）。
+ * 每行一條規則：`條件|條件=身分組,身分組`
+ *   條件會逐一去比對這張單的標籤（單別／服務／分類／性別／指定定級），全部命中才算符合；
+ *   `*` 代表不限。身分組可填 ID 或身分組名稱。
+ * 例：
+ *   唱歌單=喚雨歌手
+ *   娛樂|限女生=喚雨娛樂女陪,聲優女陪
+ *   技術|限女生|神話=VAL女神話
+ * 沒有任何規則命中時，退回設定的 role_player（維持舊行為，不會變成沒人看得到）。
+ */
+function routedPlayerRoles(guild, t) {
+  const fallback = getSetting('role_player', '', guild.id).split(',').map(x => x.trim()).filter(Boolean);
+  const raw = getSetting('order_role_routes', '', guild.id);
+  // 沒有自訂規則就用身分組名稱自動配對（歌手／娛樂・聲優／VAL 定級）
+  if (!raw.trim()) {
+    const auto = autoPlayerRoles(guild, t);
+    return auto.length ? auto : fallback;
+  }
+
+  const labels = [ticketLabel(guild.id, t.service), t.service, t.subject, t.gender, rankKey(t.want_rank)]
+    .map(x => String(x || '').trim()).filter(Boolean);
+  const resolve = name => {
+    if (/^\d{5,}$/.test(name)) return name;
+    const clean = name.replace(/^<@&|>$/g, '').replace(/^@/, '');
+    if (/^\d{5,}$/.test(clean)) return clean;
+    const r = guild.roles.cache.find(x => x.name === clean)
+           || guild.roles.cache.find(x => x.name.includes(clean));
+    return r ? r.id : '';
+  };
+
+  const hit = new Set();
+  for (const line of raw.split(/[\n;]+/)) {
+    const idx = line.indexOf('=');
+    if (idx < 0) continue;
+    const conds = line.slice(0, idx).split('|').map(x => x.trim()).filter(Boolean);
+    if (!conds.length) continue;
+    if (!conds.every(c => c === '*' || labels.some(l => l.includes(c)))) continue;
+    for (const name of line.slice(idx + 1).split(',').map(x => x.trim()).filter(Boolean)) {
+      const rid = resolve(name);
+      if (rid) hit.add(rid);
+    }
+  }
+  return hit.size ? [...hit] : fallback;
+}
+
+/**
+ * 考官身分組：後台 role_examiner 可填多個（逗號分隔的 ID 或名稱）；
+ * 沒設就自動抓名稱含「考官」的身分組（技術／娛樂／歌手考官都會涵蓋）。
+ */
+function examinerRoles(guild) {
+  const raw = getSetting('role_examiner', '', guild.id).split(',').map(x => x.trim()).filter(Boolean);
+  if (raw.length) {
+    return raw.map(x => (/^\d{5,}$/.test(x) ? x : guild.roles.cache.find(r => r.name.includes(x))?.id))
+      .filter(Boolean);
+  }
+  return guild.roles.cache.filter(r => !r.managed && r.name.includes('考官')).map(r => r.id);
+}
+
 /** 全店連號的單號 */
 function nextTicketSeq(guildId) {
   const org = orgOf(guildId);
@@ -450,6 +584,7 @@ function draftPayload(guildId, tid) {
       fields: [
         { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
         { name: '老闆段位', value: t.rank || '無', inline: true },
+        { name: '指定定級', value: t.want_rank || '不限', inline: true },
         { name: '附加選項', value: addonText(guildId, t), inline: true },
         { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` },
         { name: '​', value: '⚠️ 尚未發布，陪玩目前還看不到這張單喔！' }
@@ -478,6 +613,7 @@ function publishedPayload(guildId, t) {
       fields: [
         { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
         { name: '老闆段位', value: t.rank || '無', inline: true },
+        { name: '指定定級', value: t.want_rank || '不限', inline: true },
         { name: '附加選項', value: addonText(guildId, t), inline: true },
         { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` },
         { name: '​', value: anon
@@ -501,6 +637,7 @@ function recruitEmbed(guildId, t) {
     fields: [
       { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
       { name: '老闆段位', value: t.rank || '無', inline: true },
+      { name: '指定定級', value: t.want_rank || '不限', inline: true },
       { name: '附加選項', value: addonText(guildId, t), inline: true },
       { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` }
     ]
@@ -581,6 +718,21 @@ function archivedName(channel, t, suffix) {
   return `${base}│${suffix}`.slice(0, 90);
 }
 
+/** 結單後幾天自動刪除頻道（設定 ticket_delete_days，預設 1 天；設 0 為不自動刪） */
+const deleteDays = guildId => getNum('ticket_delete_days', 1, orgOf(guildId));
+
+/** 結單完成卡片：說明保留期限，並附「關閉頻道」讓客服直接收掉 */
+function closedNotice(guildId, tid) {
+  const d = deleteDays(guildId);
+  return {
+    embeds: [ok(guildId, '訂單已結單',
+      '本頻道已移至結單分類並鎖定發言，紀錄保留供日後查閱。'
+      + (d > 0 ? `\n🗑️ 本頻道將於 **${d} 天後自動刪除**，需要提早收掉請按下方按鈕。`
+               : '\n需要收掉頻道請按下方按鈕。'))],
+    components: [row(btn(`tk:del:${tid}`, '關閉頻道', ButtonStyle.Danger, '🗑️'))]
+  };
+}
+
 /** 名片專區刪除前，把裡面的對話整理成存底貼到老闆的訂單頻道 */
 async function archiveCardChannel(guild, t) {
   try {
@@ -651,39 +803,6 @@ async function backupToFinance(i, r) {
   }).catch(() => {});
 }
 
-/** 結帳後：張貼完成卡片、改名為「已結帳」並搬到已結單分類，同時關掉名片專區 */
-async function archiveTicketChannel(i) {
-  const t = db.prepare("SELECT * FROM tickets WHERE guild_id=? AND channel_id=? AND kind='order'")
-    .get(orgOf(i.guildId), i.channelId);
-  if (!t) return;
-  db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), t.id);
-  if (t.card_channel_id) {
-    const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
-    if (cc) {
-      await archiveCardChannel(i.guild, t);
-      await cc.delete().catch(() => {});
-    }
-    db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(t.id);
-  }
-  await i.channel.send({
-    embeds: [emb(i.guildId, {
-      title: '🔴 此訂單已完成 🔴',
-      color: COLOR.err,
-      desc: [
-        '────────────────────',
-        '🚫 請勿在此線後發言及遞交名片',
-        '⚠️ 若老闆或陪玩對訂單有任何問題',
-        '請務必在 **24小時內** 包廂關閉前，聯繫管理員',
-        '────────────────────'
-      ].join('\n')
-    })],
-    components: [row(btn(`ticket:close:${t.id}`, '關閉訂單', ButtonStyle.Danger, '🔒'))]
-  }).catch(() => {});
-  if (i.channel) await i.channel.setName(archivedName(i.channel, t, '已結帳')).catch(() => {});
-  const done = getSetting('category_order_done', '', i.guildId);
-  if (done) await i.channel.setParent(done, { lockPermissions: false }).catch(() => {});
-}
-
 async function handleInteraction(i) {
   if (i.isAutocomplete()) return;
   const id = i.customId || '';
@@ -691,10 +810,12 @@ async function handleInteraction(i) {
   // ---- 身分組領取 ----
   if (id.startsWith('role:')) {
     // 身分大廳的「旅人／寄宿貓貓」與舊的「老闆／雨滴」共用同一套領取邏輯
-    const ROLE_KEY = { 'role:boss': 'role_boss', 'role:traveler': 'role_boss',
-                       'role:cat': 'role_player', 'role:drop': 'role_drop' };
-    const key = ROLE_KEY[id] || 'role_drop';
-    const rid = getSetting(key, '', i.guildId);
+    // 身份大廳可另外設定專屬身分組，沒設就退回老闆／陪玩身分組
+    const ROLE_KEY = { 'role:boss': ['role_boss'], 'role:traveler': ['role_traveler', 'role_boss'],
+                       'role:cat': ['role_cat', 'role_player'], 'role:drop': ['role_drop'] };
+    const keys = ROLE_KEY[id] || ['role_drop'];
+    // 陪玩身分組是逗號分隔的清單，領取只取第一個
+    const rid = keys.map(k => getSetting(k, '', i.guildId).split(',')[0].trim()).find(Boolean) || '';
     if (!rid) return eph(i, err(i.guildId, '管理員尚未在後台設定這個身分組。'));
     const has = i.member.roles.cache.has(rid);
     await (has ? i.member.roles.remove(rid) : i.member.roles.add(rid));
@@ -802,7 +923,8 @@ async function handleInteraction(i) {
     const ch = await createPrivateChannel(i.guild, i.member, {
       name: `📄│${name}報單`,
       categoryKey: 'category_report',
-      extraRoleKeys: ['role_cs', 'role_admin']
+      // 培訓員也要看得到報單頻道（後台設定 role_trainer）
+      extraRoleKeys: ['role_cs', 'role_admin', 'role_trainer']
     });
     try {
       await ch.send({
@@ -997,8 +1119,9 @@ async function handleInteraction(i) {
         embeds: [r.detail], components: []
       });
       await i.channel.send(r.message);
-      await backupToFinance(i, r);
-      return archiveTicketChannel(i);
+      return backupToFinance(i, r);
+      // 同一個包廂可能要結好幾次帳（不同陪玩／同一位老闆多筆），
+      // 所以結帳不再自動結單歸檔，一律由客服按「結單」或關閉訂單
     }
   }
 
@@ -1087,17 +1210,20 @@ async function handleInteraction(i) {
 
     if (step === 'gender') {
       S.update(sid, { gender: i.values[0] });
-      // 沒有加購選項的服務（例：唱歌單）直接進需求單
-      if (SKIP_ADDON.includes(sess.service)) return i.showModal(finalModal(sid, S.get(sid)));
-      const addons = addonOptions(i.guildId);
-      return i.update({
-        content: '請選擇附加選項（可複選，沒有需求請選「無」）：',
-        components: [new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder().setCustomId(`ord:addon:${sid}`)
-            .setPlaceholder('＋ 選擇附加選項（可複選）')
-            .setMinValues(1).setMaxValues(addons.length)
-            .addOptions(addons.map(a => ({ label: a.label.slice(0, 100), value: a.name.slice(0, 100) }))))]
-      });
+      // 技術單（特戰英豪）要再問老闆想指定的陪玩定級，之後才決定給哪些身分組看
+      if (needWantRank(i.guildId, S.get(sid))) {
+        return i.update({
+          content: '請選擇您想指定的陪玩定級：',
+          components: [selectRow(`ord:wrank:${sid}`, '請選擇指定定級',
+            wantRankOptions(i.guildId, i.values[0]))]
+        });
+      }
+      return askAddonOrModal(i, sid);
+    }
+
+    if (step === 'wrank') {
+      S.update(sid, { want_rank: i.values[0] });
+      return askAddonOrModal(i, sid);
     }
 
     if (step === 'addon') {
@@ -1121,10 +1247,11 @@ async function handleInteraction(i) {
       });
       const info = db.prepare(`INSERT INTO tickets
           (guild_id, src_guild, channel_id, customer_id, kind, subject, seq, service, gender,
-           rank, play_at, duration, publish)
-          VALUES (?,?,?,?,'order',?,?,?,?,?,?,?,'draft')`)
+           rank, want_rank, play_at, duration, publish)
+          VALUES (?,?,?,?,'order',?,?,?,?,?,?,?,?,'draft')`)
         .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, sess.service, seq,
-             sess.category || sess.service, sess.gender, f('rank'), f('play_at'), f('duration'));
+             sess.category || sess.service, sess.gender, f('rank'), sess.want_rank || '',
+             f('play_at'), f('duration'));
       if (sess.addons?.length)
         db.prepare('UPDATE tickets SET addons=? WHERE id=?').run(sess.addons.join(','), info.lastInsertRowid);
       const note = [
@@ -1159,6 +1286,14 @@ async function handleInteraction(i) {
     const mine = t.customer_id === i.user.id;
     if (!mine && !isCS(i.member)) return denyEph(i, '只有開單者或客服可以操作這張單。');
 
+    // 結單後手動收掉頻道（不等自動刪除）
+    if (act === 'del') {
+      if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以刪除頻道。');
+      db.prepare("UPDATE tickets SET channel_id='' WHERE id=?").run(tid);
+      await i.reply({ embeds: [ok(i.guildId, '頻道即將關閉', '本頻道將於 5 秒後刪除。')] });
+      return setTimeout(() => i.channel.delete().catch(() => {}), 5000);
+    }
+
     if (act === 'cancel') {
       db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), tid);
       await i.update({ embeds: [ok(i.guildId, '訂單已取消', '頻道將於 5 秒後關閉。')], components: [] });
@@ -1173,7 +1308,8 @@ async function handleInteraction(i) {
       const parent = getSetting(anon ? 'category_order_anon' : 'category_order_public', '', i.guildId);
       if (parent) await i.channel.setParent(parent, { lockPermissions: false }).catch(() => {});
 
-      const playerRoles = getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean);
+      // 只開放給符合這張單需求（單別／性別／指定定級）的陪玩身分組
+      const playerRoles = routedPlayerRoles(i.guild, t);
       const csRole = getSetting('role_cs', '', i.guildId);
       let cardCh = null;
 
@@ -1182,7 +1318,8 @@ async function handleInteraction(i) {
         cardCh = await createPrivateChannel(i.guild, i.member, {
           name: `🎫│${ticketLabel(i.guildId, t.service)}│${t.seq}│名片專區`,
           categoryKey: 'category_order_public',   // 名片專區要讓陪玩看得到，放公開單分類
-          extraRoleKeys: ['role_cs', 'role_admin', 'role_player']
+          extraRoleKeys: ['role_cs', 'role_admin'],
+          extraRoleIds: playerRoles
         });
         db.prepare('UPDATE tickets SET card_channel_id=? WHERE id=?').run(cardCh.id, tid);
       } else {
@@ -1274,6 +1411,7 @@ async function handleInteraction(i) {
             if (rid) await boss.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
           }
           await boss.setName(archivedName(boss, t, '已結單')).catch(() => {});
+          await boss.send(closedNotice(i.guildId, tid)).catch(() => {});
         }
       }
       const msg = act === 'end'
@@ -1351,8 +1489,7 @@ async function handleInteraction(i) {
     }
     if (i.channel) await i.channel.setName(archivedName(i.channel, t, '已結單')).catch(() => {});
 
-    return i.reply({ embeds: [ok(i.guildId, '訂單已結單',
-      '本頻道已移至結單分類並鎖定發言，紀錄保留供日後查閱。')] });
+    return i.reply(closedNotice(i.guildId, tid));
   }
 
   // ---- 考核入職 ----
@@ -1370,7 +1507,8 @@ async function handleInteraction(i) {
     const ch = await createPrivateChannel(i.guild, i.member, {
       name: `📝│考核單│${i.user.username}`,
       categoryKey: 'category_exam',
-      extraRoleKeys: ['role_admin', 'role_cs']
+      extraRoleKeys: ['role_admin', 'role_cs'],
+      extraRoleIds: examinerRoles(i.guild)   // 所有考官身分組都看得到
     });
     const info = db.prepare(`INSERT INTO exams (guild_id, src_guild, user_id, nickname, subject, grade, gender, channel_id)
                 VALUES (?,?,?,?,?,?,?,?)`)
@@ -1417,23 +1555,34 @@ async function handleInteraction(i) {
     const kind = id.split(':')[1];
     return i.showModal(new ModalBuilder().setCustomId(`sugm:${kind}`)
       .setTitle(kind === 'staff' ? '員工輔導室' : '意見投訴與建議箱')
-      .addComponents(input('content', '內容', { style: TextInputStyle.Paragraph, ph: '請詳細描述…' })));
+      .addComponents(
+        input('name', '填表人（可留空，留空為匿名）', { required: false, ph: '想具名再填，留空就是匿名用戶' }),
+        input('content', '回饋內容', { style: TextInputStyle.Paragraph, ph: '請詳細描述…' })));
   }
   if (id.startsWith('sugm:')) {
     const kind = id.split(':')[1];
     const content = i.fields.getTextInputValue('content').trim();
-    db.prepare('INSERT INTO suggestions (guild_id, user_id, kind, content) VALUES (?,?,?,?)')
-      .run(orgOf(i.guildId), i.user.id, kind, content);
+    // 填表人留空就是匿名，後台與通知都顯示「匿名用戶」
+    const name = (i.fields.getTextInputValue('name') || '').trim();
+    db.prepare('INSERT INTO suggestions (guild_id, user_id, kind, name, content) VALUES (?,?,?,?,?)')
+      .run(orgOf(i.guildId), i.user.id, kind, name, content);
     const sent = await sendToChannel(i.guild, kind === 'staff' ? 'channel_staff_box' : 'channel_suggestion', {
       embeds: [emb(i.guildId, {
-        title: kind === 'staff' ? '🧑‍💼 員工輔導室來信' : '📮 新的意見投稿',
-        desc: content,
+        title: kind === 'staff' ? '🧑‍💼 員工輔導室來信' : '📬 意見箱新回饋',
         color: COLOR.warn,
-        footer: `來自 ${i.user.tag}`
+        fields: [
+          { name: '填表人', value: name || '匿名用戶' },
+          { name: '回饋內容', value: content.slice(0, 1000) }
+        ]
       })]
     });
-    return eph(i, ok(i.guildId, '已送出', sent ? '管理層會盡快處理，謝謝你的回饋 💜'
-      : '已記錄到後台（管理員尚未設定接收頻道）。'));
+    const boxKey = kind === 'staff' ? 'channel_staff_box' : 'channel_suggestion';
+    const configured = !!getSetting(boxKey, '', i.guildId);
+    return eph(i, ok(i.guildId, '已送出',
+      sent ? '管理層會盡快處理，謝謝你的回饋 💜'
+        : configured
+          ? '已記錄到後台，但機器人送不進接收頻道（請管理員確認它有該頻道的「檢視頻道」與「發送訊息」權限）。'
+          : '已記錄到後台（管理員尚未設定接收頻道）。'));
   }
 
   // ---- 投票 ----

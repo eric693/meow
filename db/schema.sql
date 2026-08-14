@@ -227,6 +227,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   service     TEXT NOT NULL DEFAULT '',       -- 服務類型（特戰英豪／唱歌單曲…）
   gender      TEXT NOT NULL DEFAULT '',       -- 偏好性別
   rank        TEXT NOT NULL DEFAULT '',       -- 老闆目前段位
+  want_rank   TEXT NOT NULL DEFAULT '',       -- 指定陪玩定級（技術單用）
   play_at     TEXT NOT NULL DEFAULT '',       -- 希望時段
   duration    TEXT NOT NULL DEFAULT '',       -- 預計時長
   addons      TEXT NOT NULL DEFAULT '',       -- 附加選項（逗號分隔）
@@ -280,6 +281,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   guild_id   TEXT NOT NULL,
   user_id    TEXT NOT NULL DEFAULT '',
   kind       TEXT NOT NULL DEFAULT 'public',  -- public 意見投訴 / staff 員工輔導室
+  name       TEXT NOT NULL DEFAULT '',        -- 填表人（選填，留空顯示匿名用戶）
   content    TEXT NOT NULL,
   handled    INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))

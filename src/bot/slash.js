@@ -473,7 +473,28 @@ const handlers = {
 
 // 送禮款式自動完成
 async function autocomplete(i) {
-  const q = (i.options.getFocused() || '').toLowerCase();
+  const focused = i.options.getFocused(true);
+  const q = String(focused?.value || '').toLowerCase().replace(/^@/, '');
+
+  // 陪玩欄位：用代號／藝名／Discord 名稱直接搜尋在職陪玩，不必先打 @
+  if (focused?.name === '陪玩') {
+    const rows = db.prepare(`SELECT * FROM staff WHERE guild_id=? ORDER BY active DESC, name`)
+      .all(orgOf(i.guildId));
+    const label = s => {
+      const m = i.guild?.members?.cache.get(s.user_id);
+      const dc = m ? (m.displayName || m.user.username) : '';
+      return [s.name || s.code, s.code && s.code !== s.name ? `(${s.code})` : '', dc ? `・${dc}` : '',
+              s.active ? '' : '（已離職）'].filter(Boolean).join(' ').slice(0, 100);
+    };
+    const hit = rows.filter(s => {
+      if (!q) return true;
+      const m = i.guild?.members?.cache.get(s.user_id);
+      return [s.name, s.code, s.user_id, m?.displayName, m?.user?.username]
+        .some(x => String(x || '').toLowerCase().includes(q));
+    }).slice(0, 25);
+    return i.respond(hit.map(s => ({ name: label(s), value: s.user_id || s.code })));
+  }
+
   const list = G.listGifts(i.guildId)
     .filter(g => !q || g.name.toLowerCase().includes(q) || g.key.includes(q))
     .slice(0, 25)

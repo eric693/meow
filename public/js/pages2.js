@@ -272,8 +272,9 @@ Pages.polls = async view => {
   ]);
   const sgF = mk('public'), stF = mk('staff');
 
-  const sugTable = rows => H.table(['時間', '投稿人', '內容', '狀態', '操作'],
-    rows.map(s => `<tr><td>${H.date(s.created_at)}</td><td>${H.user(s.user_id)}</td>
+  const sugTable = rows => H.table(['時間', '填表人', '回饋內容', '狀態', '操作'],
+    rows.map(s => `<tr><td>${H.date(s.created_at)}</td>
+      <td>${s.name ? UI.esc(s.name) : '<span class="muted">匿名用戶</span>'}</td>
       <td style="white-space:normal;max-width:460px">${UI.esc(s.content)}</td>
       <td>${s.handled ? '<span class="tag ok">已處理</span>' : '<span class="tag warn">待處理</span>'}</td>
       <td><button class="btn sm" data-sh="${s.id}" data-v="${s.handled ? 0 : 1}">${s.handled ? '標記未處理' : '標記已處理'}</button></td></tr>`),
@@ -639,6 +640,10 @@ Pages.settings = async view => {
         <label class="f"><span>陪玩身分組</span><select name="role_player">${opts(res.roles, v.role_player)}</select></label>
         <label class="f"><span>老闆身分組（!sendrole 領取）</span><select name="role_boss">${opts(res.roles, v.role_boss)}</select></label>
         <label class="f"><span>雨滴通知身分組</span><select name="role_drop">${opts(res.roles, v.role_drop)}</select></label>
+        <label class="f"><span>旅人身分組（身份大廳，未設用老闆身分組）</span><select name="role_traveler">${opts(res.roles, v.role_traveler)}</select></label>
+        <label class="f"><span>寄宿貓貓身分組（身份大廳，未設用陪玩身分組）</span><select name="role_cat">${opts(res.roles, v.role_cat)}</select></label>
+        <label class="f"><span>培訓員身分組（可看報單頻道）</span><select name="role_trainer">${opts(res.roles, v.role_trainer)}</select></label>
+        <label class="f"><span>考官身分組（可多個，逗號分隔；留空自動抓名稱含「考官」的身分組）</span><input name="role_examiner" value="${UI.esc(v.role_examiner || '')}" placeholder="喚雨技術考官,喚雨娛樂考官,喚雨歌手考官"></label>
       </div>
     </div>
     <div class="card"><h3>頻道與分類</h3>
@@ -698,7 +703,13 @@ Pages.settings = async view => {
         <label class="f"><span>開單冷卻秒數（0＝不限）</span><input name="order_cooldown_sec" type="number" value="${UI.esc(v.order_cooldown_sec || '30')}"></label>
         <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '100')}"></label>
         <label class="f"><span>高薪陪玩門檻（!業績查詢）</span><input name="high_income_threshold" type="number" value="${UI.esc(v.high_income_threshold || '20000')}"></label>
+        <label class="f"><span>要問指定定級的服務</span><input name="order_rank_services" value="${UI.esc(v.order_rank_services || '')}" placeholder="特戰英豪"></label>
+        <label class="f"><span>指定定級選項（男／不限）</span><input name="order_want_ranks" value="${UI.esc(v.order_want_ranks || '')}" placeholder="頂尖賦能 (600分以上),賦能,神話,超凡"></label>
+        <label class="f"><span>指定定級選項（限女生）</span><input name="order_want_ranks_female" value="${UI.esc(v.order_want_ranks_female || '')}" placeholder="賦能,神話,超凡"></label>
+        <label class="f"><span>結單後幾天刪頻道（0＝不刪）</span><input name="ticket_delete_days" type="number" value="${UI.esc(v.ticket_delete_days || '1')}"></label>
       </div>
+      <label class="f"><span>陪玩身分組分流規則（一行一條：條件|條件=身分組,身分組；留空為自動依身分組名稱配對）</span>
+        <textarea name="order_role_routes" rows="4" placeholder="唱歌單=喚雨歌手&#10;娛樂|限女生=喚雨娛樂女陪,聲優女陪&#10;技術|限女生|神話=VAL女神話">${UI.esc(v.order_role_routes || '')}</textarea></label>
       ${res.roles.length ? '' : '<div class="muted">機器人目前離線或尚未加入伺服器，因此無法列出身分組與頻道。</div>'}
     </div>
     <div class="card"><button class="btn" id="save">儲存設定</button></div>

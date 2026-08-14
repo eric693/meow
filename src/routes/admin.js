@@ -43,6 +43,8 @@ const ORG_KEYS = ['brand_name', 'staff_share_rate', 'gift_share_rate', 'vip_thre
 const GUILD_KEYS = [
   'bot_activity',
   'role_admin', 'role_cs', 'role_player', 'role_boss', 'role_drop',
+  // 身份大廳（旅人／寄宿貓貓）領取用；沒設就退回老闆／陪玩身分組
+  'role_traveler', 'role_cat', 'role_trainer', 'role_examiner',
   'category_ticket', 'category_exam', 'category_report',
   'category_order_done', 'category_order_public', 'category_order_anon', 'category_order_closed',
   'channel_order_log', 'channel_suggestion', 'channel_staff_box',
@@ -59,7 +61,11 @@ const GUILD_KEYS = [
   'channel_voice_hub', 'category_voice',
   // 下單選單選項（逗號分隔）
   'order_genders', 'order_services', 'order_categories', 'order_addons',
-  'order_type_labels', 'ticket_seq_start', 'order_max_open', 'order_cooldown_sec'
+  'order_type_labels', 'ticket_seq_start', 'order_max_open', 'order_cooldown_sec',
+  // 技術單定級與陪玩身分組分流
+  'order_rank_services', 'order_want_ranks', 'order_want_ranks_female', 'order_role_routes',
+  // 結單頻道幾天後自動刪除
+  'ticket_delete_days'
 ];
 const SETTING_KEYS = [...ORG_KEYS, ...GUILD_KEYS];
 

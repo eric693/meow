@@ -56,6 +56,32 @@ function startTitleWatcher(c) {
   setInterval(tick, 60 * 1000);
 }
 
+/** 結單頻道自動清理：結單滿 N 天（設定 ticket_delete_days，預設 1）就把頻道刪掉 */
+function startTicketCleaner(c) {
+  const { getNum } = require('../db');
+  const tick = async () => {
+    for (const [gid, guild] of c.guilds.cache) {
+      try {
+        const days = getNum('ticket_delete_days', 1, orgOf(gid));
+        if (days <= 0) continue;
+        const rows = db.prepare(`SELECT id, channel_id FROM tickets
+                                  WHERE (src_guild=? OR (src_guild='' AND guild_id=?))
+                                    AND status='closed' AND channel_id!=''
+                                    AND closed_at IS NOT NULL
+                                    AND closed_at <= datetime('now','localtime',?)`)
+          .all(gid, orgOf(gid), `-${days} days`);
+        for (const r of rows) {
+          const ch = await guild.channels.fetch(r.channel_id).catch(() => null);
+          if (ch) await ch.delete('結單超過保留期限，自動清理').catch(() => {});
+          db.prepare("UPDATE tickets SET channel_id='' WHERE id=?").run(r.id);
+        }
+      } catch (e) { console.error('結單頻道清理失敗：', e.message); }
+    }
+  };
+  tick();
+  setInterval(tick, 10 * 60 * 1000);
+}
+
 /** 重新整理人事名單（!刷新人事） */
 function refreshRoster(guildId) {
   const r = db.prepare(`SELECT kind, COUNT(*) c FROM staff WHERE guild_id=? AND active=1 GROUP BY kind`).all(orgOf(guildId));
@@ -81,6 +107,7 @@ async function start() {
     const activity = getSetting('bot_activity', '☔ 喚雨接單中');
     try { c.user.setActivity(activity); } catch (e) { console.warn('狀態設定失敗：', e.message); }
     startTitleWatcher(c);
+    startTicketCleaner(c);
   });
 
   client.on(Events.GuildCreate, async g => {

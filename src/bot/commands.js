@@ -11,7 +11,7 @@ const commands = [
   // ---- 財務與結帳 ----
   b('結帳', '一般結帳：選折價券與付款方式，計算拆帳與親密度並發布結帳明細')
     .addUserOption(o => o.setName('客人').setDescription('請標記金主').setRequired(true))
-    .addStringOption(o => o.setName('陪玩').setDescription('請標記服務陪玩').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true))
     .addIntegerOption(o => o.setName('金額').setDescription('客人實付金額').setRequired(true).setMinValue(1))
     .addIntegerOption(o => o.setName('原價').setDescription('未折扣前的訂單原價，不填視為與實付相同').setMinValue(0))
     .addStringOption(o => o.setName('項目').setDescription('例：娛樂4場、唱歌2小時'))
@@ -19,7 +19,7 @@ const commands = [
 
   b('身分組結帳', '身分組專屬結帳（如獨顯-週／獨顯-月），完成後免核銷')
     .addUserOption(o => o.setName('客人').setDescription('付款的老闆').setRequired(true))
-    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName('項目').setDescription('例：獨顯-週、獨顯-月').setRequired(true))
     .addIntegerOption(o => o.setName('單價').setDescription('單份金額').setRequired(true).setMinValue(1))
     .addIntegerOption(o => o.setName('數量').setDescription('預設 1').setMinValue(1))
@@ -42,7 +42,7 @@ const commands = [
     .addStringOption(o => o.setName('原因').setDescription('例：重複儲值更正')),
 
   b('提領', '發放薪資給陪玩，並從其可提領帳戶中扣除')
-    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true))
     .addIntegerOption(o => o.setName('金額').setDescription('發放金額').setRequired(true).setMinValue(1))
     .addStringOption(o => o.setName('備註').setDescription('例：匯款帳號末五碼')),
 
@@ -53,7 +53,7 @@ const commands = [
 
   b('補單', '於底層帳本補登歷史紀錄（不影響實際雨幣餘額）')
     .addUserOption(o => o.setName('客人').setDescription('老闆').setRequired(true))
-    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true))
     .addIntegerOption(o => o.setName('金額').setDescription('補登金額').setRequired(true).setMinValue(1))
     .addStringOption(o => o.setName('項目').setDescription('例：娛樂4場'))
     .addStringOption(o => o.setName('日期').setDescription('YYYY-MM-DD，不填視為今天'))
@@ -78,10 +78,10 @@ const commands = [
   // ---- 查詢與報表 ----
   b('對帳', '查詢特定老闆在特定陪玩身上的累計消費金額與次數')
     .addUserOption(o => o.setName('客人').setDescription('老闆').setRequired(true))
-    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true)),
+    .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true)),
 
   b('陪玩業績詳報', '【管理專屬】查詢某位陪玩師的金主分布與總業績')
-    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true)),
+    .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true)),
 
   // ---- 互動與福利 ----
   b('送禮', '發送禮物，選擇付款方式並計算親密度')
@@ -91,12 +91,12 @@ const commands = [
     .addIntegerOption(o => o.setName('數量').setDescription('預設 1').setMinValue(1)),
 
   b('愛戀查詢', '查詢老闆與陪玩的親密羈絆點數與特權進度')
-    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true))
     .addUserOption(o => o.setName('客人').setDescription('不填則查自己')),
 
   b('親密調整', '強制調整某對 CP 的親密度（歸零時同步清除歷史禮物紀錄）')
     .addUserOption(o => o.setName('客人').setDescription('老闆').setRequired(true))
-    .addStringOption(o => o.setName('陪玩').setDescription('陪玩代號／藝名／@提及').setRequired(true))
+    .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true))
     .addIntegerOption(o => o.setName('點數').setDescription('正數增加、負數減少；設 0 請用 -999999').setRequired(true)),
 
   b('vip等級', '手動強制設定老闆的 VIP 等級（0~7）')
