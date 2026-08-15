@@ -162,7 +162,7 @@ const PANELS = {
   'setup-report-cross': {
     label: '跨伺服器報單 1 號',
     build: guildId => ({
-      embeds: [emb(guildId, { title: '📄 跨伺服器報單中心', desc: '陪玩專用：請點擊下方按鈕填寫報單資料！' })],
+      embeds: [emb(guildId, { title: '📄 跨伺服器報單中心', desc: '陪玩專用：請先向客服拿訂單編號（ORD-XXXXXXXX），再點下方按鈕填寫報單資料！' })],
       components: [row(btn('report:cross', '填寫報單', ButtonStyle.Primary, '📄'))]
     })
   },
@@ -705,13 +705,13 @@ function reportModal(kind) {
       input('song_names', '歌名', { style: TextInputStyle.Paragraph, ph: '一行一首' })
     );
   }
-  // 跨服單沒有主群結帳流程，報單當下才建帳
+  // 跨服單一樣認領主群已結帳的訂單，金額以結帳時登記的為準，陪玩不用自己填單價
   return m.addComponents(
+    input('order_no', '訂單編號（ORD-XXXXXXXX）', { ph: '結帳時客服提供' }),
     input('boss_dc', '老闆 dc', { ph: '例：tsuki_.32' }),
     input('customer', '老闆 id', { ph: '例：tsuki_.32 或 123456789012345678' }),
     input('staff', '陪玩 id', { ph: '例：一坨羊毛毛#0712 或 R01' }),
-    input('slots', '報單場次／小時', { ph: '例：娛樂4場' }),
-    input('price', '單價（雨幣）', { ph: '例：300' })
+    input('slots', '報單場次／小時', { ph: '例：娛樂4場' })
   );
 }
 
@@ -1032,7 +1032,7 @@ async function handleInteraction(i) {
     const panel = await ch.send({
       embeds: [emb(i.guildId, {
         title: '📄 跨伺服器報單中心',
-        desc: '陪玩專用：請點擊下方按鈕填寫報單資料！'
+        desc: '陪玩專用：請先向客服拿訂單編號（ORD-XXXXXXXX），再點下方按鈕填寫報單資料！'
       })],
       components: [row(btn('reportform:self', '填寫報單', ButtonStyle.Primary, '📄'))]
     });
@@ -1088,25 +1088,13 @@ async function handleInteraction(i) {
 
     let o;
     try {
-      if (kind === 'self') {
-        // 唯一的限制：這張訂單只有結帳時登記的那位陪玩本人能報
-        const exist = M.getOrder(i.guildId, f('order_no'));
-        if (exist && exist.staff_id && exist.staff_id !== i.user.id)
-          return eph(i, err(i.guildId,
-            `訂單 ${exist.order_no} 的服務陪玩是 <@${exist.staff_id}>，只有本人可以報這張單。`));
-        o = M.reportOrder(i.guildId, f('order_no'), { reporterId: i.user.id, item, qty });
-      } else {
-        const price = Number(f('price'));
-        if (!Number.isFinite(qty) || !Number.isFinite(price))
-          return eph(i, err(i.guildId, '場次與單價必須含數字。'));
-        // 跨服單當下才建帳，分潤要有對象：對不到就算在報單者自己頭上
-        o = M.createOrder({
-          guildId: i.guildId, customerId, customerName: f('boss_dc') || customerRaw,
-          staffId: staff ? staff.user_id : i.user.id,
-          csId: isCS(i.member) ? i.user.id : '', item, qty, unitPrice: price,
-          source: kind, operator: i.user.tag
-        });
-      }
+      // 自主單與跨服單都是認領主群已結帳的訂單
+      // 唯一的限制：這張訂單只有結帳時登記的那位陪玩本人能報
+      const exist = M.getOrder(i.guildId, f('order_no'));
+      if (exist && exist.staff_id && exist.staff_id !== i.user.id)
+        return eph(i, err(i.guildId,
+          `訂單 ${exist.order_no} 的服務陪玩是 <@${exist.staff_id}>，只有本人可以報這張單。`));
+      o = M.reportOrder(i.guildId, f('order_no'), { reporterId: i.user.id, item, qty });
     } catch (e) { return eph(i, err(i.guildId, e.message)); }
 
     // 陪玩以訂單上登記的為準（手填的只是參考，填錯不該蓋掉正確資料也不該 tag 錯人）
