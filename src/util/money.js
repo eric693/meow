@@ -28,6 +28,7 @@ const intimacyRate = guildId => getNum('order_intimacy_rate', 100, orgOf(guildId
  * 建立一筆交易（報單／送禮／身分組結帳）。
  * 老闆雨幣即時扣款，陪玩抽成先進「暫存薪水」，核銷後才轉可提領。
  * listPrice 是訂單原價、amount 是實收金額（可折扣）；未指定則兩者相同。
+ * 折扣由伺服器吸收：陪玩抽成以原價計算，淨利＝實收－抽成（折太多會是負的）。
  */
 function createOrder({
   guildId, customerId, customerName = '', staffId, staffName = '', csId = '', csName = '',
@@ -48,8 +49,9 @@ function createOrder({
   // 匯入歷史資料與財務調整允許 0 元紀錄；日常開單則不允許
   if (paid === 0 && !skipWallet && !allowZero) throw new Error('實收金額不可為 0');
   const list = Math.round(listPrice == null ? paid : Number(listPrice));
+  // 折扣一律由伺服器吸收：陪玩抽成固定以「訂單原價」計算，不受折價券或 VIP 折扣影響
   const share = !staffId ? 0
-    : Math.round(staffShare == null ? paid * shareRate(guildId) / 100 : Number(staffShare));
+    : Math.round(staffShare == null ? list * shareRate(guildId) / 100 : Number(staffShare));
   const net = paid - share;
   // 一般訂單與身分組結帳會累積羈絆；送禮由 gifts.sendGift 另外計算，這裡傳 0
   const bond = Math.round(intimacy == null
