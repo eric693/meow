@@ -22,8 +22,9 @@ const N = v => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) 
 const who = req => req.user.name || req.user.username;
 
 /** 篩選條件 → WHERE 片段，列表／統計／匯出共用 */
-function where(req) {
-  const q = req.query;
+function where(req, skip = []) {
+  const q = { ...req.query };
+  for (const k of skip) delete q[k];
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (S(q.status) && STATUS[q.status]) { cond.push('status = ?'); args.push(q.status); }
   if (S(q.category) && CATEGORIES[q.category]) { cond.push('category = ?'); args.push(q.category); }
@@ -87,12 +88,14 @@ router.get('/payroll/stats', (req, res) => {
     const x = new Date(d.getFullYear(), d.getMonth() - i, 1);
     list.push(x.toLocaleDateString('sv-SE').slice(0, 7));
   }
+  // 月份趨勢固定看全區間，不受「歸屬月份」篩選影響，否則只會剩一根柱子
+  const wm = where(req, ['period']);
   const byPeriod = db.prepare(`
     SELECT period,
            SUM(CASE WHEN status='unpaid' THEN amount ELSE 0 END) unpaid,
            SUM(CASE WHEN status='paid'   THEN amount ELSE 0 END) paid,
            COUNT(*) cnt
-      FROM payroll_entries WHERE ${w.sql} AND period != '' GROUP BY period`).all(...w.args);
+      FROM payroll_entries WHERE ${wm.sql} AND period != '' GROUP BY period`).all(...wm.args);
   const map = new Map(byPeriod.map(r => [r.period, r]));
   const monthly = list.map(p => {
     const r = map.get(p) || {};

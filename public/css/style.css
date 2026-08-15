@@ -197,3 +197,6 @@ label.f > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 .table-wrap table.has-actions thead th:last-child { z-index: 3; }
 .table-wrap table.has-actions tbody tr:hover td:last-child { background: var(--panel-2, var(--panel)); }
 .table-wrap { position: relative; }
+
+/* 記帳頁的月份快選：選中的按鈕反白 */
+.btn.secondary.sel { background: var(--brand); border-color: var(--brand); color: #fff; }

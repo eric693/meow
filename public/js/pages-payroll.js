@@ -21,6 +21,23 @@ Pages.payroll = async view => {
     { id: 'max_amount', label: '金額 ≤', type: 'number' }
   ];
 
+  // 近 12 個月的快選按鈕
+  const monthChoices = () => {
+    const out = [], d = new Date();
+    for (let i = 0; i < 12; i++) out.push(new Date(d.getFullYear(), d.getMonth() - i, 1).toLocaleDateString('sv-SE').slice(0, 7));
+    return out;
+  };
+  /** 月份快選、篩選列的「歸屬月份」共用同一個值 */
+  const setMonth = m => {
+    const el = document.getElementById('pr_period');
+    if (el) el.value = m || '';
+    const pm = document.getElementById('pmon');
+    if (pm) pm.value = m || '';
+    view.querySelectorAll('[data-mon]').forEach(b => b.classList.toggle('sel', b.dataset.mon === (m || '')));
+    ST.offset = 0;
+    refresh();
+  };
+
   const catLabel = k => (META.categories.find(c => c.key === k) || {}).label || k;
   const today = () => new Date().toLocaleDateString('sv-SE');
   const overdue = r => r.status === 'unpaid' && r.due_date && r.due_date < today();
@@ -158,6 +175,12 @@ Pages.payroll = async view => {
         <div class="muted" style="font-size:12.5px">登錄還沒發出去的薪資、獎金、補貼與代墊款，發放後標記起來就好</div></div>
       <div class="fit"><button class="btn secondary" id="pbatch">批次標記已發放</button></div>
       <div class="fit"><button class="btn" id="padd">＋ 新增記帳</button></div>
+    </div>
+    <div class="row" style="margin-top:10px;align-items:center;flex-wrap:wrap;gap:8px">
+      <span class="muted" style="font-size:12.5px">選擇月份</span>
+      <div class="fit"><button class="btn secondary sm" data-mon="">全部</button></div>
+      ${monthChoices().map(m => `<div class="fit"><button class="btn secondary sm" data-mon="${m}">${m.slice(2)}</button></div>`).join('')}
+      <div class="fit"><input type="month" id="pmon" style="width:auto"></div>
     </div></div>
     <div class="grid c4" id="psum"></div>
     <div id="pcharts"><div class="card"><div class="empty">圖表載入中…</div></div></div>
@@ -165,6 +188,16 @@ Pages.payroll = async view => {
     <div class="card" id="ptable"><div class="empty">載入中…</div></div>`;
 
   const bind = H.bindFilters('pr', F, () => refresh(), ST, { exportPath: '/exports/payroll' });
+
+  view.querySelectorAll('[data-mon]').forEach(b => b.onclick = () => setMonth(b.dataset.mon));
+  document.getElementById('pmon').onchange = e => setMonth(e.target.value);
+  // 從篩選列改月份時，上面的快選按鈕也要跟著亮
+  const periodInput = document.getElementById('pr_period');
+  if (periodInput) periodInput.addEventListener('change', () => {
+    const m = periodInput.value || '';
+    document.getElementById('pmon').value = m;
+    view.querySelectorAll('[data-mon]').forEach(b => b.classList.toggle('sel', b.dataset.mon === m));
+  });
 
   document.getElementById('padd').onclick = () => openForm();
   document.getElementById('pbatch').onclick = async () => {
@@ -176,5 +209,6 @@ Pages.payroll = async view => {
     refresh();
   };
 
-  await refresh();
+  // 進頁面時把記住的篩選月份同步到快選列
+  setMonth((H.savedFilters('pr').period) || '');
 };
