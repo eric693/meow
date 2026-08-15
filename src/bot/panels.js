@@ -502,6 +502,8 @@ function ticketLabel(guildId, service) {
  */
 function autoPlayerRoles(guild, t) {
   const label = ticketLabel(guild.id, t.service);
+  // 資料表裡 subject 存服務、service 存分類（技術／娛樂），兩邊都比對才不會漏
+  const isTech = [t.service, t.subject, label].some(x => String(x || '').includes('技術'));
   const g = String(t.gender || '');
   const anyGender = /不限/.test(g);
   const onlyF = !anyGender && /限女/.test(g);
@@ -513,7 +515,7 @@ function autoPlayerRoles(guild, t) {
 
   let pick;
   if (/唱歌|歌手/.test(label + t.service)) pick = n => n.includes('歌手');
-  else if (String(t.subject || '') === '技術')
+  else if (isTech)
     pick = n => /賦能|神話|超凡|VAL|Val|val/.test(n) && genderOk(n) && byRank(n);
   else pick = n => /娛樂|聲優/.test(n) && genderOk(n);
 
@@ -526,11 +528,13 @@ function autoPlayerRoles(guild, t) {
  * 這張單該讓哪些陪玩身分組看到（設定 order_role_routes）。
  * 每行一條規則：`條件|條件=身分組,身分組`
  *   條件會逐一去比對這張單的標籤（單別／服務／分類／性別／指定定級），全部命中才算符合；
- *   `*` 代表不限。身分組可填 ID 或身分組名稱。
+ *   `*` 代表不限，`!條件` 代表排除（命中就不算符合，用來區分「賦能」與「頂尖賦能」）。
+ *   身分組可填 ID 或身分組名稱。
  * 例：
  *   唱歌單=喚雨歌手
- *   娛樂|限女生=喚雨娛樂女陪,聲優女陪
- *   技術|限女生|神話=VAL女神話
+ *   娛樂|!技術|限女生=喚雨娛樂女陪,聲優女陪
+ *   技術|限男生|賦能|!頂尖=VAL男頂尖賦能,VAL男賦能
+ *   技術|限女生|神話=VAL女賦能,VAL女神話
  * 沒有任何規則命中時，退回設定的 role_player（維持舊行為，不會變成沒人看得到）。
  */
 function routedPlayerRoles(guild, t) {
@@ -559,7 +563,13 @@ function routedPlayerRoles(guild, t) {
     if (idx < 0) continue;
     const conds = line.slice(0, idx).split('|').map(x => x.trim()).filter(Boolean);
     if (!conds.length) continue;
-    if (!conds.every(c => c === '*' || labels.some(l => l.includes(c)))) continue;
+    const ok = conds.every(c => {
+      if (c === '*') return true;
+      // 「!條件」代表排除：這張單只要有標籤命中就不算符合
+      if (c.startsWith('!')) return !labels.some(l => l.includes(c.slice(1)));
+      return labels.some(l => l.includes(c));
+    });
+    if (!ok) continue;
     for (const name of line.slice(idx + 1).split(',').map(x => x.trim()).filter(Boolean)) {
       const rid = resolve(name);
       if (rid) hit.add(rid);

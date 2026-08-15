@@ -41,12 +41,15 @@ function startTitleWatcher(c) {
         const ch = chId ? await guild.channels.fetch(chId).catch(() => null) : null;
         // 同一個集團的多台伺服器只由設有播報頻道的那台發，避免重複提醒
         if (!ch) continue;
+        // 提醒時一併標客服（後台 role_cs，可填多個），沒設就只發嵌入訊息
+        const cs = getSetting('role_cs', '', gid).split(',').map(x => x.trim()).filter(Boolean)
+          .map(x => `<@&${x.replace(/^<@&|>$/g, '')}>`).join(' ');
         for (const t of started) {
-          await ch.send({ embeds: [emb(gid, { title: `🟢 ${T.KINDS[t.kind]}開始`, desc: T.titleBlock(t) })] })
+          await ch.send({ content: cs || undefined, embeds: [emb(gid, { title: `🟢 ${T.KINDS[t.kind]}開始`, desc: T.titleBlock(t) })] })
             .then(() => T.markStarted(t.id)).catch(() => {});
         }
         for (const t of ended) {
-          await ch.send({ embeds: [emb(gid, { title: `⏰ ${T.KINDS[t.kind]}到期`, desc: T.titleBlock(t) })] })
+          await ch.send({ content: cs || undefined, embeds: [emb(gid, { title: `⏰ ${T.KINDS[t.kind]}到期`, desc: T.titleBlock(t) })] })
             .then(() => T.markEnded(t.id)).catch(() => {});
         }
       } catch (e) { console.error('冠名提醒失敗：', e.message); }

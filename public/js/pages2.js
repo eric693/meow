@@ -762,8 +762,8 @@ Pages.settings = async view => {
         <label class="f"><span>指定定級選項（限女生）</span><input name="order_want_ranks_female" value="${UI.esc(v.order_want_ranks_female || '')}" placeholder="賦能,神話,超凡"></label>
         <label class="f"><span>結單後幾天刪頻道（0＝不刪）</span><input name="ticket_delete_days" type="number" value="${UI.esc(v.ticket_delete_days || '1')}"></label>
       </div>
-      <label class="f"><span>陪玩身分組分流規則（一行一條：條件|條件=身分組,身分組；留空為自動依身分組名稱配對）</span>
-        <textarea name="order_role_routes" rows="4" placeholder="唱歌單=喚雨歌手&#10;娛樂|限女生=喚雨娛樂女陪,聲優女陪&#10;技術|限女生|神話=VAL女神話">${UI.esc(v.order_role_routes || '')}</textarea></label>
+      <label class="f"><span>陪玩身分組分流規則（一行一條：條件|條件=身分組,身分組；<code>*</code>＝不限、<code>!條件</code>＝排除；留空為自動依身分組名稱配對）</span>
+        <textarea name="order_role_routes" rows="6" placeholder="唱歌單=喚雨歌手&#10;娛樂|!技術|限女生=喚雨娛樂女陪&#10;技術|限男生|賦能|!頂尖=VAL男頂尖賦能,VAL男賦能&#10;技術|限女生|神話=VAL女賦能,VAL女神話">${UI.esc(v.order_role_routes || '')}</textarea></label>
       ${res.roles.length ? '' : '<div class="muted">機器人目前離線或尚未加入伺服器，因此無法列出身分組與頻道。</div>'}
     </div>
     <div class="card"><button class="btn" id="save">儲存設定</button></div>
