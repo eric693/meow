@@ -63,6 +63,26 @@ ensureColumns('exams', [
   ['gender',    "TEXT NOT NULL DEFAULT ''"]
 ]);
 ensureColumns('suggestions', [['name', "TEXT NOT NULL DEFAULT ''"]]);
+
+// 抽籤改成不限次數：舊資料庫的 (guild_id, user_id, day) 唯一鍵會擋住第二次，重建掉
+(() => {
+  const t = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='lottery_draws'").get();
+  if (!t || !/UNIQUE/i.test(t.sql)) return;
+  db.exec(`
+    CREATE TABLE lottery_draws_new (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id   TEXT NOT NULL,
+      user_id    TEXT NOT NULL,
+      day        TEXT NOT NULL,
+      prize      TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    );
+    INSERT INTO lottery_draws_new (id, guild_id, user_id, day, prize, created_at)
+      SELECT id, guild_id, user_id, day, prize, created_at FROM lottery_draws;
+    DROP TABLE lottery_draws;
+    ALTER TABLE lottery_draws_new RENAME TO lottery_draws;
+  `);
+})();
 db.exec(fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8'));
 
 // 舊資料補算原價與淨利（要等 schema 建好表才能跑，全新資料庫也才不會炸）

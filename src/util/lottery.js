@@ -50,22 +50,19 @@ function expiresAt(days) {
 }
 
 /**
- * 抽一次。已經抽過會丟錯，讓呼叫端直接顯示訊息。
+ * 抽一次，不限次數。
  * 回傳 { prize, coupon }：coupon 是這次發進背包的券（沒中券就是 null）。
  */
 function draw(guildId, userId, userName = '') {
   const org = orgOf(guildId);
-  if (drewToday(guildId, userId)) throw new Error('你今天已經抽過籤了，明天再來 ☔');
 
   const prizes = pool(guildId);
   const total = prizes.reduce((a, p) => a + Number(p.weight || 0), 0);
   let r = Math.random() * total, prize = prizes[prizes.length - 1];
   for (const p of prizes) { r -= Number(p.weight || 0); if (r <= 0) { prize = p; break; } }
 
-  // 先記錄再發獎：同一秒連按兩次時，第二次會因為 UNIQUE 衝突而抽不到
-  const ins = db.prepare('INSERT INTO lottery_draws (guild_id, user_id, day, prize) VALUES (?,?,?,?)')
+  db.prepare('INSERT INTO lottery_draws (guild_id, user_id, day, prize) VALUES (?,?,?,?)')
     .run(org, userId, today(), prize.name);
-  if (!ins.changes) throw new Error('你今天已經抽過籤了，明天再來 ☔');
 
   let coupon = null;
   if (prize.type === 'coupon' && (Number(prize.value) > 0 || Number(prize.percent) > 0)) {

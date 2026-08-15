@@ -262,8 +262,7 @@ CREATE TABLE IF NOT EXISTS lottery_draws (
   user_id    TEXT NOT NULL,
   day        TEXT NOT NULL,
   prize      TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-  UNIQUE (guild_id, user_id, day)
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
 -- ---------- 投票 ----------

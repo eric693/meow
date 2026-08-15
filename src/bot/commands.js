@@ -31,7 +31,7 @@ const commands = [
     .addStringOption(o => o.setName('項目').setDescription('例：伺服器冠名-8月'))
     .addStringOption(o => o.setName('備註').setDescription('寫進流水帳的備註')),
 
-  b('抽籤', '喚雨星象：每日一次的運勢抽籤，抽中吉籤還會掉折價券'),
+  b('抽籤', '喚雨星象：抽一支運勢籤，次數不限'),
 
   b('儲值', '為金主手動增加雨幣餘額')
     .addUserOption(o => o.setName('對象').setDescription('請選擇要儲值的金主').setRequired(true))
