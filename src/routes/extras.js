@@ -97,8 +97,47 @@ router.post('/backpack', (req, res) => {
   res.json({ ok: true });
 });
 router.delete('/backpack/:id', (req, res) => {
-  db.prepare('DELETE FROM backpack WHERE id=? AND guild_id=?').run(req.params.id, req.orgId);
+  const cur = db.prepare('SELECT * FROM backpack WHERE id=? AND guild_id=?').get(req.params.id, req.orgId);
+  if (!cur) return res.status(404).json({ error: '找不到這筆道具' });
+  db.prepare('DELETE FROM backpack WHERE id=?').run(cur.id);
+  audit(req.user.name, '刪除道具', `${cur.name}×${cur.qty} ← ${cur.user_id}`, req.orgId, { source: 'web' });
   res.json({ ok: true });
+});
+// 批次刪除：一次收掉多列
+router.post('/backpack/delete-batch', (req, res) => {
+  const ids = (req.body?.ids || []).map(Number).filter(Boolean);
+  if (!ids.length) return res.status(400).json({ error: '沒有選取任何道具' });
+  const get = db.prepare('SELECT * FROM backpack WHERE id=? AND guild_id=?');
+  const del = db.prepare('DELETE FROM backpack WHERE id=?');
+  const tx = db.transaction(() => {
+    let n = 0, qty = 0;
+    for (const id of ids) {
+      const cur = get.get(id, req.orgId);
+      if (!cur) continue;
+      del.run(cur.id); n++; qty += cur.qty;
+    }
+    return { n, qty };
+  });
+  const r = tx();
+  audit(req.user.name, '批次刪除道具', `${r.n} 列、共 ${r.qty} 張`, req.orgId, { source: 'web' });
+  res.json({ ok: true, deleted: r.n, qty: r.qty });
+});
+// 改數量：扣到 0（或填 0）就整列刪掉
+router.put('/backpack/:id', (req, res) => {
+  const cur = db.prepare('SELECT * FROM backpack WHERE id=? AND guild_id=?').get(req.params.id, req.orgId);
+  if (!cur) return res.status(404).json({ error: '找不到這筆道具' });
+  const b = req.body || {};
+  const qty = b.minus != null
+    ? cur.qty - Math.max(0, Math.round(Number(b.minus) || 0))
+    : Math.max(0, Math.round(Number(b.qty) || 0));
+  if (qty <= 0) {
+    db.prepare('DELETE FROM backpack WHERE id=?').run(cur.id);
+    audit(req.user.name, '扣除道具', `${cur.name} 扣光（原 ${cur.qty} 張）← ${cur.user_id}`, req.orgId, { source: 'web' });
+    return res.json({ ok: true, qty: 0, removed: true });
+  }
+  db.prepare('UPDATE backpack SET qty=? WHERE id=?').run(qty, cur.id);
+  audit(req.user.name, '調整道具數量', `${cur.name} ${cur.qty} → ${qty} ← ${cur.user_id}`, req.orgId, { source: 'web' });
+  res.json({ ok: true, qty });
 });
 
 // ---------------- 冠名／身份組期限 ----------------

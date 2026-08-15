@@ -142,27 +142,62 @@ Pages.backpack = async view => {
     const d = await GET('/backpack?' + new URLSearchParams({ ...bind.values(), limit: ST.limit, offset: ST.offset }));
     H.pager('bk', d.total, ST);
     document.getElementById('kt').innerHTML = H.table(
-      ['對象', '道具代號', '名稱', { label: '數量', num: 1 }, { label: '面額', num: 1 },
+      ['選取', '對象', '道具代號', '名稱',
+       { label: '數量', num: 1 }, { label: '面額', num: 1 },
        { label: '折扣', num: 1 }, { label: '門檻', num: 1 }, '到期', '操作'],
-      d.rows.map(r => `<tr><td>${H.user(r.user_id)}</td><td><code>${UI.esc(r.item_key)}</code></td>
+      d.rows.map(r => `<tr>
+        <td><input type="checkbox" class="kchk" value="${r.id}" style="width:auto"></td>
+        <td>${H.user(r.user_id)}</td><td><code>${UI.esc(r.item_key)}</code></td>
         <td>${UI.esc(r.name)}</td><td class="num">${r.qty}</td>
         <td class="num">${r.value ? H.n(r.value) : '—'}</td>
         <td class="num">${r.percent ? r.percent + '%' : '—'}</td>
         <td class="num">${r.min_spend ? H.n(r.min_spend) : '—'}</td><td>${UI.esc(r.expires || '—')}</td>
-        <td><button class="btn danger sm" data-kd="${r.id}">刪除</button></td></tr>`));
+        <td><button class="btn secondary sm" data-kminus='${UI.esc(JSON.stringify({ id: r.id, name: r.name, qty: r.qty }))}'>扣張數</button>
+            <button class="btn danger sm" data-kd="${r.id}">刪除</button></td></tr>`));
+
+
     document.querySelectorAll('[data-kd]').forEach(b => b.onclick = async () => {
-      if (!await UI.confirm('確定要刪除這筆道具嗎？')) return;
+      if (!await UI.confirm('確定要刪除這筆道具嗎？整列（含全部張數）都會消失。')) return;
       await DEL('/backpack/' + b.dataset.kd); UI.ok('已刪除'); load();
+    });
+    // 只扣掉幾張，扣到 0 就整列刪掉
+    document.querySelectorAll('[data-kminus]').forEach(b => b.onclick = () => {
+      const it = JSON.parse(b.dataset.kminus);
+      UI.modal({
+        title: `扣除張數：${it.name}`, okText: '扣除',
+        bodyHTML: `<div class="muted" style="margin-bottom:8px">目前持有 ${it.qty} 張，扣完剩 0 張時整列會自動刪掉。</div>
+          <label class="f"><span>要扣幾張</span><input name="minus" type="number" min="1" max="${it.qty}" value="1"></label>`,
+        onOk: async back => {
+          const n = Number(UI.val(back, 'minus'));
+          if (!(n > 0)) throw new Error('請填大於 0 的張數');
+          const r = await PUT('/backpack/' + it.id, { minus: n });
+          UI.ok(r.removed ? '已扣光並移除' : `已扣除，剩 ${r.qty} 張`);
+          load();
+        }
+      });
     });
   };
 
   view.innerHTML = `
     <div class="card"><div class="row"><div class="grow"><h3 style="margin:0">背包與折價券</h3></div>
+      <div class="fit"><label class="f" style="flex-direction:row;align-items:center;gap:6px;margin:0">
+        <input type="checkbox" id="kall" style="width:auto"><span style="margin:0">全選</span></label></div>
+      <div class="fit"><button class="btn danger" id="kbatch">批次刪除</button></div>
       <div class="fit"><button class="btn" id="kadd">＋ 發放道具／折價券</button></div></div></div>
     ${H.filters('bk', F)}
     <div class="card" id="kt"><div class="empty">載入中…</div></div>`;
 
   const bind = H.bindFilters('bk', F, () => load(), ST);
+  document.getElementById('kall').onchange = e =>
+    document.querySelectorAll('.kchk').forEach(c => { c.checked = e.target.checked; });
+  document.getElementById('kbatch').onclick = async () => {
+    const ids = [...document.querySelectorAll('.kchk:checked')].map(c => Number(c.value));
+    if (!ids.length) return UI.err('請先勾選要刪除的道具');
+    if (!await UI.confirm(`確定要刪除勾選的 ${ids.length} 列道具嗎？每列的全部張數都會消失。`)) return;
+    const r = await POST('/backpack/delete-batch', { ids });
+    UI.ok(`已刪除 ${r.deleted} 列、共 ${r.qty} 張`);
+    load();
+  };
   document.getElementById('kadd').onclick = () => UI.modal({
     title: '發放道具／折價券',
     bodyHTML: `<label class="f"><span>對象 Discord ID</span><input name="user_id"></label>
