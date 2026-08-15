@@ -806,10 +806,11 @@ async function archiveCardChannel(guild, t) {
     const boss = await guild.channels.fetch(t.channel_id).catch(() => null);
     if (!cc || !boss?.isTextBased?.()) return;
 
+    // 只存真人的對話；機器人自己的訂單公告、按鈕提示不必再存一份
     const msgs = [...(await cc.messages.fetch({ limit: 100 })).values()]
-      .filter(m => !m.author.bot || m.embeds.length)
+      .filter(m => !m.author.bot)
       .reverse();
-    if (!msgs.length) return;
+    if (!msgs.length) return;   // 沒人講過話就不發存底
 
     // 圖片與影片另外收起來重新上傳；Discord CDN 連結會過期，只貼網址存底日後會失效
     const media = [];
