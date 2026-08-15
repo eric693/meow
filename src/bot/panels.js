@@ -1502,8 +1502,9 @@ async function handleInteraction(i) {
           await cc.delete().catch(() => {});
         }
         db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(tid);
-      } else {
-        // 公開單沒有獨立頻道，改成收回陪玩的檢視權限
+      } else if (act !== 'end') {
+        // 公開單沒有獨立頻道，單純「關閉名片專區」時才收回陪玩的檢視權限；
+        // 結單不收（陪玩常常事後才報單，要留著看訂單編號），只在下面鎖發言
         for (const rid of getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean)) {
           if (i.channel) await i.channel.permissionOverwrites.edit(rid, { ViewChannel: false }).catch(() => {});
         }
