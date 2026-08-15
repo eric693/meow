@@ -766,12 +766,8 @@ const deleteDays = guildId => cfgNum('ticket_delete_days', 1, guildId);
  */
 async function closeTicket(guild, channel, t) {
   db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), t.id);
-  // 名片專區一併收掉（收掉前先把對話存底到包廂）
-  if (t.card_channel_id) {
-    const cc = await guild.channels.fetch(t.card_channel_id).catch(() => null);
-    if (cc) { await archiveCardChannel(guild, t); await cc.delete().catch(() => {}); }
-    db.prepare("UPDATE tickets SET card_channel_id='' WHERE id=?").run(t.id);
-  }
+  // 名片專區留著讓陪玩事後還查得到訂單編號，只鎖發言改名，滿保留期限再跟包廂一起清掉
+  if (t.card_channel_id) await lockCardChannel(guild, t);
   if (!channel) return;
   const target = getSetting('category_order_closed', '', guild.id)
               || getSetting('category_ticket', '', guild.id);
@@ -780,6 +776,19 @@ async function closeTicket(guild, channel, t) {
     if (rid) await channel.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
   }
   await channel.setName(archivedName(channel, t, '已結單')).catch(() => {});
+}
+
+/**
+ * 結單時的名片專區：不刪頻道，只鎖住發言並改名成「已結單」。
+ * 陪玩常常事後才報單，刪掉他們就找不到訂單編號了；頻道會在保留期限到期時一起清掉。
+ */
+async function lockCardChannel(guild, t) {
+  const cc = await guild.channels.fetch(t.card_channel_id).catch(() => null);
+  if (!cc) return;
+  for (const rid of getSetting('role_player', '', guild.id).split(',').map(x => x.trim()).filter(Boolean)) {
+    await cc.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
+  }
+  if (!/│已結單$/.test(cc.name)) await cc.setName(`${cc.name}│已結單`.slice(0, 100)).catch(() => {});
 }
 
 /** 這個頻道對應的訂單（!結單 用來判斷是不是在包廂裡下的指令） */
@@ -1401,8 +1410,13 @@ async function handleInteraction(i) {
     // 結單後手動收掉頻道（不等自動刪除）
     if (act === 'del') {
       if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以刪除頻道。');
-      db.prepare("UPDATE tickets SET channel_id='' WHERE id=?").run(tid);
+      db.prepare("UPDATE tickets SET channel_id='', card_channel_id='' WHERE id=?").run(tid);
       await i.reply({ embeds: [ok(i.guildId, '頻道即將關閉', '本頻道將於 5 秒後刪除。')] });
+      // 結單時留下來的名片專區一起收掉
+      if (t.card_channel_id && t.card_channel_id !== i.channelId) {
+        const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
+        if (cc) await cc.delete('訂單頻道關閉，一併收掉名片專區').catch(() => {});
+      }
       return setTimeout(() => i.channel.delete().catch(() => {}), 5000);
     }
 
@@ -1496,7 +1510,10 @@ async function handleInteraction(i) {
     if (act === 'closecard' || act === 'end') {
       // 名片專區等一下會被刪掉，i.channel 會變成 null，所以先把身分記下來
       const inCardChannel = i.channelId === t.card_channel_id;
-      if (t.card_channel_id) {
+      if (t.card_channel_id && act === 'end') {
+        // 結單：名片專區留著（陪玩可能事後才報單，要看得到訂單編號），只鎖發言改名
+        await lockCardChannel(i.guild, t);
+      } else if (t.card_channel_id) {
         const cc = await i.guild.channels.fetch(t.card_channel_id).catch(() => null);
         if (cc) {
           await archiveCardChannel(i.guild, t);   // 刪除前先把對話存底到老闆頻道

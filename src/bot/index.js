@@ -75,7 +75,7 @@ function startTicketCleaner(c) {
         if (d <= 0) continue;
         // 只清「剛過期」的單：上限 30 天，避免第一次啟用就把久遠的歷史頻道整批刪掉；
         // 每輪最多 20 間，免得撞上 Discord 的刪頻道速率限制
-        const rows = db.prepare(`SELECT id, channel_id FROM tickets
+        const rows = db.prepare(`SELECT id, channel_id, card_channel_id FROM tickets
                                   WHERE (src_guild=? OR (src_guild='' AND guild_id=?))
                                     AND status='closed' AND channel_id!=''
                                     AND closed_at IS NOT NULL
@@ -84,9 +84,12 @@ function startTicketCleaner(c) {
                                   ORDER BY closed_at LIMIT 20`)
           .all(gid, orgOf(gid), `-${d} days`);
         for (const r of rows) {
-          const ch = await guild.channels.fetch(r.channel_id).catch(() => null);
-          if (ch) await ch.delete('結單超過保留期限，自動清理').catch(() => {});
-          db.prepare("UPDATE tickets SET channel_id='' WHERE id=?").run(r.id);
+          // 結單時名片專區是留著的，保留期限到了跟包廂一起收
+          for (const cid of [r.channel_id, r.card_channel_id].filter(Boolean)) {
+            const ch = await guild.channels.fetch(cid).catch(() => null);
+            if (ch) await ch.delete('結單超過保留期限，自動清理').catch(() => {});
+          }
+          db.prepare("UPDATE tickets SET channel_id='', card_channel_id='' WHERE id=?").run(r.id);
         }
       } catch (e) { console.error('結單頻道清理失敗：', e.message); }
     }
