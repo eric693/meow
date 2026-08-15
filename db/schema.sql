@@ -346,3 +346,21 @@ CREATE TABLE IF NOT EXISTS titles (
   created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_titles_end ON titles (guild_id, status, end_at);
+
+-- ---------- 記帳：未發放薪資 ----------
+CREATE TABLE IF NOT EXISTS payroll_entries (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id    TEXT NOT NULL,
+  staff_id    TEXT NOT NULL DEFAULT '',         -- 對象 Discord ID（可留空，只記名字）
+  staff_name  TEXT NOT NULL DEFAULT '',         -- 對象名稱
+  category    TEXT NOT NULL DEFAULT 'salary',   -- salary 薪資 / bonus 獎金 / subsidy 補貼 / refund 代墊 / other 其他
+  period      TEXT NOT NULL DEFAULT '',         -- 歸屬月份 YYYY-MM
+  amount      INTEGER NOT NULL DEFAULT 0,       -- 應發金額
+  status      TEXT NOT NULL DEFAULT 'unpaid',   -- unpaid 未發放 / paid 已發放
+  due_date    TEXT NOT NULL DEFAULT '',         -- 預計發放日
+  paid_at     TEXT,                             -- 實際發放時間
+  note        TEXT NOT NULL DEFAULT '',
+  operator    TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_payroll_guild ON payroll_entries (guild_id, status, period);

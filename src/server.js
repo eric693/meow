@@ -51,6 +51,7 @@ app.get('/api/me', requireAuth(), (req, res) => {
 // ---- 功能路由 ----
 app.use('/api', require('./routes/core'));
 app.use('/api', require('./routes/ledger'));
+app.use('/api', require('./routes/payroll'));
 app.use('/api', require('./routes/extras'));
 app.use('/api', require('./routes/admin'));
 app.use('/api', require('./routes/discord-ops'));
