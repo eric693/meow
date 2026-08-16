@@ -13,6 +13,7 @@ const S = require('../util/session');
 const CF = require('../util/checkout-flow');
 const GF = require('../util/gift-flow');
 const { isAdmin, isCS } = require('./perm');
+const CardMedia = require('../util/cardmedia');
 
 const btn = (id, label, style = ButtonStyle.Primary, emoji) => {
   const b = new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
@@ -281,7 +282,10 @@ const commands = Object.fromEntries(Object.keys(PANELS).map(key => [key,
   async msg => { adminOnly(msg); await post(msg, PANELS[key].build(msg.guild.id)); }]));
 
 // ---------------- 互動處理 ----------------
-const eph = (i, e) => i.reply({ embeds: [e], ephemeral: true });
+// 已經 defer 過的互動要用 editReply，不然會噴 already acknowledged
+const eph = (i, e) => (i.deferred || i.replied
+  ? i.editReply({ embeds: [e] })
+  : i.reply({ embeds: [e], ephemeral: true }));
 // 面板的權限阻擋同樣標記起來，讓 index.js 記成 deny
 const denyEph = (i, message) => { i._denied = true; return eph(i, err(i.guildId, message)); };
 
@@ -1512,6 +1516,8 @@ async function handleInteraction(i) {
       if (t.publish === 'draft') return eph(i, err(i.guildId, '這張單還沒發布。'));
       if (t.status === 'closed') return eph(i, err(i.guildId, '這張單已經結束了。'));
       const name = staff.name || staff.code;
+      // 下載影音名片＋抽封面要花幾秒，先 defer 才不會逾時
+      await i.deferReply({ ephemeral: true }).catch(() => {});
       const boss = await i.guild.channels.fetch(t.channel_id).catch(() => null);
       if (!boss) return eph(i, err(i.guildId, '找不到老闆的訂單頻道，請聯絡客服。'));
 
@@ -1519,22 +1525,32 @@ async function handleInteraction(i) {
       // 其他連結（YouTube 等）維持貼網址，由 Discord 自己展開
       const url = staff.card_url;
       const isImg = isImageUrl(url), isVid = isVideoUrl(url);
+      // Discord CDN 連結會過期，先抓回本機（順便替影片抽一張封面圖）
+      const media = (isImg || isVid) ? await CardMedia.fetchCard(url, { video: isVid })
+                                     : { file: null, poster: null };
+      if ((isImg || isVid) && !media.file)
+        return eph(i, err(i.guildId, '你的影音名片連結已經失效了，請找管理用 `/入職` 重新綁定一次。'));
+
+      const posterName = media.poster ? require('path').basename(media.poster) : '';
       const card = {
         content: url && !isImg && !isVid ? url : undefined,
         embeds: [emb(i.guildId, {
           title: `✨ 專屬名片：${name}`,
           desc: `老闆您好，我是 **${name}**！請看看我的專屬音卡 👋`,
           color: COLOR.ok,
-          image: isImg ? url : undefined,
+          image: isImg ? `attachment://card${require('path').extname(media.file || '.png')}`
+               : posterName ? `attachment://${posterName}` : undefined,
           footer: url ? undefined : '這位陪玩還沒綁定影音名片，請管理用 /入職 補上'
-        })]
+        })],
+        files: isImg ? [{ attachment: media.file, name: `card${require('path').extname(media.file)}` }]
+             : media.poster ? [{ attachment: media.poster, name: posterName }] : undefined
       };
       // 影片分成兩則發：先出名片文字卡，播放器再跟在下面
       //（同一則訊息 Discord 一律把附件排在 embed 上面，只能拆開才換得了順序）
       // 影片太大傳不上去時（Discord 有檔案大小上限），退回附上連結
       const send = async ch => {
         await ch.send(card);
-        if (isVid) await ch.send({ files: [url] }).catch(() => ch.send({ content: url }));
+        if (isVid) await ch.send({ files: [media.file] }).catch(() => ch.send({ content: url }));
       };
       await send(boss);
       // 在名片專區也公開一份，讓其他陪玩與客服看得到誰報名了
