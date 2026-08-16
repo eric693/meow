@@ -1529,9 +1529,13 @@ async function handleInteraction(i) {
           footer: url ? undefined : '這位陪玩還沒綁定影音名片，請管理用 /入職 補上'
         })]
       };
+      // 影片分成兩則發：先出名片文字卡，播放器再跟在下面
+      //（同一則訊息 Discord 一律把附件排在 embed 上面，只能拆開才換得了順序）
       // 影片太大傳不上去時（Discord 有檔案大小上限），退回附上連結
-      const send = ch => ch.send(isVid ? { ...card, files: [url] } : card)
-        .catch(() => ch.send({ ...card, content: url }));
+      const send = async ch => {
+        await ch.send(card);
+        if (isVid) await ch.send({ files: [url] }).catch(() => ch.send({ content: url }));
+      };
       await send(boss);
       // 在名片專區也公開一份，讓其他陪玩與客服看得到誰報名了
       if (i.channelId !== boss.id && i.channel) await send(i.channel).catch(() => {});
