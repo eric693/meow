@@ -59,6 +59,22 @@ function startTitleWatcher(c) {
   setInterval(tick, 60 * 1000);
 }
 
+/** 影音名片快取清理：超過 N 天沒被用到就刪（設定 card_cache_days，預設 30；設 0 為不清） */
+function startCardCacheCleaner() {
+  const CardMedia = require('../util/cardmedia');
+  const { getNum } = require('../db');
+  const tick = () => {
+    try {
+      const days = getNum('card_cache_days', 30, HOME_GUILD);
+      if (days <= 0) return;
+      const r = CardMedia.pruneCache(days);
+      if (r.files) console.log(`🧹 名片快取清理：刪掉 ${r.files} 個檔案，釋出 ${r.mb} MB`);
+    } catch (e) { console.error('名片快取清理失敗：', e.message); }
+  };
+  tick();
+  setInterval(tick, 24 * 60 * 60 * 1000);
+}
+
 /** 結單頻道自動清理：結單滿 N 天（設定 ticket_delete_days，預設 1）就把頻道刪掉 */
 function startTicketCleaner(c) {
   const { getNum } = require('../db');
@@ -126,6 +142,7 @@ async function start() {
     try { c.user.setActivity(activity); } catch (e) { console.warn('狀態設定失敗：', e.message); }
     startTitleWatcher(c);
     startTicketCleaner(c);
+    startCardCacheCleaner();
   });
 
   client.on(Events.GuildCreate, async g => {

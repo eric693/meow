@@ -49,6 +49,9 @@ async function fetchCard(url, { video = false } = {}) {
     .filter(f => f.startsWith(k) && !f.includes('.poster.') && !f.endsWith('.part'))
     .map(f => path.join(DIR, f))[0] || '';
 
+  // 用到就把時間戳更新一次，清理排程才知道這份還活著
+  if (base) { const t = new Date(); fs.utimes(base, t, t, () => {}); }
+
   if (!base) {
     let res = await fetch(url).catch(() => null);
     if (!res || !res.ok) {
@@ -81,4 +84,27 @@ function makePoster(video, out) {
   });
 }
 
-module.exports = { refreshUrl, fetchCard, isDiscordCdn };
+/**
+ * 清掉太久沒用到的名片快取（預設 30 天）。
+ * 每次遞交名片都會更新檔案時間戳，所以還在用的名片不會被掃掉；
+ * 真的被清掉也只是下次遞交時重抓一份，不影響功能。
+ */
+function pruneCache(days = 30) {
+  const deadline = Date.now() - days * 86400 * 1000;
+  let n = 0, bytes = 0;
+  for (const f of fs.readdirSync(DIR)) {
+    const p = path.join(DIR, f);
+    try {
+      const st = fs.statSync(p);
+      if (!st.isFile()) continue;
+      // .part 是中斷的暫存檔，超過一天就一起收掉
+      const limit = f.endsWith('.part') ? Date.now() - 86400 * 1000 : deadline;
+      if (st.mtimeMs >= limit) continue;
+      fs.unlinkSync(p);
+      n++; bytes += st.size;
+    } catch (_) { /* 檔案剛好被別人動過就跳過 */ }
+  }
+  return { files: n, mb: +(bytes / 1048576).toFixed(1) };
+}
+
+module.exports = { refreshUrl, fetchCard, isDiscordCdn, pruneCache };
