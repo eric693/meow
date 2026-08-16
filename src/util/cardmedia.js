@@ -45,7 +45,8 @@ async function fetchCard(url, { video = false } = {}) {
   if (!url) return { file: null, poster: null };
   const k = key(url);
   // 已經抓過就直接用（副檔名以第一次抓到的為準）
-  let base = fs.readdirSync(DIR).filter(f => f.startsWith(k) && !f.includes('.poster.'))
+  let base = fs.readdirSync(DIR)
+    .filter(f => f.startsWith(k) && !f.includes('.poster.') && !f.endsWith('.part'))
     .map(f => path.join(DIR, f))[0] || '';
 
   if (!base) {
@@ -60,7 +61,10 @@ async function fetchCard(url, { video = false } = {}) {
     // Discord 會用 ?format=webp 之類的參數轉檔，副檔名以實際回傳的型別為準，
     // 不然貼上去的 .png 其實是 webp，embed 會顯示不出來
     base = path.join(DIR, k + (CT[(res.headers.get('content-type') || '').split(';')[0].trim()] || extOf(url)));
-    fs.writeFileSync(base, buf);
+    // 先寫暫存檔再改名，兩個人同時遞交名片才不會讀到只寫一半的檔案
+    const tmp = `${base}.${process.pid}.${Date.now()}.part`;
+    fs.writeFileSync(tmp, buf);
+    fs.renameSync(tmp, base);
   }
   const posterPath = base.replace(/\.[^.]+$/, '') + '.poster.jpg';
 
