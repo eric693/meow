@@ -244,6 +244,27 @@ const handlers = {
       if (msg.deletable) await msg.delete().catch(() => {});
       return;
     }
+
+    // 在名片專區打 !結單：要結的是那張正單，歸檔老闆的包廂而不是名片專區
+    const c = panels.ticketOfCardChannel(msg.guild.id, msg.channelId);
+    if (c) {
+      const boss = await msg.guild.channels.fetch(c.channel_id).catch(() => null);
+      await panels.closeTicket(msg.guild, boss, c);
+      if (boss) await boss.send(panels.closedNotice(msg.guild.id, c.id)).catch(() => {});
+      await msg.channel.send({ embeds: [ok(msg.guild.id, '訂單已結單',
+        '已收掉老闆的包廂並歸檔，本名片專區留著給陪玩查訂單編號。')] });
+      if (msg.deletable) await msg.delete().catch(() => {});
+      return;
+    }
+
+    // 查不到單但頻道長得像訂單包廂（舊系統搬過來的）也照樣歸檔，不要退回去發公告
+    if (panels.looksLikeOrderRoom(msg.guild.id, msg.channel)) {
+      const legacy = { id: 0, guild_id: msg.guild.id, customer_id: '', card_channel_id: '', service: '', seq: 0 };
+      await panels.closeTicket(msg.guild, msg.channel, legacy);
+      await msg.channel.send(panels.closedNotice(msg.guild.id, 0));
+      if (msg.deletable) await msg.delete().catch(() => {});
+      return;
+    }
     await msg.channel.send({ embeds: [emb(msg.guild.id, {
       title: '🛑 目前已結單',
       desc: '**請停止下單和聊天。**\n\n今日營業已結束，感謝各位老闆的支持 💜\n有任何問題請等待下次開單或私訊客服。',

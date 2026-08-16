@@ -316,9 +316,14 @@ async function createPrivateChannel(guild, member, { prefix, name, categoryKey, 
               PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles,
               PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels,
               PermissionsBitField.Flags.ManageMessages] },
-    { id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages,
-                             PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] }
   ];
+  // member 傳 null＝這個頻道不開給本人看（例：匿名單的名片專區不能讓老闆進去，
+  // 不然陪玩從右側成員列表就認得出老闆是誰）
+  if (member) {
+    overwrites.push({ id: member.id,
+      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] });
+  }
   for (const key of extraRoleKeys) {
     for (const rid of getSetting(key, '', guild.id).split(',').map(s => s.trim()).filter(Boolean)) {
       overwrites.push({ id: rid, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages,
@@ -330,7 +335,7 @@ async function createPrivateChannel(guild, member, { prefix, name, categoryKey, 
                                        PermissionsBitField.Flags.ReadMessageHistory] });
   }
   return guild.channels.create({
-    name: (name || `${prefix}-${member.user.username}`.toLowerCase()).slice(0, 90),
+    name: (name || `${prefix}-${member?.user?.username || 'ticket'}`.toLowerCase()).slice(0, 90),
     type: ChannelType.GuildText,
     parent: parent || undefined,
     permissionOverwrites: overwrites
@@ -519,8 +524,12 @@ function autoPlayerRoles(guild, t) {
     pick = n => /賦能|神話|超凡|VAL|Val|val/.test(n) && genderOk(n) && byRank(n);
   else pick = n => /娛樂|聲優/.test(n) && genderOk(n);
 
+  // 名字裡也有「娛樂／聲優」但不是接單陪玩的身分組（考官、訓練、實習、管理…）要排掉，
+  // 不然派單會連考官一起標到
+  const NOT_PLAYER = /考官|面試|訓練|培訓|實習|見習|管理|幹部|店長|客服|老闆|金主|退休|離職|停權|黑名單/;
+
   return guild.roles.cache
-    .filter(r => !r.managed && r.id !== guild.id && pick(r.name))
+    .filter(r => !r.managed && r.id !== guild.id && !NOT_PLAYER.test(r.name) && pick(r.name))
     .map(r => r.id);
 }
 
@@ -765,7 +774,8 @@ const deleteDays = guildId => cfgNum('ticket_delete_days', 1, guildId);
  * 按鈕（ticket:close / tk:end）與 !結單 共用同一套。
  */
 async function closeTicket(guild, channel, t) {
-  db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), t.id);
+  // t.id 為 0＝資料庫裡沒有這張單（舊系統留下的包廂），只做頻道歸檔
+  if (t.id) db.prepare("UPDATE tickets SET status='closed', closed_at=? WHERE id=?").run(now(), t.id);
   // 名片專區留著讓陪玩事後還查得到訂單編號，只鎖發言改名，滿保留期限再跟包廂一起清掉
   if (t.card_channel_id) await lockCardChannel(guild, t);
   if (!channel) return;
@@ -796,6 +806,11 @@ const ticketOfChannel = (guildId, channelId) =>
   db.prepare("SELECT * FROM tickets WHERE guild_id=? AND channel_id=? AND status!='closed' ORDER BY id DESC LIMIT 1")
     .get(orgOf(guildId), channelId);
 
+/** 這個頻道是不是某張單的名片專區（在名片專區打 !結單，要結的是那張正單） */
+const ticketOfCardChannel = (guildId, channelId) =>
+  db.prepare("SELECT * FROM tickets WHERE guild_id=? AND card_channel_id=? AND status!='closed' ORDER BY id DESC LIMIT 1")
+    .get(orgOf(guildId), channelId);
+
 /** 結單完成卡片：說明保留期限，並附「關閉頻道」讓客服直接收掉 */
 function closedNotice(guildId, tid) {
   const d = deleteDays(guildId);
@@ -804,8 +819,20 @@ function closedNotice(guildId, tid) {
       '本頻道已移至結單分類並鎖定發言，紀錄保留供日後查閱。'
       + (d > 0 ? `\n🗑️ 本頻道將於 **${d} 天後自動刪除**，需要提早收掉請按下方按鈕。`
                : '\n需要收掉頻道請按下方按鈕。'))],
-    components: [row(btn(`tk:del:${tid}`, '關閉頻道', ButtonStyle.Danger, '🗑️'))]
+    components: [row(btn(tid ? `tk:del:${tid}` : 'tkch:del', '關閉頻道', ButtonStyle.Danger, '🗑️'))]
   };
+}
+
+/**
+ * 這個頻道看起來是不是訂單包廂（資料庫查不到單時的退路）。
+ * 舊系統搬過來、或資料還原後對不到 tickets 的包廂，!結單 也要能正常歸檔。
+ */
+function looksLikeOrderRoom(guildId, channel) {
+  if (!channel) return false;
+  const cats = ['category_ticket', 'category_order_closed', 'category_order_anon', 'category_order_public']
+    .map(k => getSetting(k, '', guildId)).filter(Boolean);
+  if (channel.parentId && cats.includes(channel.parentId)) return true;
+  return /^🎫│.+│\d+/.test(channel.name || '');
 }
 
 /** 名片專區刪除前，把裡面的對話整理成存底貼到老闆的訂單頻道 */
@@ -1387,13 +1414,26 @@ async function handleInteraction(i) {
   }
 
   // ---- 包廂內：附加選項與發布 ----
+  // 資料庫查不到單的包廂（舊系統留下的），結單卡片上的「關閉頻道」走這條
+  if (id === 'tkch:del') {
+    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以刪除頻道。');
+    await i.reply({ embeds: [ok(i.guildId, '頻道即將關閉', '本頻道將於 5 秒後刪除。')] });
+    return setTimeout(() => i.channel.delete().catch(() => {}), 5000);
+  }
+
   if (id.startsWith('tk:')) {
     const [, act, tidRaw] = id.split(':');
     const tid = Number(tidRaw);
     const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
     if (!t) return eph(i, err(i.guildId, '查無這張訂單。'));
     const mine = t.customer_id === i.user.id;
-    if (!mine && !isCS(i.member)) return denyEph(i, '只有開單者或客服可以操作這張單。');
+    // 收單類的操作（結單／關閉頻道／關閉名片專區）一律只有客服／管理／店長能按，
+    // 老闆和陪玩都不行；遞交名片則開放給所有陪玩，底下另有在職陪玩的檢查。
+    const CS_ONLY = ['end', 'del', 'closecard'];
+    if (CS_ONLY.includes(act) && !isCS(i.member))
+      return denyEph(i, '只有客服／管理員可以結單或關閉訂單。');
+    if (!CS_ONLY.includes(act) && act !== 'card' && !mine && !isCS(i.member))
+      return denyEph(i, '只有開單者或客服可以操作這張單。');
 
     // 結單後手動收掉頻道（不等自動刪除）
     if (act === 'del') {
@@ -1429,7 +1469,8 @@ async function handleInteraction(i) {
 
       if (anon) {
         // 匿名單：另開名片專區給陪玩，老闆的包廂維持隱密
-        cardCh = await createPrivateChannel(i.guild, i.member, {
+        // 老闆不進名片專區（member 傳 null），匿名才守得住
+        cardCh = await createPrivateChannel(i.guild, null, {
           name: `🎫│${ticketLabel(i.guildId, t.service)}│${t.seq}│名片專區`,
           categoryKey: 'category_order_public',   // 名片專區要讓陪玩看得到，放公開單分類
           extraRoleKeys: ['role_cs', 'role_admin'],
@@ -1454,7 +1495,10 @@ async function handleInteraction(i) {
         embeds: [recruitEmbed(i.guildId, fresh)],
         components: [row(
           btn(`tk:card:${tid}`, '遞交名片', ButtonStyle.Success, '📇'),
-          btn(`tk:end:${tid}`, '結束此訂單', ButtonStyle.Danger, '🔒')
+          // 名片專區只收掉這個頻道（老闆選好人了，但訂單還要繼續服務）；
+          // 公開單是在老闆自己的包廂裡，那顆才是真的結單
+          cardCh ? btn(`tk:closecard:${tid}`, '關閉頻道', ButtonStyle.Danger, '🗑️')
+                 : btn(`tk:end:${tid}`, '結束此訂單', ButtonStyle.Danger, '🔒')
         )]
       });
       return;
@@ -1587,8 +1631,7 @@ async function handleInteraction(i) {
     const tid = Number(id.split(':')[2]);
     const t = db.prepare('SELECT * FROM tickets WHERE id=?').get(tid);
     if (!t) return eph(i, err(i.guildId, '查無此傳票。'));
-    if (t.customer_id !== i.user.id && !isCS(i.member))
-      return denyEph(i, '只有開單者或客服可以關閉。');
+    if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以關閉訂單。');
 
     await closeTicket(i.guild, i.channel, t);
     return i.reply(closedNotice(i.guildId, tid));
@@ -1718,4 +1761,4 @@ async function handleInteraction(i) {
 }
 
 module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEmbed,
-                   closeTicket, closedNotice, ticketOfChannel };
+                   closeTicket, closedNotice, ticketOfChannel, ticketOfCardChannel, looksLikeOrderRoom };
