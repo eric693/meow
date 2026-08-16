@@ -1525,32 +1525,31 @@ async function handleInteraction(i) {
       // 其他連結（YouTube 等）維持貼網址，由 Discord 自己展開
       const url = staff.card_url;
       const isImg = isImageUrl(url), isVid = isVideoUrl(url);
-      // Discord CDN 連結會過期，先抓回本機（順便替影片抽一張封面圖）
-      const media = (isImg || isVid) ? await CardMedia.fetchCard(url, { video: isVid })
-                                     : { file: null, poster: null };
+      // Discord CDN 連結會過期，先抓回本機再重傳
+      const media = (isImg || isVid) ? await CardMedia.fetchCard(url) : { file: null, poster: null };
       if ((isImg || isVid) && !media.file)
         return eph(i, err(i.guildId, '你的影音名片連結已經失效了，請找管理用 `/入職` 重新綁定一次。'));
 
-      const posterName = media.poster ? require('path').basename(media.poster) : '';
+      const ext = media.file ? require('path').extname(media.file) : '';
       const card = {
         content: url && !isImg && !isVid ? url : undefined,
         embeds: [emb(i.guildId, {
           title: `✨ 專屬名片：${name}`,
           desc: `老闆您好，我是 **${name}**！請看看我的專屬音卡 👋`,
           color: COLOR.ok,
-          image: isImg ? `attachment://card${require('path').extname(media.file || '.png')}`
-               : posterName ? `attachment://${posterName}` : undefined,
+          // 圖片名片直接嵌在卡片裡；影片名片不放封面圖，不然會跟下面的播放器重複一張
+          image: isImg ? `attachment://card${ext}` : undefined,
           footer: url ? undefined : '這位陪玩還沒綁定影音名片，請管理用 /入職 補上'
         })],
-        files: isImg ? [{ attachment: media.file, name: `card${require('path').extname(media.file)}` }]
-             : media.poster ? [{ attachment: media.poster, name: posterName }] : undefined
+        files: isImg ? [{ attachment: media.file, name: `card${ext}` }] : undefined
       };
       // 影片分成兩則發：先出名片文字卡，播放器再跟在下面
       //（同一則訊息 Discord 一律把附件排在 embed 上面，只能拆開才換得了順序）
       // 影片太大傳不上去時（Discord 有檔案大小上限），退回附上連結
       const send = async ch => {
         await ch.send(card);
-        if (isVid) await ch.send({ files: [media.file] }).catch(() => ch.send({ content: url }));
+        if (isVid) await ch.send({ files: [media.file] }).catch(async () =>
+          ch.send({ content: await CardMedia.refreshUrl(url) }));
       };
       await send(boss);
       // 在名片專區也公開一份，讓其他陪玩與客服看得到誰報名了
