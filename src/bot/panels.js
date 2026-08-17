@@ -409,6 +409,26 @@ const wantRankOptions = (guildId, gender) =>
 
 /** 定級選項可能帶說明（「頂尖賦能 (600分以上)」），比對身分組時只取前面的定級名 */
 const rankKey = r => String(r || '').replace(/[（(].*$/, '').trim();
+
+// 定級階梯（由低到高，可用設定 order_rank_ladder 覆蓋）。
+// 老闆指定某定級時，「該定級以上」的陪玩都要看得到單——高定級本來就接得了低定級的單，
+// 例如神話單，超凡／賦能／頂尖賦能也該收到通知。
+const DEFAULT_RANK_LADDER = ['神話', '超凡', '賦能', '頂尖賦能'];
+
+/** 指定定級 → 該定級與其以上的定級名清單（找不到就只用原本那個定級） */
+function ranksAtOrAbove(guildId, rank) {
+  const ladder = optionList(guildId, 'order_rank_ladder', DEFAULT_RANK_LADDER).map(rankKey).filter(Boolean);
+  // 先找完全相同，再退而求其次找最長的相符名稱：
+  // 「頂尖賦能」若用一般的包含比對會先被較短的「賦能」攔截，變成連賦能組也一起標到
+  let i = ladder.indexOf(rank);
+  if (i < 0) {
+    ladder.forEach((x, idx) => {
+      if (!(rank.includes(x) || x.includes(rank))) return;
+      if (i < 0 || x.length > ladder[i].length) i = idx;
+    });
+  }
+  return i < 0 ? [rank] : ladder.slice(i);
+}
 // 加購選項可標價，格式「名稱=每局加價」
 const DEFAULT_ADDONS = ['指定/甜蜜=50', '聲優=50', '無=0'];
 // 服務分類（技術／娛樂）
@@ -520,7 +540,9 @@ function autoPlayerRoles(guild, t) {
   const genderOk = n => (onlyF ? n.includes('女') : onlyM ? n.includes('男') : true);
 
   const rank = rankKey(t.want_rank);
-  const byRank = n => (!rank || /不限/.test(rank) ? true : n.includes(rank));
+  // 指定定級時連同更高的定級一起帶到（神話單 → 神話、超凡、賦能、頂尖賦能都看得到）
+  const wanted = rank && !/不限/.test(rank) ? ranksAtOrAbove(guild.id, rank) : null;
+  const byRank = n => !wanted || wanted.some(r => n.includes(r));
 
   let pick;
   if (/唱歌|歌手/.test(label + t.service)) pick = n => n.includes('歌手');

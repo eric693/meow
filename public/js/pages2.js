@@ -799,6 +799,7 @@ Pages.settings = async view => {
         <label class="f"><span>要問指定定級的服務</span><input name="order_rank_services" value="${UI.esc(v.order_rank_services || '')}" placeholder="特戰英豪"></label>
         <label class="f"><span>指定定級選項（男／不限）</span><input name="order_want_ranks" value="${UI.esc(v.order_want_ranks || '')}" placeholder="頂尖賦能 (600分以上),賦能,神話,超凡"></label>
         <label class="f"><span>指定定級選項（限女生）</span><input name="order_want_ranks_female" value="${UI.esc(v.order_want_ranks_female || '')}" placeholder="賦能,神話,超凡"></label>
+        <label class="f"><span>定級階梯（由低到高；指定某定級時，該定級以上的陪玩都看得到單）</span><input name="order_rank_ladder" value="${UI.esc(v.order_rank_ladder || '')}" placeholder="神話,超凡,賦能,頂尖賦能"></label>
         <label class="f"><span>結單後幾天刪頻道（0＝不刪）</span><input name="ticket_delete_days" type="number" value="${UI.esc(v.ticket_delete_days || '1')}"></label>
       </div>
       <label class="f"><span>陪玩身分組分流規則（一行一條：條件|條件=身分組,身分組；<code>*</code>＝不限、<code>!條件</code>＝排除；留空為自動依身分組名稱配對）</span>
