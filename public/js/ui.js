@@ -47,7 +47,8 @@ const UI = {
   async confirm(msg, okText = '確定', okClass = 'btn danger') {
     return new Promise(resolve => {
       UI.modal({
-        title: '請確認', bodyHTML: `<div>${UI.esc(msg)}</div>`, okText, okClass,
+        title: '請確認', bodyHTML: `<div style="white-space:pre-wrap;line-height:1.7">${UI.esc(msg)}</div>`,
+        okText, okClass,
         onOk: () => { resolve(true); }
       }).back.querySelector('[data-cancel]').addEventListener('click', () => resolve(false));
     });

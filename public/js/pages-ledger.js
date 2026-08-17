@@ -90,8 +90,15 @@ Pages.orders = async view => {
 
     // 操作
     view.querySelectorAll('[data-settle]').forEach(b => b.onclick = async () => {
-      try { await POST(`/ledger/${b.dataset.settle}/settle`); UI.ok('核銷完成'); load(); }
-      catch (e) { UI.err(e.message); }
+      const no = b.dataset.settle;
+      try { await POST(`/ledger/${no}/settle`); UI.ok('核銷完成'); load(); }
+      catch (e) {
+        // 匯入的歷史單舊系統多半已經發過薪，這裡再問一次才放行
+        if (!/歷史訂單/.test(e.message)) return UI.err(e.message);
+        if (!await UI.confirm(`${e.message}\n\n仍要強制核銷 ${no} 嗎？`, '強制核銷', 'btn danger')) return;
+        try { await POST(`/ledger/${no}/settle`, { force: true }); UI.ok('已強制核銷'); load(); }
+        catch (e2) { UI.err(e2.message); }
+      }
     });
     view.querySelectorAll('[data-refund]').forEach(b => b.onclick = () => UI.modal({
       title: `退單／撤銷 ${b.dataset.refund}`, okText: '確定退單', okClass: 'btn danger',
@@ -278,7 +285,22 @@ Pages.orders = async view => {
     if (!nos.length) return UI.err('請先勾選要核銷的訂單');
     if (!await UI.confirm(`確定要核銷勾選的 ${nos.length} 筆訂單嗎？`, '確定核銷', 'btn ok')) return;
     const r = await POST('/ledger/bulk/settle', { order_nos: nos });
-    UI.ok(`已核銷 ${r.done} 筆${r.failed.length ? `，${r.failed.length} 筆失敗` : ''}`);
+    const legacy = r.legacy || [];
+    UI.ok(`已核銷 ${r.done} 筆${r.failed.length ? `，${r.failed.length} 筆失敗` : ''}`
+      + (legacy.length ? `，另有 ${legacy.length} 筆是匯入的歷史單` : ''));
+    // 匯入的歷史單全部擋下來，集中問一次要不要真的發薪
+    if (legacy.length) {
+      const nosLegacy = legacy.map(x => x.order_no);
+      const okForce = await UI.confirm(
+        `其中 ${legacy.length} 筆是從舊系統匯入的歷史訂單：\n${nosLegacy.slice(0, 8).join('、')}`
+        + `${nosLegacy.length > 8 ? ` …等 ${nosLegacy.length} 筆` : ''}\n\n`
+        + '這些單的薪水舊系統可能已經發過，核銷會再發一次。確定要強制核銷嗎？',
+        '強制核銷', 'btn danger');
+      if (okForce) {
+        const r2 = await POST('/ledger/bulk/settle', { order_nos: nosLegacy, force: true });
+        UI.ok(`已強制核銷 ${r2.done} 筆`);
+      }
+    }
     load();
   };
 

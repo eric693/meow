@@ -9,6 +9,9 @@ const { db } = require('../src/db');
 
 const args = process.argv.slice(2);
 const APPLY = args.includes('--apply');
+// 這支是「income = income + 差額」，重跑一次就會再加一次，
+// 所以執行過就記在 settings 裡，之後要重跑必須明確加 --again。
+const DONE_KEY = 'legacy_income_restored_at';
 const arg = (k, d = '') => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const GUILD = arg('--guild', '1535904785084059718');
 const FILE = args.find(a => !a.startsWith('--') && a.endsWith('.xlsx')) || 'data/legacy-playmates.xlsx';
@@ -38,9 +41,17 @@ const S = v => (v === null || v === undefined ? '' : String(v).trim());
     plan.push({ s, code, name, total, month, diff, before: s.income, after: s.income + diff });
   });
 
+  const doneAt = db.prepare('SELECT value FROM settings WHERE guild_id=? AND key=?').get(GUILD, DONE_KEY)?.value;
+  if (doneAt && !args.includes('--again')) {
+    console.error(`⚠ 這支腳本已於 ${doneAt} 執行過，重跑會把差額再加一次，導致所有人的可提領虛增。`);
+    console.error('  確定要再跑一次，請加上 --again。');
+    process.exit(1);
+  }
   if (APPLY) {
     db.transaction(() => {
       for (const p of plan) db.prepare('UPDATE staff SET income = income + ? WHERE id=?').run(p.diff, p.s.id);
+      db.prepare(`INSERT INTO settings (guild_id, key, value) VALUES (?,?,datetime('now','localtime'))
+                  ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value`).run(GUILD, DONE_KEY);
     })();
   }
 

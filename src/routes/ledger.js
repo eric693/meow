@@ -65,19 +65,25 @@ router.post('/ledger', (req, res) => {
 // ---------------- 編輯 / 刪除 / 核銷 / 退單 ----------------
 router.put('/ledger/:no', (req, res) => res.json(M.updateOrder(req.orgId, req.params.no, req.body || {}, who(req))));
 router.delete('/ledger/:no', (req, res) => res.json(M.deleteOrder(req.orgId, req.params.no, who(req))));
-router.post('/ledger/:no/settle', (req, res) => res.json(M.settleOrder(req.orgId, req.params.no, who(req))));
+// force=true 才會放行匯入的歷史單（前端會先跳確認），一般核銷維持擋下
+router.post('/ledger/:no/settle', (req, res) =>
+  res.json(M.settleOrder(req.orgId, req.params.no, who(req), { force: !!req.body?.force })));
 router.post('/ledger/:no/refund', (req, res) =>
   res.json(M.refundOrder(req.orgId, req.params.no, who(req), req.body?.reason || '')));
 
 // 批次核銷
 router.post('/ledger/bulk/settle', (req, res) => {
   const list = Array.isArray(req.body?.order_nos) ? req.body.order_nos : [];
-  const done = [], failed = [];
+  const force = !!req.body?.force;
+  const done = [], failed = [], legacy = [];
   for (const no of list) {
-    try { M.settleOrder(req.orgId, no, who(req)); done.push(no); }
-    catch (e) { failed.push({ order_no: no, error: e.message }); }
+    try { M.settleOrder(req.orgId, no, who(req), { force }); done.push(no); }
+    catch (e) {
+      // 匯入的歷史單另外列出來，讓前端可以問「這 N 筆要不要真的發薪」
+      (e.code === 'LEGACY_ORDER' ? legacy : failed).push({ order_no: no, error: e.message });
+    }
   }
-  res.json({ done: done.length, failed });
+  res.json({ done: done.length, failed, legacy });
 });
 
 // ---------------- 匯出：流水帳 / 金主榜 / 業績 / 提領 ----------------

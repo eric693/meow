@@ -31,6 +31,11 @@ const intimacyRate = guildId => getNum('order_intimacy_rate', 100, orgOf(guildId
  * 帳面永遠等於「未核銷訂單合計」，不會因為匯入、加減時被夾在 0、或任何一步漏算而對不上。
  * （可提領餘額則不行：它還牽涉提領紀錄與舊系統轉入的餘額，仍需逐筆加減。）
  */
+// 從舊系統匯入的歷史訂單：薪水在舊系統多半已經結算發放過，
+// 在這裡再核銷一次就等於同一筆錢發兩次（曾經一次誤核銷 58 筆、多發十萬元）。
+const isLegacyOrder = o =>
+  ['legacy', 'import'].includes(o.source) || String(o.order_no || '').startsWith('IMP-');
+
 // 這筆單當初是不是真的從錢包扣了雨幣。現金／轉帳與匯入的歷史單都沒扣過，
 // 事後改單、刪單、退單就不能照訂單金額動錢包，否則等於平白生出雨幣。
 const paidByCoins = o => /雨幣/.test(o.pay_method || '');
@@ -232,12 +237,18 @@ function unreportOrder(guildId, orderNo, operator = '') {
 }
 
 /** 核銷：暫存薪水 → 可提領薪水 */
-function settleOrder(guildId, orderNo, operator = '') {
+function settleOrder(guildId, orderNo, operator = '', { force = false } = {}) {
   guildId = orgOf(guildId);
   const o = db.prepare('SELECT * FROM orders WHERE guild_id = ? AND order_no = ?').get(guildId, orderNo);
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
   if (o.status === 'settled') throw new Error(`這筆訂單（${o.order_no}）已經核銷過了！`);
   if (o.status === 'refunded') throw new Error(`訂單 ${orderNo} 已退單，無法核銷`);
+  if (isLegacyOrder(o) && !force) {
+    const e = new Error(`${o.order_no} 是從舊系統匯入的歷史訂單（${String(o.created_at).slice(0, 10)}），`
+      + '舊系統可能已經發過這筆薪水，核銷會再發一次。確定要發放請改用「強制核銷」。');
+    e.code = 'LEGACY_ORDER';
+    throw e;
+  }
 
   db.transaction(() => {
     db.prepare("UPDATE orders SET status = 'settled', settled_at = ? WHERE id = ?").run(now(), o.id);
@@ -247,7 +258,9 @@ function settleOrder(guildId, orderNo, operator = '') {
     recalcPending(guildId, o.staff_id);
   })();
 
-  audit(operator, '核銷訂單', `${orderNo} 陪玩入帳 ${o.staff_share}`, guildId, { source: 'salary' });
+  audit(operator, '核銷訂單',
+    `${orderNo} 陪玩入帳 ${o.staff_share}${isLegacyOrder(o) ? '（強制核銷匯入的歷史單）' : ''}`,
+    guildId, { source: 'salary' });
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id);
 }
 
@@ -344,7 +357,7 @@ function reviewWithdraw(guildId, id, status, operator = '') {
 
 module.exports = {
   createOrder, updateOrder, deleteOrder, getOrder, reportOrder, unreportOrder, settleOrder, refundOrder,
-  recalcPending,
+  recalcPending, isLegacyOrder,
   requestWithdraw, reviewWithdraw, payoutStaff,
   shareRate, giftShareRate, intimacyRate, KINDS, STATUS, kindLabel
 };
