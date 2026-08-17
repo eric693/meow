@@ -779,6 +779,10 @@ Pages.settings = async view => {
         <label class="f"><span>「創建語音房」大廳語音頻道</span><select name="channel_voice_hub">${opts(res.voices || [], v.channel_voice_hub)}</select></label>
         <label class="f"><span>語音房名稱格式（{name} 會換成使用者暱稱）</span><input name="voice_room_name" value="${UI.esc(v.voice_room_name || '')}" placeholder="{name} 老闆的專屬語音"></label>
         <label class="f"><span>語音房建立在哪個分類</span><select name="category_voice">${opts(res.categories, v.category_voice)}</select></label>
+        <label class="f"><span>房間是否私人</span><select name="voice_room_private">
+          <option value="1" ${v.voice_room_private !== '0' ? 'selected' : ''}>私人（只有老闆、客服與管理看得到，陪玩由客服人工拉入）</option>
+          <option value="0" ${v.voice_room_private === '0' ? 'selected' : ''}>公開（所有人都看得到也進得去）</option>
+        </select></label>
       </div>
       <h4 style="margin:14px 0 6px">下單選單選項（逗號分隔，留空用預設）</h4>
       <div class="grid c2">

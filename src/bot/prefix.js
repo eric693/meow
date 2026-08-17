@@ -4,7 +4,7 @@ const { db, getCustomer, findStaff, getStaff, addCoins, monthPrefix, getNum, aud
 const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const M = require('../util/money');
 const R = require('../util/reports');
-const { isAdmin, isCS } = require('./perm');
+const { isCS } = require('./perm');
 const { checkoutMessage } = require('../util/checkout');
 const { helpEmbed } = require('../util/help');
 const panels = require('./panels');
@@ -71,7 +71,7 @@ const handlers = {
   },
 
   async 匯出消費總表(msg) {
-    if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     await msg.reply({ content: '✅ **全服金主消費總表已成功匯出！**\n包含所有老闆的 VIP 進度與完整數據，請下載附件查看。',
       files: [csv(`喚雨金主總表_${monthPrefix()}.csv`, toCSV(R.PATRON_COLUMNS, R.patronBoard(msg.guild.id)))] });
   },
@@ -131,19 +131,19 @@ const handlers = {
   },
 
   async 匯出報表(msg) {
-    if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     await msg.reply({ content: `✅ **${monthPrefix()} 財務報表已成功匯出！**\n，請下載附件查看。`,
       files: [csv(`喚雨財務報表_${monthPrefix()}.csv`, toCSV(R.LEDGER_COLUMNS, R.ledgerQuery(msg.guild.id, { month: monthPrefix() }).rows))] });
   },
 
   async 匯出提領報表(msg) {
-    if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     await msg.reply({ content: `✅ **${monthPrefix()} 陪玩提領明細已成功匯出！**\n請下載附件查看。`,
       files: [csv(`喚雨提領明細_${monthPrefix()}.csv`, toCSV(R.WITHDRAW_COLUMNS, R.withdrawRows(msg.guild.id, { month: monthPrefix() })))] });
   },
 
   async 財務報表(msg) {
-    if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const f = R.financeReport(msg.guild.id);
     const rate = M.shareRate(msg.guild.id);
     // 依本月分潤（薪資）排名，沒有業績的不列
@@ -180,7 +180,7 @@ const handlers = {
   },
 
   async 清空客服業績(msg) {
-    if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const c = db.prepare('DELETE FROM cs_stats WHERE guild_id=?').run(orgOf(msg.guild.id)).changes;
     audit(msg.author.tag, '清空客服業績', `${c} 筆`, msg.guild.id);
     await msg.reply({ embeds: [ok(msg.guild.id, '已清空', `共清除 ${c} 筆客服獨立業績紀錄。`)] });
@@ -281,7 +281,7 @@ const handlers = {
   },
 
   async 離職(msg, args) {
-    if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const key = args.trim();
     if (!key) throw new Error('請輸入員工名稱或代號，例如 `!離職 小雨`');
     const s = findStaff(msg.guild.id, key);
@@ -447,7 +447,7 @@ const handlers = {
   },
 
   async 退單(msg, args) {
-    if (!isAdmin(msg.member)) throw new Error('僅限管理員使用。');
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const [no, ...rest] = args.trim().split(/\s+/);
     if (!no) throw new Error('用法：`!退單 訂單編號 [原因]`');
     const o = M.refundOrder(msg.guild.id, no, msg.author.tag, rest.join(' '));

@@ -9,7 +9,7 @@ const { emb, ok, err, money, COLOR, n, mention } = require('../util/embed');
 const { vipName } = require('../util/reports');
 const G = require('../util/gifts');
 const R = require('../util/reports');
-const { isAdmin, isCS } = require('./perm');
+const { isCS } = require('./perm');
 const { helpEmbed } = require('../util/help');
 const { getSetting } = require('../db');
 
@@ -134,7 +134,7 @@ const handlers = {
   },
 
   async 提領(i) {
-    if (!isAdmin(i.member)) return deny(i);
+    if (!isCS(i.member)) return deny(i);
     const s = resolveStaff(i);
     const amt = i.options.getInteger('金額');
     M.payoutStaff(i.guildId, s.user_id, amt, i.user.tag, i.options.getString('備註') || '');
@@ -150,7 +150,7 @@ const handlers = {
   },
 
   async 退單(i) {
-    if (!isAdmin(i.member)) return deny(i);
+    if (!isCS(i.member)) return deny(i);
     const no = i.options.getString('訂單編號').trim().toUpperCase();
     const refundCoins = i.options.getBoolean('退還雨幣') ?? true;
     const reason = i.options.getString('原因') || '';
@@ -159,7 +159,7 @@ const handlers = {
   },
 
   async 補單(i) {
-    if (!isAdmin(i.member)) return deny(i);
+    if (!isCS(i.member)) return deny(i);
     const u = i.options.getUser('客人');
     const s = resolveStaff(i);
     const amount = i.options.getInteger('金額');
@@ -186,7 +186,7 @@ const handlers = {
   },
 
   async 財務調整(i) {
-    if (!isAdmin(i.member)) return deny(i);
+    if (!isCS(i.member)) return deny(i);
     const amount = i.options.getInteger('金額');
     const reason = i.options.getString('原因');
     const o = M.createOrder({
@@ -309,7 +309,7 @@ const handlers = {
   },
 
   async 親密調整(i) {
-    if (!isAdmin(i.member)) return deny(i);
+    if (!isCS(i.member)) return deny(i);
     const cust = i.options.getUser('客人');
     const staff = resolveStaff(i);
     const delta = i.options.getInteger('點數');
@@ -323,7 +323,7 @@ const handlers = {
   },
 
   async vip等級(i) {
-    if (!isAdmin(i.member)) return deny(i);
+    if (!isCS(i.member)) return deny(i);
     const u = i.options.getUser('老闆');
     const lv = i.options.getInteger('等級');
     const c = getCustomer(i.guildId, u.id, u.username);
@@ -453,7 +453,7 @@ const handlers = {
   },
 
   async 入職(i) {
-    if (!isAdmin(i.member)) return deny(i);
+    if (!isCS(i.member)) return deny(i);
     const u = i.options.getUser('對象');
     const code = i.options.getString('代號');
     const name = i.options.getString('名稱');

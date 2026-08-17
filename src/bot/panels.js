@@ -12,7 +12,7 @@ const { parseSlots } = require('../util/slots');
 const S = require('../util/session');
 const CF = require('../util/checkout-flow');
 const GF = require('../util/gift-flow');
-const { isAdmin, isCS } = require('./perm');
+const { isCS } = require('./perm');
 const CardMedia = require('../util/cardmedia');
 
 const btn = (id, label, style = ButtonStyle.Primary, emoji) => {
@@ -25,7 +25,7 @@ const input = (id, label, { style = TextInputStyle.Short, required = true, ph = 
   row(new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style)
     .setRequired(required).setPlaceholder(ph).setValue(value));
 
-const adminOnly = msg => { if (!isAdmin(msg.member)) throw new Error('面板建置僅限管理員使用。'); };
+const adminOnly = msg => { if (!isCS(msg.member)) throw new Error('面板建置僅限客服／管理員使用。'); };
 const post = async (msg, payload) => {
   try {
     await msg.channel.send(payload);

@@ -58,7 +58,7 @@ const GUILD_KEYS = [
   'channel_order_entry', 'channel_exam_entry', 'channel_intro',
   'channel_command_log', 'channel_money_log',
   // 語音房
-  'channel_voice_hub', 'category_voice', 'voice_room_name',
+  'channel_voice_hub', 'category_voice', 'voice_room_name', 'voice_room_private',
   // 下單選單選項（逗號分隔）
   'order_genders', 'order_services', 'order_categories', 'order_addons',
   'order_type_labels', 'ticket_seq_start', 'order_max_open', 'order_cooldown_sec',
