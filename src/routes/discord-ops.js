@@ -134,7 +134,8 @@ router.post('/checkout', guardModule('orders'), async (req, res) => {
 
     const discount = G.couponDiscount(coupon, list) + manual;
     const payable = Math.max(0, list - discount);
-    if (payable <= 0) return res.status(400).json({ error: '折抵後實付為 0 元，請調整金額' });
+    // 折價券全額折抵時實付 0 也要能成立（抽成以原價計，折扣由伺服器吸收）
+    if (payable === 0 && discount <= 0) return res.status(400).json({ error: '訂單金額為 0，請確認原價' });
 
     const cash = b.pay === 'cash';
     if (!cash) {

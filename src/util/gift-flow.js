@@ -86,7 +86,8 @@ function finish(sid, pay) {
   }
   const discount = G.couponDiscount(coupon, sess.list) + (sess.manualDiscount || 0);
   const payable = Math.max(0, sess.list - discount);
-  if (payable === 0) throw new Error('折抵後實付為 0 元，請改用其他方式處理。');
+  // 同結帳：折價券全額折抵是正常用法，只有原價為 0 才擋
+  if (payable === 0 && discount <= 0) throw new Error('禮物金額為 0，請確認定價。');
 
   const cash = pay === 'cash';
   if (!cash) {

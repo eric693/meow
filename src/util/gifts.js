@@ -98,6 +98,8 @@ function sendGift({ guildId, customerId, customerName = '', staffId, giftKey, qt
     guildId, customerId, customerName, staffId, staffName: staff.name || staff.code,
     csId, csName, kind: 'gift', item: `${g.emoji} ${g.name}`, qty: n, unitPrice: g.price,
     listPrice: list, amount, staffShare, status: 'settled',
+    // 折價券全額折抵時實付 0，一樣要能送出（分潤照禮物定價計）
+    allowZero: amount === 0,
     source: 'gift', operator, orderPrefix: 'GFT',
     payMethod, skipWallet, intimacy: gain, note: note || `送禮 ${g.name}×${n}`
   });

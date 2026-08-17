@@ -100,7 +100,9 @@ function finish(sid, pay) {
   }
   const discount = G.couponDiscount(coupon, sess.list) + (sess.manualDiscount || 0);
   const payable = Math.max(0, sess.list - discount);
-  if (payable === 0) throw new Error('折抵後實付為 0 元，請改用其他方式處理。');
+  // 折價券剛好折抵完（例如 500 元的單用 500 元券）是正常的用法，實付 0 照樣成立：
+  // 陪玩抽成本來就以原價計算、折扣由伺服器吸收。只有「原價本身就是 0」才是真的有問題。
+  if (payable === 0 && discount <= 0) throw new Error('訂單金額為 0，請確認原價。');
 
   const cash = pay === 'cash';
   if (!cash) {
@@ -126,6 +128,8 @@ function finish(sid, pay) {
     payMethod: cash ? PAY_CASH : PAY_COIN,
     // 現金／轉帳是場外收款，不能再動客人的雨幣餘額
     skipWallet: cash,
+    // 全額折抵時實付為 0，要明確允許 0 元單
+    allowZero: payable === 0,
     note
   });
 
