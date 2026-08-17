@@ -218,6 +218,8 @@ function refreshVip(guildId, userId) {
 function addCoins(guildId, userId, delta, reason, { ref = '', operator = '', allowNegative = false, name = '' } = {}) {
   guildId = orgOf(guildId);
   const c = getCustomer(guildId, userId, name);
+  // 0 元不留流水：帳沒有變動卻多一筆看不懂的紀錄，只會讓日後對帳更難查
+  if (Math.round(delta) === 0) return c.coins;
   const next = c.coins + Math.round(delta);
   if (next < 0 && !allowNegative) {
     const e = new Error(`雨幣不足：目前 ${c.coins}，需要 ${Math.abs(Math.round(delta))}`);

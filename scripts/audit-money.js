@@ -4,6 +4,10 @@
 const { db } = require('../src/db');
 
 const N = v => Number(v || 0).toLocaleString('en-US');
+// 舊系統匯入的資料本身就有些對不齊（人員已離職、負數的沖帳單…），那是匯入當下的既成事實，
+// 不是這套系統在漏帳；把它們獨立列在最後，不混進「需要處理」的計數。
+const LEGACY = "(source IN ('legacy','import') OR order_no LIKE 'IMP-%')";
+const NEW = `NOT ${LEGACY}`;
 const line = t => console.log('\n' + t + '\n' + '─'.repeat(72));
 let problems = 0;
 const bad = (title, rows, fmt) => {
@@ -53,9 +57,10 @@ bad('已完成的提領沒有完成時間',
   db.prepare("SELECT id, staff_id, amount FROM withdrawals WHERE status='done' AND (done_at IS NULL OR done_at='')").all(),
   r => `#${r.id} ${r.staff_id} ${N(r.amount)}`);
 
-bad('提領對不到陪玩',
+bad('提領對不到陪玩（不含舊系統匯入）',
   db.prepare(`SELECT w.id, w.staff_id, w.amount FROM withdrawals w
-     WHERE NOT EXISTS (SELECT 1 FROM staff s WHERE s.guild_id=w.guild_id AND s.user_id=w.staff_id)`).all(),
+     WHERE w.note NOT LIKE 'WTH-%'
+       AND NOT EXISTS (SELECT 1 FROM staff s WHERE s.guild_id=w.guild_id AND s.user_id=w.staff_id)`).all(),
   r => `#${r.id} ${r.staff_id} ${N(r.amount)}`);
 
 line('三、訂單');
@@ -69,7 +74,8 @@ bad('抽成大於原價',
   r => `${r.order_no} 原價 ${N(r.list_price)} / 抽成 ${N(r.staff_share)}`);
 
 bad('金額為負數',
-  db.prepare('SELECT order_no, amount, staff_share FROM orders WHERE amount < 0 OR staff_share < 0').all(),
+  db.prepare(`SELECT order_no, amount, staff_share FROM orders
+              WHERE (amount < 0 OR staff_share < 0) AND ${NEW}`).all(),
   r => `${r.order_no} 實收 ${N(r.amount)} 抽成 ${N(r.staff_share)}`);
 
 bad('訂單編號重複',
@@ -86,7 +92,7 @@ bad('狀態異常（非 pending/settled/refunded）',
 
 bad('有抽成卻對不到陪玩',
   db.prepare(`SELECT o.order_no, o.staff_id, o.staff_share FROM orders o
-     WHERE o.staff_share > 0 AND o.staff_id != ''
+     WHERE o.staff_share > 0 AND o.staff_id != '' AND ${NEW}
        AND NOT EXISTS (SELECT 1 FROM staff s WHERE s.guild_id=o.guild_id AND s.user_id=o.staff_id)`).all(),
   r => `${r.order_no} ${r.staff_id} 抽成 ${N(r.staff_share)}`);
 
@@ -119,6 +125,17 @@ const s = db.prepare(`SELECT COALESCE(SUM(income),0) i, COALESCE(SUM(pending_inc
 const w = db.prepare("SELECT COALESCE(SUM(amount),0) v FROM withdrawals WHERE status!='rejected'").get().v;
 console.log(`陪玩可提領合計 ${N(s.i)}　暫存薪水合計 ${N(s.p)}　歷史入帳合計 ${N(s.t)}　已提領合計 ${N(w)}`);
 console.log(`老闆雨幣流通 ${N(db.prepare('SELECT COALESCE(SUM(coins),0) v FROM customers').get().v)}`);
+
+line('六、舊系統匯入資料（既成事實，僅供參考）');
+const info = (t, v) => console.log(`   ${t}：${v}`);
+info('匯入的訂單', N(db.prepare(`SELECT COUNT(*) c FROM orders WHERE ${LEGACY}`).get().c) + ' 筆');
+info('其中沖帳用的負數單', N(db.prepare(`SELECT COUNT(*) c FROM orders WHERE ${LEGACY} AND amount < 0`).get().c) + ' 筆');
+info('陪玩已不在名冊的訂單',
+  N(db.prepare(`SELECT COUNT(*) c FROM orders o WHERE ${LEGACY} AND o.staff_id != ''
+     AND NOT EXISTS (SELECT 1 FROM staff s WHERE s.guild_id=o.guild_id AND s.user_id=o.staff_id)`).get().c) + ' 筆');
+info('陪玩已不在名冊的提領',
+  N(db.prepare(`SELECT COUNT(*) c FROM withdrawals w WHERE w.note LIKE 'WTH-%'
+     AND NOT EXISTS (SELECT 1 FROM staff s WHERE s.guild_id=w.guild_id AND s.user_id=w.staff_id)`).get().c) + ' 筆');
 
 console.log('\n' + '═'.repeat(72));
 console.log(problems ? `發現 ${problems} 個需要處理的項目` : '所有檢查項目都通過');

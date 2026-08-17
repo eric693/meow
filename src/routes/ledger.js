@@ -13,6 +13,8 @@ router.use(['/ledger', '/exports'], guardModule('orders'));
 const who = req => req.user.name || req.user.username;
 const filtersFrom = q => ({
   month: q.month || '', from: q.from || '', to: q.to || '',
+  // 月份／起訖日要套在交易時間還是核銷時間
+  date_field: q.date_field === 'settled_at' ? 'settled_at' : 'created_at',
   kind: q.kind || '', status: q.status || '', source: q.source || '',
   cs: q.cs || '', customer: q.customer || '', staff: q.staff || '',
   min_amount: q.min_amount ?? '', max_amount: q.max_amount ?? '',

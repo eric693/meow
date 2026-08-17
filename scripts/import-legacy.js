@@ -66,6 +66,11 @@ async function importPlaymates() {
   const ins = db.prepare(`INSERT INTO staff (guild_id,user_id,code,name,card_url,kind,income,pending_income,total_income)
                           VALUES (?,?,?,?,?, 'player', ?,?,?)`);
   const upd = db.prepare(`UPDATE staff SET code=?, name=?, card_url=?, income=?, pending_income=?, total_income=? WHERE id=?`);
+  // 重跑匯入時，既有陪玩的餘額預設不覆蓋：試算表是某個時間點的快照，
+  // 蓋回去會把匯入後新接的單、已核銷的錢一起抹掉（曾經因此讓人的暫存薪水歸零）。
+  // 真的要用試算表重設餘額時，才加上 --overwrite-balance。
+  const updProfile = db.prepare('UPDATE staff SET code=?, name=?, card_url=? WHERE id=?');
+  const OVERWRITE = args.includes('--overwrite-balance');
   const relink = db.prepare('UPDATE staff SET user_id=? WHERE id=?');
   const del = db.prepare('DELETE FROM staff WHERE id=?');
   let added = 0, updated = 0, merged = 0, skipped = 0;
@@ -78,7 +83,10 @@ async function importPlaymates() {
     if (cur) {
       if (ph && APPLY) del.run(ph.id);
       if (ph) merged++;
-      if (APPLY) upd.run(code, name, card, income, pending, total, cur.id);
+      if (APPLY) {
+        if (OVERWRITE) upd.run(code, name, card, income, pending, total, cur.id);
+        else updProfile.run(code, name, card, cur.id);
+      }
       updated++;
     } else if (ph) {
       if (APPLY) { relink.run(uid, ph.id); upd.run(code, name, card, income, pending, total, ph.id); }

@@ -6,6 +6,12 @@ const { db } = require('../src/db');
 // 舊系統的資料分兩批匯入（source=legacy／import，單號 IMP-）；其餘才是新系統自己開的單
 const LIVE_ORDER = "source NOT IN ('legacy','import') AND order_no NOT LIKE 'IMP-%'";
 const N = v => Number(v || 0).toLocaleString('en-US');
+// 現金單誤退雨幣、0 元空流水這兩個 bug 修好之前留下的紀錄是既成的歷史
+//（雨幣已另以「更正」分錄收回），這裡只檢查修好之後有沒有再發生。
+// 基準點直接取那筆更正分錄的時間，不寫死時間字串——資料庫與這支腳本的時區未必一致。
+const FIXED_AT = db.prepare(`SELECT COALESCE(MAX(created_at), '9999') t FROM coin_tx
+                             WHERE reason LIKE '更正：現金單退單誤退雨幣%'`).get().t;
+console.log(`（基準：帳務更正於 ${FIXED_AT}，只檢查此後的資料）`);
 let problems = 0;
 const check = (title, rows, fmt) => {
   if (!rows.length) return console.log(`✅ ${title}`);
@@ -44,21 +50,32 @@ check('有扣雨幣的單都有留下雨幣流水',
      AND NOT EXISTS (SELECT 1 FROM coin_tx t WHERE t.guild_id=o.guild_id AND t.ref=o.order_no)`).all(),
   r => `${r.order_no} 實收 ${N(r.amount)}`);
 
-// 退單也應該有一筆退還的流水
-check('退掉的單都有退還雨幣的流水',
+// 用雨幣付的單退掉時要有退還的流水；現金／轉帳的單當初沒扣過，本來就不該退幣
+check('雨幣單退掉時都有退還雨幣',
   db.prepare(`SELECT o.order_no FROM orders o WHERE ${LIVE_ORDER}
      AND o.status='refunded' AND o.customer_id != '' AND o.amount > 0
-     AND (SELECT COUNT(*) FROM coin_tx t WHERE t.guild_id=o.guild_id AND t.ref=o.order_no) < 2`).all(),
+     AND o.pay_method LIKE '%雨幣%' AND o.note NOT LIKE '%不退幣%'
+     AND NOT EXISTS (SELECT 1 FROM coin_tx t
+                     WHERE t.guild_id=o.guild_id AND t.ref=o.order_no AND t.delta > 0)`).all(),
+  r => r.order_no);
+
+check('現金單退掉時沒有誤退雨幣',
+  db.prepare(`SELECT o.order_no FROM orders o WHERE ${LIVE_ORDER}
+     AND o.status='refunded' AND o.pay_method NOT LIKE '%雨幣%' AND o.amount > 0
+     AND EXISTS (SELECT 1 FROM coin_tx t
+                 WHERE t.guild_id=o.guild_id AND t.ref=o.order_no AND t.delta > 0
+                   AND t.created_at > '${FIXED_AT}')`).all(),
   r => r.order_no);
 
 check('雨幣流水沒有金額為 0 的空紀錄',
-  db.prepare('SELECT id, user_id, reason FROM coin_tx WHERE delta = 0').all(),
+  db.prepare(`SELECT id, user_id, reason FROM coin_tx WHERE delta = 0 AND created_at > '${FIXED_AT}'`).all(),
   r => `#${r.id} ${r.user_id} ${r.reason}`);
 
 // 提領：新系統的提領一定對得到陪玩，且不超過當時的可提領
 check('新系統的提領都對得到陪玩',
   db.prepare(`SELECT w.id, w.staff_id, w.amount FROM withdrawals w
      WHERE w.created_at >= (SELECT MIN(created_at) FROM orders WHERE ${LIVE_ORDER})
+     AND w.note NOT LIKE 'WTH-%'
      AND NOT EXISTS (SELECT 1 FROM staff s WHERE s.guild_id=w.guild_id AND s.user_id=w.staff_id)`).all(),
   r => `#${r.id} ${r.staff_id} ${N(r.amount)}`);
 

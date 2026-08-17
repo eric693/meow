@@ -3,7 +3,8 @@
 // 訂單原價／實收金額／陪玩抽成／伺服器淨利／狀態／備註
 
 const LedgerState = {
-  f: { month: '', from: '', to: '', kind: '', status: '', source: '', cs: '', customer: '', staff: '',
+  f: { month: '', from: '', to: '', date_field: 'created_at', kind: '', status: '', source: '',
+       cs: '', customer: '', staff: '',
        min_amount: '', max_amount: '', q: '', sort: 'created_at', dir: 'desc' },
   page: 0, limit: 50, meta: null
 };
@@ -32,7 +33,7 @@ Pages.orders = async view => {
       <div class="table-wrap"><table class="has-actions">
         <thead><tr>
           <th><input type="checkbox" id="lall" style="width:auto"></th>
-          ${th('order_no', '訂單編號')}${th('created_at', '交易時間')}${th('kind', '交易類型')}
+          ${th('order_no', '訂單編號')}${th('created_at', '交易時間')}${th('settled_at', '核銷時間')}${th('kind', '交易類型')}
           <th>經辦客服</th><th>金主名稱</th><th>陪玩名稱</th>
           ${th('list_price', '訂單原價', 1)}${th('amount', '實收金額', 1)}
           ${th('staff_share', '陪玩抽成', 1)}${th('net', '伺服器淨利', 1)}
@@ -43,6 +44,7 @@ Pages.orders = async view => {
               ${o.status === 'pending' ? '' : 'disabled'}></td>
           <td><code>${UI.esc(o.order_no)}</code></td>
           <td>${H.esc(o.created_at)}</td>
+          <td>${o.settled_at ? H.esc(o.settled_at) : '<span class="muted">未核銷</span>'}</td>
           <td>${UI.esc(LedgerState.kindLabel(o.kind))}</td>
           <td>${UI.esc(o.cs_name || '')}</td>
           <td title="${UI.esc(o.customer_id)}">${UI.esc(o.customer_name || o.customer_id)}</td>
@@ -206,6 +208,10 @@ Pages.orders = async view => {
 
     <div class="card"><h3>篩選器</h3>
       <div class="row">
+        <label class="f"><span>日期依據</span><select id="f_datefield">
+          <option value="created_at" ${S.f.date_field !== 'settled_at' ? 'selected' : ''}>交易時間</option>
+          <option value="settled_at" ${S.f.date_field === 'settled_at' ? 'selected' : ''}>核銷時間</option>
+        </select></label>
         <label class="f"><span>月份</span><input id="f_month" type="month" value="${S.f.month}"></label>
         <label class="f"><span>起始日</span><input id="f_from" type="date" value="${S.f.from}"></label>
         <label class="f"><span>結束日</span><input id="f_to" type="date" value="${S.f.to}"></label>
@@ -243,6 +249,7 @@ Pages.orders = async view => {
     <div class="row" id="lpage" style="align-items:center"></div>`;
 
   const apply = () => {
+    S.f.date_field = document.getElementById('f_datefield').value;
     S.f.month = document.getElementById('f_month').value;
     S.f.from = document.getElementById('f_from').value;
     S.f.to = document.getElementById('f_to').value;
@@ -260,8 +267,8 @@ Pages.orders = async view => {
   document.getElementById('f_go').onclick = apply;
   document.getElementById('f_q').onkeydown = e => { if (e.key === 'Enter') apply(); };
   document.getElementById('f_clear').onclick = () => {
-    Object.assign(S.f, { month: '', from: '', to: '', kind: '', status: '', cs: '', customer: '',
-                         staff: '', min_amount: '', max_amount: '', q: '' });
+    Object.assign(S.f, { month: '', from: '', to: '', date_field: 'created_at', kind: '', status: '',
+                         cs: '', customer: '', staff: '', min_amount: '', max_amount: '', q: '' });
     App.reload();
   };
 

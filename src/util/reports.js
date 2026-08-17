@@ -243,9 +243,12 @@ function ledgerQuery(guildId, f = {}) {
   guildId = orgOf(guildId);
   const cond = ['guild_id = ?'], args = [guildId];
   const like = v => `%${v}%`;
-  if (f.month)   { cond.push('created_at LIKE ?'); args.push(f.month + '%'); }
-  if (f.from)    { cond.push('date(created_at) >= date(?)'); args.push(f.from); }
-  if (f.to)      { cond.push('date(created_at) <= date(?)'); args.push(f.to); }
+  // 月份／起訖日要看哪個日期：預設交易時間，date_field=settled_at 就改看核銷時間
+  //（用核銷時間查時，還沒核銷的單自然不會出現）
+  const dateCol = f.date_field === 'settled_at' ? 'settled_at' : 'created_at';
+  if (f.month)   { cond.push(`${dateCol} LIKE ?`); args.push(f.month + '%'); }
+  if (f.from)    { cond.push(`date(${dateCol}) >= date(?)`); args.push(f.from); }
+  if (f.to)      { cond.push(`date(${dateCol}) <= date(?)`); args.push(f.to); }
   if (f.kind)    { cond.push('kind = ?'); args.push(f.kind); }
   if (f.status)  { cond.push('status = ?'); args.push(f.status); }
   if (f.source)  { cond.push('source = ?'); args.push(f.source); }
@@ -260,7 +263,8 @@ function ledgerQuery(guildId, f = {}) {
   }
   const where = cond.join(' AND ');
 
-  const sortable = ['created_at', 'amount', 'staff_share', 'net', 'list_price', 'order_no', 'status', 'kind'];
+  const sortable = ['created_at', 'settled_at', 'amount', 'staff_share', 'net', 'list_price',
+    'order_no', 'status', 'kind'];
   const sort = sortable.includes(f.sort) ? f.sort : 'created_at';
   const dir = String(f.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
@@ -281,6 +285,7 @@ function ledgerQuery(guildId, f = {}) {
 const LEDGER_COLUMNS = [
   { key: 'order_no',      label: '訂單編號', width: 16 },
   { key: 'created_at',    label: '交易時間', width: 19 },
+  { key: 'settled_at',    label: '核銷時間', width: 19 },
   { key: 'kind',          label: '交易類型', width: 14, map: v => kindLabel(v) },
   { key: 'cs_name',       label: '經辦客服', width: 14 },
   { key: 'customer_name', label: '金主名稱', width: 16 },
