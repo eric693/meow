@@ -31,6 +31,10 @@ const intimacyRate = guildId => getNum('order_intimacy_rate', 100, orgOf(guildId
  * 帳面永遠等於「未核銷訂單合計」，不會因為匯入、加減時被夾在 0、或任何一步漏算而對不上。
  * （可提領餘額則不行：它還牽涉提領紀錄與舊系統轉入的餘額，仍需逐筆加減。）
  */
+// 這筆單當初是不是真的從錢包扣了雨幣。現金／轉帳與匯入的歷史單都沒扣過，
+// 事後改單、刪單、退單就不能照訂單金額動錢包，否則等於平白生出雨幣。
+const paidByCoins = o => /雨幣/.test(o.pay_method || '');
+
 function recalcPending(guildId, staffId) {
   if (!staffId) return;
   guildId = orgOf(guildId);
@@ -95,6 +99,11 @@ function createOrder({
            staffName || (staff ? staff.name || staff.code : ''), csName,
            kind, item, Number(qty) || 1, Math.round(unitPrice) || 0,
            list, paid, share, net, source, status, note, payMethod || '雨幣扣款', bond, createdAt);
+    // 一建立就是「已核銷」的單（身分組結帳、補單）也要有核銷時間，否則報表以核銷日篩選會漏掉
+    if (status === 'settled') {
+      db.prepare("UPDATE orders SET settled_at = COALESCE(settled_at, created_at) WHERE order_no = ? AND guild_id = ?")
+        .run(no, guildId);
+    }
     if (staffId) {
       if (status === 'settled') {
         db.prepare(`UPDATE staff SET income = income + ?, total_income = total_income + ?
@@ -129,9 +138,12 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
   const dAmount = paid - o.amount, dShare = share - o.staff_share;
 
   db.transaction(() => {
-    if (dAmount && o.status !== 'refunded') {
+    // 現金／轉帳的單只改帳面數字，不動雨幣錢包（當初就沒扣過）
+    if (dAmount && o.status !== 'refunded' && paidByCoins(o) && o.customer_id) {
       // 實收變多 → 老闆再扣款；變少 → 退還差額
       addCoins(guildId, o.customer_id, -dAmount, `修改訂單 ${orderNo}`, { ref: orderNo, operator, allowNegative: true });
+    }
+    if (dAmount && o.status !== 'refunded' && o.customer_id) {
       db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend + ?) WHERE guild_id=? AND user_id=?')
         .run(dAmount, guildId, o.customer_id);
     }
@@ -163,7 +175,9 @@ function deleteOrder(guildId, orderNo, operator = '') {
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
   db.transaction(() => {
     if (o.status !== 'refunded') {
-      addCoins(guildId, o.customer_id, o.amount, `刪除訂單 ${orderNo}`, { ref: orderNo, operator, allowNegative: true });
+      if (paidByCoins(o) && o.customer_id) {
+        addCoins(guildId, o.customer_id, o.amount, `刪除訂單 ${orderNo}`, { ref: orderNo, operator, allowNegative: true });
+      }
       db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend - ?) WHERE guild_id=? AND user_id=?')
         .run(o.amount, guildId, o.customer_id);
       if (o.status === 'settled') {
@@ -244,10 +258,19 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
   if (o.status === 'refunded') throw new Error(`訂單 ${orderNo} 已退過款`);
 
+  // 退幣一律以「當初真的從錢包扣走多少」為準，而不是訂單金額：
+  // 現金／轉帳的單當初沒扣過雨幣，若照訂單金額退就等於平白送老闆一筆雨幣。
+  const charged = o.customer_id
+    ? db.prepare(`SELECT COALESCE(SUM(-delta),0) v FROM coin_tx
+                  WHERE guild_id=? AND user_id=? AND ref=? AND delta < 0`)
+      .get(guildId, o.customer_id, o.order_no).v
+    : 0;
+  const noCoinPaid = refundCoins && o.customer_id && charged <= 0;
+
   db.transaction(() => {
     // 不退幣時（例如老闆違規）只撤銷訂單、扣回陪玩分潤，雨幣不還給老闆
-    if (refundCoins && o.customer_id) {
-      addCoins(guildId, o.customer_id, o.amount, `退單 ${orderNo}${reason ? '：' + reason : ''}`,
+    if (refundCoins && charged > 0) {
+      addCoins(guildId, o.customer_id, charged, `退單 ${orderNo}${reason ? '：' + reason : ''}`,
         { ref: orderNo, operator });
     }
     if (o.customer_id) {
@@ -265,12 +288,14 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
     }
     db.prepare("UPDATE orders SET status = 'refunded', note = ? WHERE id = ?")
       .run((o.note ? o.note + ' / ' : '') + '退單：' + (reason || '無註記')
-           + (refundCoins ? '' : '（不退幣）'), o.id);
+           + (refundCoins ? (noCoinPaid ? '（原單未扣雨幣，未退幣）' : '') : '（不退幣）'), o.id);
     recalcPending(guildId, o.staff_id);
   })();
 
   if (o.customer_id) refreshVip(guildId, o.customer_id);
-  audit(operator, '退單', `${orderNo} ${refundCoins ? '退還' : '未退'} ${o.amount}`, guildId, { source: 'salary' });
+  audit(operator, '退單',
+    `${orderNo} ${refundCoins && charged > 0 ? `退還 ${charged}` : `未退（原單未扣雨幣）`}`,
+    guildId, { source: 'salary' });
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id);
 }
 
