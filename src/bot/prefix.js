@@ -378,7 +378,7 @@ const handlers = {
     const q = a.replace(/冠名|身份組/g, '').trim();
     const { rows, total } = T.listTitles(msg.guild.id, { kind, q, limit: 25 });
     if (!rows.length) return msg.reply({ embeds: [ok(msg.guild.id, '目前沒有進行中的紀錄', '　')] });
-    const body = rows.map(t => `\`#${t.id}\`\n${T.titleBlock(t)}`).join('\n' + '─'.repeat(28) + '\n');
+    const body = rows.map(t => T.titleBlock(t)).join('\n' + '─'.repeat(28) + '\n');
     await msg.reply({ embeds: [emb(msg.guild.id, {
       title: `🏷️ 冠名／身份組（進行中 ${total} 筆${total > 25 ? '，顯示前 25 筆' : ''}）`,
       desc: body.slice(0, 4000)

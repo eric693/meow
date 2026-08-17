@@ -952,8 +952,8 @@ Pages.titles = async view => {
       ['#', '類別', '名稱', '對象', { label: '天數', num: 1 }, '開始', '結束', '剩餘', '狀態', '備註', '操作'],
       d.rows.map(t => `<tr><td>${t.id}</td><td>${KIND[t.kind]}</td><td><b>${UI.esc(t.name)}</b></td>
         <td>${t.kind === 'role'
-              ? UI.esc(t.target_name || t.target_id)
-              : `${UI.esc(t.customer_name || t.customer_id)} → ${UI.esc(t.staff_name || t.staff_id)}`}</td>
+              ? H.user(t.target_id, t.target_name)
+              : `老闆 ${H.user(t.customer_id, t.customer_name)}<br>陪玩 ${H.user(t.staff_id, t.staff_name)}`}</td>
         <td class="num">${t.days}</td><td>${H.date(t.start_at)}</td><td>${H.date(t.end_at)}</td>
         <td>${t.status === 'ended' ? '<span class="muted">—</span>' : left(t.end_at)}</td>
         <td>${t.status === 'queued' ? '<span class="tag warn">排隊中</span>'

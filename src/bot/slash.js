@@ -437,7 +437,7 @@ const handlers = {
     });
     if (!rows.length)
       return i.reply({ embeds: [ok(i.guildId, '沒有符合條件的紀錄', '　')], ephemeral: true });
-    const body = rows.map(t => `\`#${t.id}\`\n${T.titleBlock(t)}`).join('\n' + '─'.repeat(28) + '\n');
+    const body = rows.map(t => T.titleBlock(t)).join('\n' + '─'.repeat(28) + '\n');
     await i.reply({ embeds: [emb(i.guildId, {
       title: `🏷️ 冠名／身份組（${total} 筆${total > 25 ? '，顯示前 25 筆' : ''}）`,
       desc: body.slice(0, 4000)

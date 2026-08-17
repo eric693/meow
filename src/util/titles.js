@@ -91,14 +91,18 @@ function endTitle(guildId, id, operator = '') {
   return t;
 }
 
+// 直接標出本人的 Discord，客服不用再另外查是誰；
+// 後台手動建立的紀錄可能只有名字沒有 ID，這時退回顯示純文字姓名。
+const mention = (id, name) => (id ? `<@${id}>` : (name || '—'));
+
 const who = t => (t.kind === 'role'
-  ? `🎯 身份組對象：${t.target_name || `<@${t.target_id}>`}`
-  : `👤 客人：${t.customer_name || `<@${t.customer_id}>`}　🎮 陪玩：${t.staff_name || `<@${t.staff_id}>`}`);
+  ? `🎯 對象：${mention(t.target_id, t.target_name)}`
+  : `👤 老闆：${mention(t.customer_id, t.customer_name)}\n🎮 陪玩：${mention(t.staff_id, t.staff_name)}`);
 
 /** 一筆紀錄的顯示區塊，格式沿用舊系統的排版 */
 function titleBlock(t) {
   return [
-    `🏷️ 類別：${KINDS[t.kind]}　天數：${t.days}`,
+    `🏷️ 類別：${KINDS[t.kind]}　編號：#${t.id}　天數：${t.days}`,
     `📌 名稱：${t.name}`,
     who(t),
     t.status === 'queued' ? '🔄 接棒：等待開始提醒' : '',
