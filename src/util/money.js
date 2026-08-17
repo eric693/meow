@@ -25,6 +25,21 @@ const giftShareRate = guildId => getNum('gift_share_rate', 70, orgOf(guildId));
 const intimacyRate = guildId => getNum('order_intimacy_rate', 100, orgOf(guildId));
 
 /**
+ * 重算「暫存薪水」：直接以未核銷訂單的抽成合計為準。
+ *
+ * 暫存薪水完全由訂單推導得出，所以不用加加減減去維護餘額——只要訂單有異動就重算，
+ * 帳面永遠等於「未核銷訂單合計」，不會因為匯入、加減時被夾在 0、或任何一步漏算而對不上。
+ * （可提領餘額則不行：它還牽涉提領紀錄與舊系統轉入的餘額，仍需逐筆加減。）
+ */
+function recalcPending(guildId, staffId) {
+  if (!staffId) return;
+  guildId = orgOf(guildId);
+  db.prepare(`UPDATE staff SET pending_income = COALESCE(
+      (SELECT SUM(staff_share) FROM orders WHERE guild_id=? AND staff_id=? AND status='pending'), 0)
+    WHERE guild_id=? AND user_id=?`).run(guildId, staffId, guildId, staffId);
+}
+
+/**
  * 建立一筆交易（報單／送禮／身分組結帳）。
  * 老闆雨幣即時扣款，陪玩抽成先進「暫存薪水」，核銷後才轉可提領。
  * listPrice 是訂單原價、amount 是實收金額（可折扣）；未指定則兩者相同。
@@ -85,8 +100,7 @@ function createOrder({
         db.prepare(`UPDATE staff SET income = income + ?, total_income = total_income + ?
                     WHERE guild_id=? AND user_id=?`).run(share, share, guildId, staffId);
       } else {
-        db.prepare('UPDATE staff SET pending_income = pending_income + ? WHERE guild_id = ? AND user_id = ?')
-          .run(share, guildId, staffId);
+        recalcPending(guildId, staffId);
       }
     }
     if (bond && staffId && customerId) {
@@ -121,9 +135,8 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
       db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend + ?) WHERE guild_id=? AND user_id=?')
         .run(dAmount, guildId, o.customer_id);
     }
-    if (dShare && o.status !== 'refunded') {
-      const col = o.status === 'settled' ? 'income' : 'pending_income';
-      db.prepare(`UPDATE staff SET ${col} = MAX(0, ${col} + ?) WHERE guild_id=? AND user_id=?`)
+    if (dShare && o.status === 'settled') {
+      db.prepare('UPDATE staff SET income = MAX(0, income + ?) WHERE guild_id=? AND user_id=?')
         .run(dShare, guildId, o.staff_id);
     }
     db.prepare(`UPDATE orders SET kind=?, item=?, qty=?, unit_price=?, list_price=?, amount=?,
@@ -135,6 +148,7 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
            patch.customer_name ?? o.customer_name, patch.staff_name ?? o.staff_name,
            patch.source ?? o.source, patch.pay_method ?? o.pay_method,
            patch.created_at ?? o.created_at, o.id);
+    recalcPending(guildId, o.staff_id);
   })();
 
   refreshVip(guildId, o.customer_id);
@@ -152,12 +166,14 @@ function deleteOrder(guildId, orderNo, operator = '') {
       addCoins(guildId, o.customer_id, o.amount, `刪除訂單 ${orderNo}`, { ref: orderNo, operator, allowNegative: true });
       db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend - ?) WHERE guild_id=? AND user_id=?')
         .run(o.amount, guildId, o.customer_id);
-      const col = o.status === 'settled' ? 'income' : 'pending_income';
-      db.prepare(`UPDATE staff SET ${col} = MAX(0, ${col} - ?) WHERE guild_id=? AND user_id=?`)
-        .run(o.staff_share, guildId, o.staff_id);
+      if (o.status === 'settled') {
+        db.prepare('UPDATE staff SET income = MAX(0, income - ?) WHERE guild_id=? AND user_id=?')
+          .run(o.staff_share, guildId, o.staff_id);
+      }
     }
     db.prepare('DELETE FROM gift_logs WHERE guild_id=? AND order_no=?').run(guildId, orderNo);
     db.prepare('DELETE FROM orders WHERE id=?').run(o.id);
+    recalcPending(guildId, o.staff_id);
   })();
   audit(operator, '刪除交易', orderNo, guildId, { source: 'orders' });
   return { ok: true };
@@ -211,10 +227,10 @@ function settleOrder(guildId, orderNo, operator = '') {
 
   db.transaction(() => {
     db.prepare("UPDATE orders SET status = 'settled', settled_at = ? WHERE id = ?").run(now(), o.id);
-    db.prepare(`UPDATE staff SET pending_income = MAX(0, pending_income - ?),
-                income = income + ?, total_income = total_income + ?
+    db.prepare(`UPDATE staff SET income = income + ?, total_income = total_income + ?
                 WHERE guild_id = ? AND user_id = ?`)
-      .run(o.staff_share, o.staff_share, o.staff_share, guildId, o.staff_id);
+      .run(o.staff_share, o.staff_share, guildId, o.staff_id);
+    recalcPending(guildId, o.staff_id);
   })();
 
   audit(operator, '核銷訂單', `${orderNo} 陪玩入帳 ${o.staff_share}`, guildId, { source: 'salary' });
@@ -238,14 +254,10 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
       db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend - ?) WHERE guild_id = ? AND user_id = ?')
         .run(o.amount, guildId, o.customer_id);
     }
-    if (o.staff_id) {
-      const col = o.status === 'settled' ? 'income' : 'pending_income';
-      db.prepare(`UPDATE staff SET ${col} = MAX(0, ${col} - ?) WHERE guild_id = ? AND user_id = ?`)
-        .run(o.staff_share, guildId, o.staff_id);
-      if (o.status === 'settled') {
-        db.prepare('UPDATE staff SET total_income = MAX(0, total_income - ?) WHERE guild_id=? AND user_id=?')
-          .run(o.staff_share, guildId, o.staff_id);
-      }
+    if (o.staff_id && o.status === 'settled') {
+      db.prepare(`UPDATE staff SET income = MAX(0, income - ?),
+                  total_income = MAX(0, total_income - ?) WHERE guild_id = ? AND user_id = ?`)
+        .run(o.staff_share, o.staff_share, guildId, o.staff_id);
     }
     // 本單當初加的羈絆點數原數扣回
     if (o.intimacy && o.staff_id && o.customer_id) {
@@ -254,6 +266,7 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
     db.prepare("UPDATE orders SET status = 'refunded', note = ? WHERE id = ?")
       .run((o.note ? o.note + ' / ' : '') + '退單：' + (reason || '無註記')
            + (refundCoins ? '' : '（不退幣）'), o.id);
+    recalcPending(guildId, o.staff_id);
   })();
 
   if (o.customer_id) refreshVip(guildId, o.customer_id);
@@ -306,6 +319,7 @@ function reviewWithdraw(guildId, id, status, operator = '') {
 
 module.exports = {
   createOrder, updateOrder, deleteOrder, getOrder, reportOrder, unreportOrder, settleOrder, refundOrder,
+  recalcPending,
   requestWithdraw, reviewWithdraw, payoutStaff,
   shareRate, giftShareRate, intimacyRate, KINDS, STATUS, kindLabel
 };
