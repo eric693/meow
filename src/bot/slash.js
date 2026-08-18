@@ -219,7 +219,9 @@ const handlers = {
 
     const value = type === 'amount' ? num : 0;
     const percent = type === 'percent' ? 100 - num : 0;
-    const desc = type === 'amount' ? `折抵 ${n(num)} 元` : `打 ${num} 折`;
+    // 0 元券：像「指定稱呼不加價」這種優惠，背包看得到、結帳時可選用，但不折抵金額
+    const desc = type === 'amount' ? (num > 0 ? `折抵 ${n(num)} 元` : '不折抵金額的優惠券')
+                                   : `打 ${num} 折`;
     const key = `${type}${num}-${name}`.replace(/\s+/g, '').slice(0, 60);
     G.addItem(i.guildId, u.id, { key, name, qty, value, percent, minSpend, expires: expires || null });
     audit(i.user.tag, '發放折價券', `${name}(${desc})×${qty} → ${u.tag}`, i.guildId);
@@ -452,6 +454,19 @@ const handlers = {
     await i.reply({ embeds: [ok(i.guildId, '已提前結束', `#${id}　${t.name}`)] });
   },
 
+  async 收回折價券(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('老闆');
+    const key = i.options.getString('券');
+    const qty = i.options.getInteger('數量');
+    const reason = i.options.getString('原因') || '';
+    const r = G.revokeItem(i.guildId, u.id, key, qty);
+    audit(i.user.tag, '收回折價券', `${r.name}×${r.taken} ← ${u.tag}${reason ? `（${reason}）` : ''}`, i.guildId);
+    await i.reply({ embeds: [ok(i.guildId, '已收回折價券',
+      `已從 ${mention(u.id)} 的背包收回 **${r.name}** ×${r.taken}`
+      + `${r.left ? `，還剩 ${r.left} 張` : '（已全部收回）'}${reason ? `\n原因：${reason}` : ''}`)] });
+  },
+
   async 範本(i) {
     const SN = require('../util/snippets');
     const key = i.options.getString('名稱');
@@ -496,6 +511,17 @@ async function autocomplete(i) {
   if (!i.guildId) return i.respond([]);
   const focused = i.options.getFocused(true);
   const q = String(focused?.value || '').toLowerCase().replace(/^@/, '');
+
+  // 收回折價券：列出那位老闆背包裡實際有的券
+  if (focused?.name === '券') {
+    const target = i.options.get('老闆')?.value;
+    if (!target) return i.respond([{ name: '請先選擇老闆', value: 'none' }]);
+    const bag = G.listBackpack(i.guildId, String(target))
+      .filter(c => !q || c.name.toLowerCase().includes(q))
+      .slice(0, 25);
+    if (!bag.length) return i.respond([{ name: '這位老闆的背包是空的', value: 'none' }]);
+    return i.respond(bag.map(c => ({ name: G.couponLabel(c).slice(0, 100), value: c.item_key })));
+  }
 
   // 回應模板：列出後台「小工作台」建立的自訂指令
   if (focused?.name === '名稱') {

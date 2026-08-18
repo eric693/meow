@@ -137,10 +137,10 @@ const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tai
 
 /** 這筆金額可用的折價券（面額或折扣、未過期、達門檻） */
 function usableCoupons(guildId, userId, amount) {
+  // 0 元券（例如「指定稱呼不加價」）也要能挑：它不折抵金額，但結帳時要一起消耗掉，
+  // 才知道這張優惠已經用過了。
   return listBackpack(guildId, userId)
-    .filter(x => (x.value > 0 || x.percent > 0)
-              && (!x.expires || x.expires >= today())
-              && amount >= (x.min_spend || 0));
+    .filter(x => (!x.expires || x.expires >= today()) && amount >= (x.min_spend || 0));
 }
 
 /** 這張券對這筆金額實際能折多少（不會超過訂單金額） */
@@ -162,12 +162,13 @@ function couponOption(c, amount) {
     label: `[背包] ${c.name}${cond} (剩 ${c.qty} 張)`,
     description: c.percent > 0
       ? `打 ${100 - c.percent} 折 (可折抵 ${off} 元)`
-      : `可折抵 ${c.value} 元`
+      : (c.value > 0 ? `可折抵 ${c.value} 元` : '優惠券（不折抵金額）')
   };
 }
 /** 單行版本（後台列表用） */
 const couponLabel = c => {
-  const base = c.percent > 0 ? `${c.name}（折 ${c.percent}%）` : `${c.name}（折抵 ${c.value} 元）`;
+  const base = c.percent > 0 ? `${c.name}（折 ${c.percent}%）`
+    : (c.value > 0 ? `${c.name}（折抵 ${c.value} 元）` : `${c.name}（不折抵金額）`);
   return `${base}${c.min_spend ? `・滿 ${c.min_spend}` : ''}・剩 ${c.qty} 張`;
 };
 
@@ -180,6 +181,18 @@ function useCoupon(guildId, userId, key) {
   if (c.qty === 1) db.prepare('DELETE FROM backpack WHERE id=?').run(c.id);
   else db.prepare('UPDATE backpack SET qty = qty - 1 WHERE id=?').run(c.id);
   return c;
+}
+
+/** 收回背包裡的券：不指定數量就整筆收回 */
+function revokeItem(guildId, userId, key, qty = null) {
+  guildId = orgOf(guildId);
+  const c = db.prepare('SELECT * FROM backpack WHERE guild_id=? AND user_id=? AND item_key=?')
+    .get(guildId, userId, key);
+  if (!c) throw new Error('這位老闆的背包裡沒有這張券');
+  const take = qty == null ? c.qty : Math.min(c.qty, Math.max(1, Math.round(qty)));
+  if (take >= c.qty) db.prepare('DELETE FROM backpack WHERE id=?').run(c.id);
+  else db.prepare('UPDATE backpack SET qty = qty - ? WHERE id=?').run(take, c.id);
+  return { ...c, taken: take, left: Math.max(0, c.qty - take) };
 }
 
 // ---------- 地盤（步數超過 21 自動歸 0）----------
@@ -195,6 +208,7 @@ function addTerritory(guildId, userId, delta) {
 }
 
 module.exports = {
+  revokeItem,
   seedGifts, listGifts, findGift, sendGift,
   addIntimacy, getIntimacy, rankOf, RANKS,
   listBackpack, addItem, addTerritory,

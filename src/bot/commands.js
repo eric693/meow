@@ -74,12 +74,20 @@ const commands = [
     .addStringOption(o => o.setName('類型').setDescription('請選擇折價券類型').setRequired(true)
       .addChoices({ name: '金額折抵 (如: 折 50 元)', value: 'amount' },
                   { name: '打折券 (如: 打 85 折)', value: 'percent' }))
-    .addIntegerOption(o => o.setName('數值').setDescription('金額折抵填元數；打折券填折數（85 折填 85）')
-      .setRequired(true).setMinValue(1))
+    .addIntegerOption(o => o.setName('數值')
+      .setDescription('金額折抵填元數（填 0＝不折抵金額的優惠券）；打折券填折數（85 折填 85）')
+      .setRequired(true).setMinValue(0))
     .addStringOption(o => o.setName('名稱').setDescription('券的名稱，例：VIP2 折價卷').setRequired(true))
     .addIntegerOption(o => o.setName('數量').setDescription('預設 1 張').setMinValue(1))
     .addIntegerOption(o => o.setName('門檻').setDescription('最低消費門檻，不填為無門檻').setMinValue(0))
     .addStringOption(o => o.setName('期限').setDescription('到期日 YYYY-MM-DD，不填為不限期')),
+
+  b('收回折價券', '把老闆背包裡的券收回來')
+    .addUserOption(o => o.setName('老闆').setDescription('要收回誰的券').setRequired(true))
+    .addStringOption(o => o.setName('券').setDescription('選擇這位老闆背包裡的券')
+      .setRequired(true).setAutocomplete(true))
+    .addIntegerOption(o => o.setName('數量').setDescription('不填＝整筆收回').setMinValue(1))
+    .addStringOption(o => o.setName('原因').setDescription('會記在操作紀錄裡')),
 
   // ---- 查詢與報表 ----
   b('對帳', '查詢特定老闆在特定陪玩身上的累計消費金額與次數')

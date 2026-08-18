@@ -103,7 +103,8 @@ const handlers = {
     }
     const c = getCustomer(msg.guild.id, target);
     const G = require('../util/gifts');
-    const coupons = G.listBackpack(msg.guild.id, target).filter(x => x.value > 0 || x.percent > 0);
+    // 0 元的優惠券（指定稱呼不加價之類）一樣要列出來，只是不顯示折抵金額
+    const coupons = G.listBackpack(msg.guild.id, target);
     await msg.reply({ embeds: [money(msg.guild.id, '💳 餘額與背包查詢',
       `老闆 ${mention(target)} 的雨幣餘額：\`${n(c.coins)}\`\n\n**🎒 背包折價券：**\n`
       + (coupons.length ? coupons.map(x => '・' + G.couponLabel(x)).join('\n') : '無'))] });
@@ -164,11 +165,19 @@ const handlers = {
       (_, m, dd) => `${new Date().getFullYear()}-${m.padStart(2, '0')}-${dd.padStart(2, '0')}`) : '');
     const r = R.csRanking(msg.guild.id, fix(from), fix(to));
     const short = d => (d ? d.slice(5).replace('-', '/') : '不限');
-    const body = r.tickets.length
-      ? r.tickets.map((x, i) => `${i + 1}. ${mention(x.cs_id)} ➜ \`${n(x.cnt)}\` 次`).join('\n')
-      : '這個區間還沒有接單紀錄。';
-    await msg.reply({ embeds: [money(msg.guild.id, '📊 喚雨｜客服接單排行榜',
-      `📅 **結算區間：** \`${short(fix(from))}\` ~ \`${short(fix(to)) === '不限' ? '今天' : short(fix(to))}\`\n\n${body}`.slice(0, 3900))] });
+    // 客服的業績主要來自結帳（訂單上的經辦客服），客服單的接單次數只是其中一部分；
+    // 只看 cs_stats 會變成「按過接單按鈕幾次」，跟實際成交完全對不起來。
+    const body = r.orders.length
+      ? r.orders.map((x, i) =>
+          `${i + 1}. ${mention(x.cs_id)} ➜ \`${n(x.amount)}\` 元（${n(x.cnt)} 單）`).join('\n')
+      : '這個區間還沒有結帳紀錄。';
+    const tickets = r.tickets.length
+      ? '\n\n────────────────\n🎫 **客服單接單次數**\n'
+        + r.tickets.map(x => `・${mention(x.cs_id)} ➜ \`${n(x.cnt)}\` 次`).join('\n')
+      : '';
+    await msg.reply({ embeds: [money(msg.guild.id, '📊 喚雨｜客服業績排行榜',
+      `📅 **結算區間：** \`${short(fix(from))}\` ~ \`${short(fix(to)) === '不限' ? '今天' : short(fix(to))}\`\n\n`
+      + `${body}${tickets}`.slice(0, 3600))] });
   },
 
   async 清空客服業績(msg) {
