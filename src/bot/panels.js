@@ -1006,20 +1006,47 @@ async function handleInteraction(i) {
       return eph(i, emb(i.guildId, { title: '🎒 我的專屬背包', desc: body, color: COLOR.err }));
     }
     if (act === 'orders') {
-      return eph(i, emb(i.guildId, {
-        title: '📋 您的專屬點單紀錄',
-        desc: require('../util/reports').patronOrdersText(i.guildId, i.user.id)
-      }));
+      return i.reply({
+        embeds: [emb(i.guildId, {
+          title: '📋 您的專屬點單紀錄',
+          desc: require('../util/reports').patronOrdersText(i.guildId, i.user.id)
+        })],
+        components: [row(btn(`ord:plain:${i.user.id}`, '純文字版（可複製）', ButtonStyle.Secondary, '📄'))],
+        ephemeral: true
+      });
     }
   }
 
   // ---- 地下金庫 ----
   // 老闆自己查點單紀錄，不必再請客服代查（與會員服務中心的按鈕同一份資料）
   if (id === 'bank:orders') {
-    return eph(i, emb(i.guildId, {
-      title: '📋 您的專屬點單紀錄',
-      desc: require('../util/reports').patronOrdersText(i.guildId, i.user.id)
-    }));
+    return i.reply({
+      embeds: [emb(i.guildId, {
+        title: '📋 您的專屬點單紀錄',
+        desc: require('../util/reports').patronOrdersText(i.guildId, i.user.id)
+      })],
+      components: [row(btn(`ord:plain:${i.user.id}`, '純文字版（可複製）', ButtonStyle.Secondary, '📄'))],
+      ephemeral: true
+    });
+  }
+
+  // 手機上沒辦法選取 embed 裡的文字，這裡改用一般訊息內容送出，長按就複製得到
+  if (id.startsWith('ord:plain:')) {
+    const target = id.split(':')[2];
+    if (target !== i.user.id && !isCS(i.member)) return denyEph(i, '只能查看自己的點單紀錄。');
+    const c = getCustomer(i.guildId, target);
+    const text = require('../util/reports').patronOrdersPlain(i.guildId, target, c.name || '');
+    // Discord 一般訊息上限 2000 字，太長就分段送
+    const chunks = [];
+    let buf = '';
+    for (const line of text.split('\n')) {
+      if ((buf + line).length > 1900) { chunks.push(buf); buf = ''; }
+      buf += (buf ? '\n' : '') + line;
+    }
+    if (buf) chunks.push(buf);
+    await i.reply({ content: chunks[0], ephemeral: true });
+    for (const c2 of chunks.slice(1)) await i.followUp({ content: c2, ephemeral: true });
+    return;
   }
 
   if (id === 'bank:me') {

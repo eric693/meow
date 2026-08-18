@@ -44,10 +44,17 @@ const handlers = {
     const target = firstId(msg, args);
     if (!target) throw new Error('請標記要查詢的老闆，例如 `!查點單 @老闆`');
     const c = getCustomer(msg.guild.id, target);
-    await msg.reply({ embeds: [emb(msg.guild.id, {
-      title: `📋 ${c.name || target} 的專屬點單紀錄`,
-      desc: R.patronOrdersText(msg.guild.id, target)
-    })] });
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    await msg.reply({
+      embeds: [emb(msg.guild.id, {
+        title: `📋 ${c.name || target} 的專屬點單紀錄`,
+        desc: R.patronOrdersText(msg.guild.id, target)
+      })],
+      // 手機無法選取 embed 內的文字，另外給一份可複製的純文字
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`ord:plain:${target}`)
+          .setLabel('純文字版（可複製）').setStyle(ButtonStyle.Secondary).setEmoji('📄'))]
+    });
   },
 
   async 消費榜(msg) {

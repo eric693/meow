@@ -84,11 +84,16 @@ function patronOrders(guildId, customerId, limit = 0) {
   guildId = orgOf(guildId);
   // 0 元的補登空單只會讓清單出現「某某：0 元」，沒有資訊量，濾掉
   const where = `guild_id=? AND customer_id=? AND status!='refunded' AND (list_price > 0 OR amount > 0)`;
-  const rows = db.prepare(`SELECT staff_id, staff_name,
-      SUM(list_price) list, SUM(amount) paid, SUM(list_price - amount) discount,
-      SUM(CASE WHEN kind='gift' THEN list_price ELSE 0 END) gift, COUNT(*) cnt
-    FROM orders WHERE ${where}
-    GROUP BY staff_id ORDER BY list DESC ${limit > 0 ? 'LIMIT ?' : ''}`)
+  // 匯入的舊單多半沒存 staff_name，改去員工名冊補回名字，純文字版才不會列出一串 ID
+  const rows = db.prepare(`SELECT o.staff_id,
+      COALESCE(NULLIF(MAX(o.staff_name), ''), MAX(s.name), MAX(s.code), o.staff_id) staff_name,
+      SUM(o.list_price) list, SUM(o.amount) paid, SUM(o.list_price - o.amount) discount,
+      SUM(CASE WHEN o.kind='gift' THEN o.list_price ELSE 0 END) gift, COUNT(*) cnt
+    FROM orders o LEFT JOIN staff s ON s.guild_id = o.guild_id AND s.user_id = o.staff_id
+    WHERE ${where.replace(/guild_id=\?/, 'o.guild_id=?').replace('customer_id=?', 'o.customer_id=?')
+                 .replace("status!='refunded'", "o.status!='refunded'")
+                 .replace('list_price > 0 OR amount > 0', 'o.list_price > 0 OR o.amount > 0')}
+    GROUP BY o.staff_id ORDER BY list DESC ${limit > 0 ? 'LIMIT ?' : ''}`)
     .all(...(limit > 0 ? [guildId, customerId, limit] : [guildId, customerId]));
   const all = db.prepare(`SELECT COALESCE(SUM(list_price),0) list, COALESCE(SUM(amount),0) paid,
       COALESCE(SUM(list_price - amount),0) discount,
@@ -133,6 +138,28 @@ function patronOrdersText(guildId, customerId, limit = 0) {
     body = kept.join('\n') + `\n…版面已滿，其餘 ${lines.length - kept.length} 位未列出（總計已包含全部）`;
   }
   return body + tailText();
+}
+
+/**
+ * 點單紀錄的純文字版：手機上 Discord 沒辦法選取 embed 裡的文字，
+ * 要能複製就得走一般訊息內容。順便把 @提及換成陪玩名稱，複製出去才看得懂。
+ */
+function patronOrdersPlain(guildId, customerId, name = '') {
+  const { rows, total } = patronOrders(guildId, customerId, 0);
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  if (!rows.length) return `${name || ''} 目前沒有任何點單紀錄。`.trim();
+  const lines = rows.map(r => {
+    const who = r.staff_name || (r.staff_id ? r.staff_id : '（未指定）');
+    const extra = [
+      r.discount > 0 ? `使用了 ${n(r.discount)} 元折價` : '',
+      r.gift > 0 ? `含禮物 ${n(r.gift)} 元` : ''
+    ].filter(Boolean).join('、');
+    return `${who}：共消費 ${n(r.list)} 元${extra ? `（${extra}）` : ''}`;
+  });
+  const tail = ['────────────────', `歷史總計消費：${n(total.list)} 元`];
+  if (total.gift > 0) tail.push(`其中禮物：${n(total.gift)} 元`);
+  if (total.discount > 0) tail.push(`累計折抵：${n(total.discount)} 元`);
+  return [`${name || ''}的點單紀錄`.trim(), ...lines, ...tail].join('\n');
 }
 
 /** 消費榜 / 金主榜 */
@@ -407,7 +434,7 @@ const withdrawRows = (guildId, f = {}) => {
 module.exports = {
   customerSpend, customerOrders, pairSpend, staffDetail, spendRanking, patronBoard,
   staffRanking, financeReport, dashboardCharts, csRanking, totalCoins, unsettled,
-  ledgerQuery, withdrawRows, patronOrders, patronOrdersText,
+  ledgerQuery, withdrawRows, patronOrders, patronOrdersText, patronOrdersPlain,
   LEDGER_COLUMNS, PATRON_COLUMNS, STAFF_COLUMNS, WITHDRAW_COLUMNS,
   vipName, vipNames, DEFAULT_VIP_NAMES, KINDS, STATUS, kindLabel
 };
