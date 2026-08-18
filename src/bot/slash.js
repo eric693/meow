@@ -220,7 +220,7 @@ const handlers = {
     const value = type === 'amount' ? num : 0;
     const percent = type === 'percent' ? 100 - num : 0;
     // 0 元券：像「指定稱呼不加價」這種優惠，背包看得到、結帳時可選用，但不折抵金額
-    const desc = type === 'amount' ? (num > 0 ? `折抵 ${n(num)} 元` : '不折抵金額的優惠券')
+    const desc = type === 'amount' ? (num > 0 ? `折抵 ${n(num)} 元` : '折抵卷')
                                    : `打 ${num} 折`;
     const key = `${type}${num}-${name}`.replace(/\s+/g, '').slice(0, 60);
     G.addItem(i.guildId, u.id, { key, name, qty, value, percent, minSpend, expires: expires || null });

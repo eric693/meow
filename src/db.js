@@ -3,6 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
+// 時區：服務本身由 .env 帶 TZ=Asia/Taipei，但用 node scripts/... 手動跑的工具不會經過 .env。
+// SQLite 的 datetime('now','localtime') 走的是行程時區，兩邊不一致就會寫出差 8 小時的時間戳，
+// 對帳與依日期篩選都會錯位，所以在這裡兜底補上。
+process.env.TZ = process.env.TZ || 'Asia/Taipei';
+
 const DATA_DIR = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
