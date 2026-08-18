@@ -223,8 +223,12 @@ const PANELS = {
   'setup-bank': {
     label: '地下金庫',
     build: guildId => ({
-      embeds: [emb(guildId, { title: '🏦 地下金庫', desc: '點擊查詢你目前的雨幣餘額、VIP 等級與消費紀錄（僅你自己看得到）。' })],
-      components: [row(btn('bank:me', '查詢餘額', ButtonStyle.Primary, '🪙'))]
+      embeds: [emb(guildId, { title: '🏦 地下金庫',
+        desc: '點擊查詢你目前的雨幣餘額、VIP 等級與點單紀錄（僅你自己看得到）。' })],
+      components: [row(
+        btn('bank:me', '查詢餘額', ButtonStyle.Primary, '🪙'),
+        btn('bank:orders', '查點單', ButtonStyle.Primary, '📋')
+      )]
     })
   },
 
@@ -1010,6 +1014,14 @@ async function handleInteraction(i) {
   }
 
   // ---- 地下金庫 ----
+  // 老闆自己查點單紀錄，不必再請客服代查（與會員服務中心的按鈕同一份資料）
+  if (id === 'bank:orders') {
+    return eph(i, emb(i.guildId, {
+      title: '📋 您的專屬點單紀錄',
+      desc: require('../util/reports').patronOrdersText(i.guildId, i.user.id)
+    }));
+  }
+
   if (id === 'bank:me') {
     const R = require('../util/reports');
     const s = R.customerSpend(i.guildId, i.user.id);

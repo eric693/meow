@@ -27,7 +27,7 @@ const ACTION_LABEL = {
   'reportch': '報單-建立頻道', 'reportform': '報單-開啟表單', 'reportm': '報單-送出',
   'exam:start': '考核-開始', 'exammodal': '考核-送出資料', 'exam:close': '考核-關閉',
   'mb:coins': '會員-查餘額', 'mb:bag': '會員-查背包', 'mb:orders': '會員-查點單紀錄',
-  'bank:me': '地下金庫-查詢', 'intimacy:query': '愛戀藏館-查詢', 'intimacym': '愛戀藏館-送出',
+  'bank:me': '地下金庫-查詢', 'bank:orders': '地下金庫-查點單', 'intimacy:query': '愛戀藏館-查詢', 'intimacym': '愛戀藏館-送出',
   'sug:public': '意見箱-開啟', 'sug:staff': '員工輔導室-開啟',
   'sugm': '意見箱-送出', 'un': '未核銷-翻頁', 'poll': '投票-作答'
 };
