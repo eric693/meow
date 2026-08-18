@@ -132,6 +132,8 @@ function finish(sid, pay) {
     allowZero: payable === 0,
     note
   });
+  // 記下用掉的券，退單時才還得回去
+  if (coupon) G.recordCouponUse(sess.guildId, order.order_no, sess.customerId, coupon, discount);
 
   S.drop(sid);
   return {

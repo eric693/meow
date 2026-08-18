@@ -380,3 +380,21 @@ CREATE TABLE IF NOT EXISTS snippets (
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
   UNIQUE (guild_id, key)
 );
+
+-- ---------- 折價券使用紀錄（退單時要把券還回背包） ----------
+CREATE TABLE IF NOT EXISTS coupon_uses (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id   TEXT NOT NULL,
+  order_no   TEXT NOT NULL,                   -- 用在哪張單
+  user_id    TEXT NOT NULL,                   -- 哪位老闆的券
+  item_key   TEXT NOT NULL,
+  name       TEXT NOT NULL DEFAULT '',
+  value      INTEGER NOT NULL DEFAULT 0,      -- 券的原始條件，退回時原樣還回去
+  percent    INTEGER NOT NULL DEFAULT 0,
+  min_spend  INTEGER NOT NULL DEFAULT 0,
+  expires    TEXT,
+  discount   INTEGER NOT NULL DEFAULT 0,      -- 這張單實際折抵多少
+  restored   INTEGER NOT NULL DEFAULT 0,      -- 是否已因退單／刪單還回背包
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_coupon_uses_order ON coupon_uses (guild_id, order_no);

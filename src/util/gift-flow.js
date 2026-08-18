@@ -102,6 +102,7 @@ function finish(sid, pay) {
     csId: sess.csId, csName: sess.csName, operator: sess.csName,
     discount, payMethod: cash ? '現金 / 轉帳' : '雨幣扣款', skipWallet: cash
   });
+  if (coupon) G.recordCouponUse(sess.guildId, r.order.order_no, sess.customerId, coupon, discount);
 
   S.drop(sid);
   return {

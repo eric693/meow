@@ -187,6 +187,35 @@ function useCoupon(guildId, userId, key) {
   return c;
 }
 
+/**
+ * 記下「這張單用掉了哪張券」。退單時要靠它把券原樣還回背包，
+ * 只留訂單備註的文字是還原不回來的（面額、門檻、期限都在券本身）。
+ */
+function recordCouponUse(guildId, orderNo, userId, coupon, discount = 0) {
+  if (!coupon || !orderNo) return;
+  db.prepare(`INSERT INTO coupon_uses
+      (guild_id, order_no, user_id, item_key, name, value, percent, min_spend, expires, discount)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(orgOf(guildId), orderNo, userId, coupon.item_key, coupon.name || '',
+         coupon.value || 0, coupon.percent || 0, coupon.min_spend || 0,
+         coupon.expires || null, Math.round(discount) || 0);
+}
+
+/** 退單／刪單時把券還回老闆的背包（同一張單只會還一次） */
+function restoreCoupons(guildId, orderNo) {
+  guildId = orgOf(guildId);
+  const rows = db.prepare('SELECT * FROM coupon_uses WHERE guild_id=? AND order_no=? AND restored=0')
+    .all(guildId, orderNo);
+  for (const r of rows) {
+    addItem(guildId, r.user_id, {
+      key: r.item_key, name: r.name, qty: 1,
+      value: r.value, percent: r.percent, minSpend: r.min_spend, expires: r.expires
+    });
+    db.prepare('UPDATE coupon_uses SET restored=1 WHERE id=?').run(r.id);
+  }
+  return rows;
+}
+
 /** 收回背包裡的券：不指定數量就整筆收回 */
 function revokeItem(guildId, userId, key, qty = null) {
   guildId = orgOf(guildId);
@@ -212,7 +241,7 @@ function addTerritory(guildId, userId, delta) {
 }
 
 module.exports = {
-  revokeItem,
+  revokeItem, recordCouponUse, restoreCoupons,
   seedGifts, listGifts, findGift, sendGift,
   addIntimacy, getIntimacy, rankOf, RANKS,
   listBackpack, addItem, addTerritory,

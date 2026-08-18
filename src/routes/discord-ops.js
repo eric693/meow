@@ -155,6 +155,7 @@ router.post('/checkout', guardModule('orders'), async (req, res) => {
       payMethod: cash ? '現金 / 轉帳' : '雨幣扣款', skipWallet: cash,
       note: [b.note || '', coupon ? `使用券：${coupon.name}` : ''].filter(Boolean).join(' / ')
     });
+    if (coupon) G.recordCouponUse(req.orgId, order.order_no, customerId, coupon, discount);
 
     // 有指定頻道就把結帳明細發出去，沒指定就只建帳
     let posted = false;

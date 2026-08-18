@@ -190,7 +190,10 @@ function deleteOrder(guildId, orderNo, operator = '') {
           .run(o.staff_share, guildId, o.staff_id);
       }
     }
+    // 整筆刪除等同交易沒發生過，券也要還回去
+    if (o.status !== 'refunded') require('./gifts').restoreCoupons(guildId, o.order_no);
     db.prepare('DELETE FROM gift_logs WHERE guild_id=? AND order_no=?').run(guildId, orderNo);
+    db.prepare('DELETE FROM coupon_uses WHERE guild_id=? AND order_no=?').run(guildId, orderNo);
     db.prepare('DELETE FROM orders WHERE id=?').run(o.id);
     recalcPending(guildId, o.staff_id);
   })();
@@ -279,6 +282,7 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
       .get(guildId, o.customer_id, o.order_no).v
     : 0;
   const noCoinPaid = refundCoins && o.customer_id && charged <= 0;
+  let restored = [];
 
   db.transaction(() => {
     // 不退幣時（例如老闆違規）只撤銷訂單、扣回陪玩分潤，雨幣不還給老闆
@@ -299,15 +303,19 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
     if (o.intimacy && o.staff_id && o.customer_id) {
       require('./gifts').addIntimacy(guildId, o.customer_id, o.staff_id, -o.intimacy);
     }
+    // 用掉的折價券原樣還回老闆背包（面額、門檻、期限都照原本的）
+    restored = require('./gifts').restoreCoupons(guildId, o.order_no);
     db.prepare("UPDATE orders SET status = 'refunded', note = ? WHERE id = ?")
       .run((o.note ? o.note + ' / ' : '') + '退單：' + (reason || '無註記')
-           + (refundCoins ? (noCoinPaid ? '（原單未扣雨幣，未退幣）' : '') : '（不退幣）'), o.id);
+           + (refundCoins ? (noCoinPaid ? '（原單未扣雨幣，未退幣）' : '') : '（不退幣）')
+           + (restored.length ? `（已退回折價券：${restored.map(c => c.name).join('、')}）` : ''), o.id);
     recalcPending(guildId, o.staff_id);
   })();
 
   if (o.customer_id) refreshVip(guildId, o.customer_id);
   audit(operator, '退單',
-    `${orderNo} ${refundCoins && charged > 0 ? `退還 ${charged}` : `未退（原單未扣雨幣）`}`,
+    `${orderNo} ${refundCoins && charged > 0 ? `退還 ${charged}` : `未退（原單未扣雨幣）`}`
+    + (restored.length ? `，退回折價券 ${restored.map(c => c.name).join('、')}` : ''),
     guildId, { source: 'salary' });
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id);
 }
