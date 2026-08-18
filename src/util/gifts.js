@@ -158,8 +158,12 @@ function couponDiscount(coupon, amount) {
 function couponOption(c, amount) {
   const cond = c.min_spend ? `（滿 NT$${Number(c.min_spend).toLocaleString('en-US')}）` : '';
   const off = couponDiscount(c, amount);
+  // 折抵內容直接寫進主標題：同名的券（例如兩張都叫 TEST，一張折 10 元、一張 0 元）
+  // 光看名稱分不出來，客服很容易選錯張。
+  const what = c.percent > 0 ? `打 ${100 - c.percent} 折`
+    : (c.value > 0 ? `折抵 ${c.value} 元` : '不折抵金額');
   return {
-    label: `[背包] ${c.name}${cond} (剩 ${c.qty} 張)`,
+    label: `[背包] ${c.name}・${what}${cond} (剩 ${c.qty} 張)`,
     description: c.percent > 0
       ? `打 ${100 - c.percent} 折 (可折抵 ${off} 元)`
       : (c.value > 0 ? `可折抵 ${c.value} 元` : '優惠券（不折抵金額）')
