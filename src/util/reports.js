@@ -80,7 +80,7 @@ function staffDetail(guildId, staffId, top = 10) {
  *    累計金額，跟明細不同來源，兩邊擺在一起就會對不上。
  * 2. 「共消費」看的是訂單原價，折抵的部分另外標出來，跟舊系統的呈現一致。
  */
-function patronOrders(guildId, customerId, limit = 25) {
+function patronOrders(guildId, customerId, limit = 0) {
   guildId = orgOf(guildId);
   // 0 元的補登空單只會讓清單出現「某某：0 元」，沒有資訊量，濾掉
   const where = `guild_id=? AND customer_id=? AND status!='refunded' AND (list_price > 0 OR amount > 0)`;
@@ -88,7 +88,8 @@ function patronOrders(guildId, customerId, limit = 25) {
       SUM(list_price) list, SUM(amount) paid, SUM(list_price - amount) discount,
       SUM(CASE WHEN kind='gift' THEN list_price ELSE 0 END) gift, COUNT(*) cnt
     FROM orders WHERE ${where}
-    GROUP BY staff_id ORDER BY list DESC LIMIT ?`).all(guildId, customerId, limit);
+    GROUP BY staff_id ORDER BY list DESC ${limit > 0 ? 'LIMIT ?' : ''}`)
+    .all(...(limit > 0 ? [guildId, customerId, limit] : [guildId, customerId]));
   const all = db.prepare(`SELECT COALESCE(SUM(list_price),0) list, COALESCE(SUM(amount),0) paid,
       COALESCE(SUM(list_price - amount),0) discount,
       COALESCE(SUM(CASE WHEN kind='gift' THEN list_price ELSE 0 END),0) gift,
@@ -98,23 +99,40 @@ function patronOrders(guildId, customerId, limit = 25) {
 }
 
 /** 點單紀錄的顯示文字（Discord 用，!查點單 與會員面板共用同一份） */
-function patronOrdersText(guildId, customerId, limit = 25) {
+function patronOrdersText(guildId, customerId, limit = 0) {
   const { rows, total } = patronOrders(guildId, customerId, limit);
   const n = v => Number(v || 0).toLocaleString('en-US');
   if (!rows.length) return '目前沒有任何點單紀錄。';
-  const body = rows.map(r => {
+  const lines = rows.map(r => {
     const who = /^\d{15,25}$/.test(String(r.staff_id || '')) ? `<@${r.staff_id}>` : (r.staff_name || '（未指定）');
     const extra = [
       r.discount > 0 ? `使用了 ${n(r.discount)} 元折價` : '',
       r.gift > 0 ? `含禮物 ${n(r.gift)} 元` : ''
     ].filter(Boolean).join('、');
     return `・${who}：共消費 \`${n(r.list)}\` 元${extra ? `（${extra}）` : ''}`;
-  }).join('\n');
+  });
+
   const tail = ['\n━━━━━━━━━━━━━━━━━━', `💰 **歷史總計消費：** \`${n(total.list)}\` 元`];
   if (total.gift > 0) tail.push(`🎁 其中禮物：\`${n(total.gift)}\` 元`);
   if (total.discount > 0) tail.push(`🎟️ 累計折抵：\`${n(total.discount)}\` 元`);
-  if (total.staff > rows.length) tail.push(`（共 ${total.staff} 位陪玩，此處顯示前 ${rows.length} 位）`);
-  return (body + '\n' + tail.join('\n')).slice(0, 3900);
+
+  // 預設列出全部陪玩；Discord 的 embed 說明欄有 4096 字上限，真的塞不下才截斷，
+  // 並明講少列了幾位（總計一律是全部的金額，不受截斷影響）。
+  const LIMIT = 3900;
+  const tailText = () => '\n' + tail.join('\n');
+  let body = lines.join('\n');
+  if (body.length + tailText().length > LIMIT) {
+    const kept = [];
+    let len = 0;
+    for (const l of lines) {
+      const note = `\n…版面已滿，其餘 ${lines.length - kept.length} 位未列出（總計已包含全部）`;
+      if (len + l.length + 1 + tailText().length + note.length > LIMIT) break;
+      kept.push(l);
+      len += l.length + 1;
+    }
+    body = kept.join('\n') + `\n…版面已滿，其餘 ${lines.length - kept.length} 位未列出（總計已包含全部）`;
+  }
+  return body + tailText();
 }
 
 /** 消費榜 / 金主榜 */
