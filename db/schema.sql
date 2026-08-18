@@ -364,3 +364,19 @@ CREATE TABLE IF NOT EXISTS payroll_entries (
   created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_payroll_guild ON payroll_entries (guild_id, status, period);
+
+-- ---------- 小工作台：客服自訂的簡易指令／回應模板 ----------
+CREATE TABLE IF NOT EXISTS snippets (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id   TEXT NOT NULL,
+  key        TEXT NOT NULL,                    -- 指令名，例如「售後」→ !售後
+  title      TEXT NOT NULL DEFAULT '',         -- 顯示在回覆標題
+  content    TEXT NOT NULL DEFAULT '',         -- 回覆內容
+  visible    TEXT NOT NULL DEFAULT 'self',     -- self 只有自己看得到 / public 直接發到頻道
+  cs_only    INTEGER NOT NULL DEFAULT 1,       -- 只有客服／管理員能用
+  used       INTEGER NOT NULL DEFAULT 0,       -- 使用次數
+  sort       INTEGER NOT NULL DEFAULT 0,
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  UNIQUE (guild_id, key)
+);

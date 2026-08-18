@@ -1024,3 +1024,86 @@ Pages.titles = async view => {
   const bind = H.bindFilters('ti', F, () => load(), ST);
   load();
 };
+
+// ---------------- 小工作台：自訂指令 ----------------
+// 客服自己新增的回應模板，不用改程式就能多一個 !指令。
+Pages.snippets = async view => {
+  const VIS = { self: '只有自己看得到', public: '直接發到頻道' };
+
+  const form = s => `
+    <div class="row">
+      <label class="f"><span>指令名稱（不用加 !）</span>
+        <input name="key" value="${UI.esc(s?.key || '')}" placeholder="售後"></label>
+      <label class="f"><span>標題（選填）</span>
+        <input name="title" value="${UI.esc(s?.title || '')}" placeholder="售後服務說明"></label>
+    </div>
+    <label class="f"><span>回覆內容</span>
+      <textarea name="content" rows="8" placeholder="貼上要回覆的模板內容，可換行">${UI.esc(s?.content || '')}</textarea></label>
+    <div class="row">
+      <label class="f"><span>顯示方式</span><select name="visible">
+        <option value="self" ${s?.visible !== 'public' ? 'selected' : ''}>只有自己看得到</option>
+        <option value="public" ${s?.visible === 'public' ? 'selected' : ''}>直接發到頻道</option>
+      </select></label>
+      <label class="f"><span>排序</span><input name="sort" type="number" value="${s?.sort || 0}"></label>
+    </div>
+    <label class="f" style="flex-direction:row;align-items:center;gap:8px">
+      <input type="checkbox" name="cs_only" style="width:auto" ${s == null || s.cs_only ? 'checked' : ''}>
+      <span style="margin:0">僅限客服／管理員使用</span></label>
+    ${s ? `<label class="f" style="flex-direction:row;align-items:center;gap:8px">
+      <input type="checkbox" name="active" style="width:auto" ${s.active ? 'checked' : ''}>
+      <span style="margin:0">啟用中</span></label>` : ''}
+    <div class="muted" style="margin-top:8px">
+      「只有自己看得到」在 Discord 有兩種用法：<code>/範本</code> 斜線指令是真正只有本人看得到；
+      打 <code>!指令</code> 則會私訊給你並把指令訊息收掉（因為一般訊息沒辦法只顯示給一個人）。
+    </div>`;
+
+  const vals = back => ({
+    key: UI.val(back, 'key'), title: UI.val(back, 'title'), content: UI.val(back, 'content'),
+    visible: UI.val(back, 'visible'), sort: UI.val(back, 'sort'),
+    cs_only: UI.val(back, 'cs_only'), active: UI.val(back, 'active') ?? 1
+  });
+
+  const load = async () => {
+    const rows = await GET('/snippets');
+    document.getElementById('sntable').innerHTML = H.table(
+      ['指令', '標題', '內容', '顯示方式', '權限', '用過', '狀態', '操作'],
+      rows.map(s => `<tr>
+        <td><code>!${UI.esc(s.key)}</code></td>
+        <td>${UI.esc(s.title || '')}</td>
+        <td style="white-space:normal;max-width:360px" class="muted">${UI.esc((s.content || '').slice(0, 80))}${(s.content || '').length > 80 ? '…' : ''}</td>
+        <td>${VIS[s.visible] || s.visible}</td>
+        <td>${s.cs_only ? '客服／管理員' : '全員'}</td>
+        <td class="num">${s.used}</td>
+        <td>${s.active ? '<span class="tag ok">啟用</span>' : '<span class="tag err">停用</span>'}</td>
+        <td><button class="btn sm" data-se='${UI.esc(JSON.stringify(s))}'>編輯</button>
+            <button class="btn danger sm" data-sd="${s.id}">刪除</button></td></tr>`),
+      '還沒有自訂指令，點右上角新增一個吧');
+
+    document.querySelectorAll('[data-se]').forEach(b => b.onclick = () => {
+      const s = JSON.parse(b.dataset.se);
+      UI.modal({ title: `編輯 !${s.key}`, bodyHTML: form(s), onOk: async back => {
+        await PUT('/snippets/' + s.id, vals(back)); UI.ok('已更新'); load();
+      } });
+    });
+    document.querySelectorAll('[data-sd]').forEach(b => b.onclick = async () => {
+      if (!await UI.confirm('刪除後這個指令就不能用了，確定嗎？')) return;
+      await DEL('/snippets/' + b.dataset.sd); UI.ok('已刪除'); load();
+    });
+  };
+
+  view.innerHTML = `
+    <div class="card"><div class="row">
+      <div class="grow"><h3 style="margin:0">小工作台</h3>
+        <div class="muted" style="margin-top:4px">
+          自己新增的簡易指令。建好之後在 Discord 打 <code>!指令名</code>，
+          或用 <code>/範本</code> 選擇（斜線指令的回覆只有你自己看得到）。</div></div>
+      <div class="fit"><button class="btn" id="snadd">＋ 新增指令</button></div>
+    </div></div>
+    <div class="card" id="sntable"><div class="empty">載入中…</div></div>`;
+
+  document.getElementById('snadd').onclick = () => UI.modal({
+    title: '新增自訂指令', bodyHTML: form(null),
+    onOk: async back => { await POST('/snippets', vals(back)); UI.ok('已新增'); load(); }
+  });
+  load();
+};

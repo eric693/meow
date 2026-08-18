@@ -72,6 +72,51 @@ function staffDetail(guildId, staffId, top = 10) {
   };
 }
 
+/**
+ * 老闆的專屬點單紀錄：依陪玩彙總，含一般訂單、身分組結帳與贈禮。
+ *
+ * 兩個重點：
+ * 1. 明細與總計都以訂單為準（不用 customers.total_spend）。total_spend 還含著舊系統匯入的
+ *    累計金額，跟明細不同來源，兩邊擺在一起就會對不上。
+ * 2. 「共消費」看的是訂單原價，折抵的部分另外標出來，跟舊系統的呈現一致。
+ */
+function patronOrders(guildId, customerId, limit = 25) {
+  guildId = orgOf(guildId);
+  // 0 元的補登空單只會讓清單出現「某某：0 元」，沒有資訊量，濾掉
+  const where = `guild_id=? AND customer_id=? AND status!='refunded' AND (list_price > 0 OR amount > 0)`;
+  const rows = db.prepare(`SELECT staff_id, staff_name,
+      SUM(list_price) list, SUM(amount) paid, SUM(list_price - amount) discount,
+      SUM(CASE WHEN kind='gift' THEN list_price ELSE 0 END) gift, COUNT(*) cnt
+    FROM orders WHERE ${where}
+    GROUP BY staff_id ORDER BY list DESC LIMIT ?`).all(guildId, customerId, limit);
+  const all = db.prepare(`SELECT COALESCE(SUM(list_price),0) list, COALESCE(SUM(amount),0) paid,
+      COALESCE(SUM(list_price - amount),0) discount,
+      COALESCE(SUM(CASE WHEN kind='gift' THEN list_price ELSE 0 END),0) gift,
+      COUNT(*) cnt, COUNT(DISTINCT staff_id) staff
+    FROM orders WHERE ${where}`).get(guildId, customerId);
+  return { rows, total: all };
+}
+
+/** 點單紀錄的顯示文字（Discord 用，!查點單 與會員面板共用同一份） */
+function patronOrdersText(guildId, customerId, limit = 25) {
+  const { rows, total } = patronOrders(guildId, customerId, limit);
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  if (!rows.length) return '目前沒有任何點單紀錄。';
+  const body = rows.map(r => {
+    const who = /^\d{15,25}$/.test(String(r.staff_id || '')) ? `<@${r.staff_id}>` : (r.staff_name || '（未指定）');
+    const extra = [
+      r.discount > 0 ? `使用了 ${n(r.discount)} 元折價` : '',
+      r.gift > 0 ? `含禮物 ${n(r.gift)} 元` : ''
+    ].filter(Boolean).join('、');
+    return `・${who}：共消費 \`${n(r.list)}\` 元${extra ? `（${extra}）` : ''}`;
+  }).join('\n');
+  const tail = ['\n━━━━━━━━━━━━━━━━━━', `💰 **歷史總計消費：** \`${n(total.list)}\` 元`];
+  if (total.gift > 0) tail.push(`🎁 其中禮物：\`${n(total.gift)}\` 元`);
+  if (total.discount > 0) tail.push(`🎟️ 累計折抵：\`${n(total.discount)}\` 元`);
+  if (total.staff > rows.length) tail.push(`（共 ${total.staff} 位陪玩，此處顯示前 ${rows.length} 位）`);
+  return (body + '\n' + tail.join('\n')).slice(0, 3900);
+}
+
 /** 消費榜 / 金主榜 */
 function spendRanking(guildId, limit = 10) {
   guildId = orgOf(guildId);
@@ -344,7 +389,7 @@ const withdrawRows = (guildId, f = {}) => {
 module.exports = {
   customerSpend, customerOrders, pairSpend, staffDetail, spendRanking, patronBoard,
   staffRanking, financeReport, dashboardCharts, csRanking, totalCoins, unsettled,
-  ledgerQuery, withdrawRows,
+  ledgerQuery, withdrawRows, patronOrders, patronOrdersText,
   LEDGER_COLUMNS, PATRON_COLUMNS, STAFF_COLUMNS, WITHDRAW_COLUMNS,
   vipName, vipNames, DEFAULT_VIP_NAMES, KINDS, STATUS, kindLabel
 };

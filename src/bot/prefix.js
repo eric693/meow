@@ -43,18 +43,10 @@ const handlers = {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const target = firstId(msg, args);
     if (!target) throw new Error('請標記要查詢的老闆，例如 `!查點單 @老闆`');
-    const rows = db.prepare(`SELECT staff_id, SUM(amount) amt FROM orders
-                             WHERE guild_id=? AND customer_id=? AND status!='refunded'
-                             GROUP BY staff_id ORDER BY amt DESC LIMIT 25`)
-      .all(orgOf(msg.guild.id), target);
     const c = getCustomer(msg.guild.id, target);
-    const body = rows.length
-      ? rows.map(r => `・${mention(r.staff_id)}：共消費 \`${n(r.amt)}\` 元`).join('\n')
-        + `\n\n────────────────\n💰 **歷史總計消費：** \`${n(c.total_spend)}\` 元`
-      : '這位老闆還沒有任何點單紀錄。';
     await msg.reply({ embeds: [emb(msg.guild.id, {
       title: `📋 ${c.name || target} 的專屬點單紀錄`,
-      desc: body.slice(0, 3900)
+      desc: R.patronOrdersText(msg.guild.id, target)
     })] });
   },
 
@@ -484,4 +476,25 @@ handlers.規則 = handlers.手冊;
 // 面板建置指令（!sendrole / !setup-*）
 Object.assign(handlers, panels.commands);
 
-module.exports = { handlers };
+/**
+ * 後台自訂的簡易指令（!售後 之類）。內建指令找不到時才會走到這裡，
+ * 所以自訂指令永遠不會蓋掉系統原本的功能。
+ */
+function snippetHandler(guildId, name) {
+  const SN = require('../util/snippets');
+  const s = SN.find(guildId, name);
+  if (!s) return null;
+  return async msg => {
+    if (s.cs_only && !isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    SN.bump(s.id);
+    const payload = { embeds: [emb(msg.guild.id, { title: s.title || `📋 ${s.key}`, desc: s.content })] };
+    if (s.visible === 'public') return void await msg.channel.send(payload);
+    // 一般訊息沒有「只給一個人看」，所以改私訊本人，並把指令訊息收掉不洗版
+    await msg.author.send(payload).catch(() => {
+      throw new Error('私訊傳送失敗，請先允許來自伺服器成員的私訊，或把這個指令改成「直接發到頻道」。');
+    });
+    if (msg.deletable) await msg.delete().catch(() => {});
+  };
+}
+
+module.exports = { handlers, snippetHandler };

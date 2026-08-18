@@ -190,7 +190,7 @@ async function start() {
     const body = msg.content.slice(PREFIX.length);
     const name = body.split(/\s+/)[0];
     const args = body.slice(name.length).trim();
-    const h = require('./prefix').handlers[name];
+    const h = require('./prefix').handlers[name] || require('./prefix').snippetHandler(msg.guild.id, name);
     if (!h) return;
     const base = { guildId: msg.guild.id, source: 'prefix', action: `${PREFIX}${name}`,
                    user: msg.author, channelId: msg.channelId };

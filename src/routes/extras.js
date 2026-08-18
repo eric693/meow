@@ -317,4 +317,23 @@ router.post('/polls/:id/close', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------------- 小工作台：自訂指令 ----------------
+router.use('/snippets', guardModule('snippets'));
+router.get('/snippets', (req, res) => {
+  const SN = require('../util/snippets');
+  res.json(SN.list(req.guildId, { activeOnly: false }));
+});
+router.post('/snippets', (req, res) => {
+  const SN = require('../util/snippets');
+  res.json(SN.save(req.guildId, req.body || {}, req.user.name));
+});
+router.put('/snippets/:id', (req, res) => {
+  const SN = require('../util/snippets');
+  res.json(SN.save(req.guildId, { ...(req.body || {}), id: Number(req.params.id) }, req.user.name));
+});
+router.delete('/snippets/:id', (req, res) => {
+  const SN = require('../util/snippets');
+  res.json(SN.remove(req.guildId, Number(req.params.id), req.user.name));
+});
+
 module.exports = router;

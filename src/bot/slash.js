@@ -452,6 +452,21 @@ const handlers = {
     await i.reply({ embeds: [ok(i.guildId, '已提前結束', `#${id}　${t.name}`)] });
   },
 
+  async 範本(i) {
+    const SN = require('../util/snippets');
+    const key = i.options.getString('名稱');
+    const s = SN.find(i.guildId, key);
+    if (!s) {
+      return i.reply({ embeds: [err(i.guildId, `查無模板「${key}」，請確認後台「小工作台」裡的指令名稱。`)],
+                       ephemeral: true });
+    }
+    if (s.cs_only && !isCS(i.member)) return deny(i);
+    SN.bump(s.id);
+    // 斜線指令才有真正的「只有自己看得到」
+    await i.reply({ embeds: [emb(i.guildId, { title: s.title || `📋 ${s.key}`, desc: s.content })],
+                    ephemeral: true });
+  },
+
   async 入職(i) {
     if (!isCS(i.member)) return deny(i);
     const u = i.options.getUser('對象');
@@ -481,6 +496,16 @@ async function autocomplete(i) {
   if (!i.guildId) return i.respond([]);
   const focused = i.options.getFocused(true);
   const q = String(focused?.value || '').toLowerCase().replace(/^@/, '');
+
+  // 回應模板：列出後台「小工作台」建立的自訂指令
+  if (focused?.name === '名稱') {
+    const list = require('../util/snippets').list(i.guildId)
+      .filter(s => !q || s.key.toLowerCase().includes(q) || (s.title || '').toLowerCase().includes(q))
+      .slice(0, 25);
+    return i.respond(list.map(s => ({
+      name: `${s.key}${s.title ? `｜${s.title}` : ''}`.slice(0, 100), value: s.key
+    })));
+  }
 
   // 陪玩欄位：用代號／藝名／Discord 名稱直接搜尋在職陪玩，不必先打 @
   if (focused?.name === '陪玩') {

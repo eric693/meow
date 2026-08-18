@@ -20,6 +20,7 @@ const MODULES = [
   { key: 'polls',     label: '投票與意見箱' },
   { key: 'reports',   label: '報表與匯出' },
   { key: 'panels',    label: '面板建置' },
+  { key: 'snippets',  label: '小工作台（自訂指令）' },
   { key: 'settings',  label: '系統設定' },
   { key: 'logs',      label: '操作紀錄' },
   { key: 'users',     label: '帳號權限' }

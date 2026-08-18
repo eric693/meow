@@ -861,7 +861,9 @@ function looksLikeOrderRoom(guildId, channel) {
   const cats = ['category_ticket', 'category_order_closed', 'category_order_anon', 'category_order_public']
     .map(k => getSetting(k, '', guildId)).filter(Boolean);
   if (channel.parentId && cats.includes(channel.parentId)) return true;
-  return /^🎫│.+│\d+/.test(channel.name || '');
+  // 🎫 開頭就是包廂，後面接什麼不重要：冠名單那種「🎫│冠名單│260713-卡琳娜」結尾不是數字，
+  // 之前被排除在外，!結單 就退回去發今日公告，頻道也不會歸檔。
+  return /^🎫│/.test(channel.name || '');
 }
 
 /** 名片專區刪除前，把裡面的對話整理成存底貼到老闆的訂單頻道 */
@@ -1000,16 +1002,10 @@ async function handleInteraction(i) {
       return eph(i, emb(i.guildId, { title: '🎒 我的專屬背包', desc: body, color: COLOR.err }));
     }
     if (act === 'orders') {
-      const rows = db.prepare(`SELECT staff_id, SUM(amount) amt FROM orders
-                               WHERE guild_id=? AND customer_id=? AND status!='refunded'
-                               GROUP BY staff_id ORDER BY amt DESC LIMIT 25`)
-        .all(orgOf(i.guildId), i.user.id);
-      const total = rows.reduce((a, r) => a + r.amt, 0);
-      const body = rows.length
-        ? rows.map(r => `・${mention(r.staff_id)}：共消費 \`${n(r.amt)}\` 元`).join('\n')
-          + `\n\n────────────────\n💰 **歷史總計消費：** \`${n(total)}\` 元`
-        : '你還沒有任何點單紀錄。';
-      return eph(i, emb(i.guildId, { title: '📋 您的專屬點單紀錄', desc: body }));
+      return eph(i, emb(i.guildId, {
+        title: '📋 您的專屬點單紀錄',
+        desc: require('../util/reports').patronOrdersText(i.guildId, i.user.id)
+      }));
     }
   }
 

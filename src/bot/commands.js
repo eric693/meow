@@ -33,6 +33,10 @@ const commands = [
 
   b('抽籤', '喚雨星象：抽一支運勢籤，次數不限'),
 
+  b('範本', '叫出後台建立的回應模板（只有你自己看得到）')
+    .addStringOption(o => o.setName('名稱').setDescription('選擇要使用的模板')
+      .setRequired(true).setAutocomplete(true)),
+
   b('儲值', '為金主手動增加雨幣餘額')
     .addUserOption(o => o.setName('對象').setDescription('請選擇要儲值的金主').setRequired(true))
     .addIntegerOption(o => o.setName('金額').setDescription('輸入儲值數量 (純數字)').setRequired(true).setMinValue(1))

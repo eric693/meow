@@ -19,6 +19,7 @@ const ICONS = {
   polls:     svg('<path d="M4 7.5 12 3l8 4.5-8 4.5Z"/><path d="M4 12l8 4.5L20 12"/><path d="M4 16.5 12 21l8-4.5"/>'),
   reports:   svg('<path d="M4 19V5"/><path d="M4 19h16"/><path d="m7.5 15 3.5-4 3 2.4L19.5 7"/><path d="M19.5 7h-3.2"/><path d="M19.5 7v3.2"/>'),
   panels:    svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M7 13l2 2-2 2"/><path d="M12 17h5"/>'),
+  snippets:  svg('<path d="M14.7 6.3a3.5 3.5 0 1 1 3 3l-9.4 9.4-4 1 1-4Z"/><path d="M12.5 8.5l3 3"/>'),
   settings:  svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.2a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7h-.2a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1v-.2a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.8 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.2a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.4 1Z"/>'),
   users:     svg('<circle cx="8" cy="9" r="3.2"/><path d="M2.8 20a5.4 5.4 0 0 1 10.4 0"/><path d="M16 8.5h5.5"/><path d="M19 8.5v3"/><path d="M21.5 8.5v2"/>'),
   lock:      svg('<rect x="4.5" y="10" width="15" height="10.5" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/><path d="M12 14v2.5"/>'),
@@ -41,6 +42,7 @@ const NAV = [
   { key: 'polls',     label: '投票與意見箱' },
   { key: 'reports',   label: '報表與匯出' },
   { key: 'panels',    label: '面板指令表' },
+  { key: 'snippets',  label: '小工作台' },
   { key: 'settings',  label: '系統設定' },
   { key: 'logs',      label: '操作紀錄' },
   { key: 'users',     label: '帳號權限' }
