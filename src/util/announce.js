@@ -16,4 +16,21 @@ async function vipUpgraded(guildId, userId, from, to) {
   } catch { /* 播報失敗不能影響金流 */ }
 }
 
-module.exports = { vipUpgraded };
+/**
+ * 財務事件備份：發到「金流紀錄頻道」，沒設就退回後台財務頻道。
+ * 退單這種會動到錢的操作，不管從 Discord 還是後台做的都要留一份在頻道裡。
+ */
+async function financeLog(guildId, embed) {
+  try {
+    const id = getSetting('channel_money_log', '', guildId) || getSetting('channel_finance', '', guildId);
+    if (!id) return false;
+    const client = require('../bot').getClient();
+    if (!client) return false;
+    const ch = await client.channels.fetch(id).catch(() => null);
+    if (!ch || !ch.isTextBased?.()) return false;
+    await ch.send({ embeds: [embed] });
+    return true;
+  } catch { return false; }   // 備份失敗不能影響金流本身
+}
+
+module.exports = { vipUpgraded, financeLog };

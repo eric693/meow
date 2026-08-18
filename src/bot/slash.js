@@ -155,7 +155,10 @@ const handlers = {
     const refundCoins = i.options.getBoolean('退還雨幣') ?? true;
     const reason = i.options.getString('原因') || '';
     const o = M.refundOrder(i.guildId, no, i.user.tag, reason, { refundCoins });
-    await i.reply({ embeds: [refundNotice(i.guildId, o, { reason, refundCoins, operator: i.user.tag })], ephemeral: true });
+    const notice = refundNotice(i.guildId, o, { reason, refundCoins, operator: i.user.tag });
+    await i.reply({ embeds: [notice], ephemeral: true });
+    // 退單會動到錢，備份一份到金流紀錄頻道
+    return moneyLog(i, notice);
   },
 
   async 補單(i) {

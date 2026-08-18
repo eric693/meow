@@ -317,7 +317,12 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
     `${orderNo} ${refundCoins && charged > 0 ? `退還 ${charged}` : `未退（原單未扣雨幣）`}`
     + (restored.length ? `，退回折價券 ${restored.map(c => c.name).join('、')}` : ''),
     guildId, { source: 'salary' });
-  return db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id);
+  // 把「實際發生了什麼」一併回傳，通知訊息才不會寫成「已退還雨幣」但其實一毛都沒退
+  return {
+    ...db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id),
+    refunded_coins: refundCoins ? charged : 0,
+    restored_coupons: restored.map(c => c.name)
+  };
 }
 
 /** 陪玩提領：從「可提領」扣除，建立提領紀錄 */

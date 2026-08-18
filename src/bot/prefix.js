@@ -451,8 +451,13 @@ const handlers = {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const [no, ...rest] = args.trim().split(/\s+/);
     if (!no) throw new Error('用法：`!退單 訂單編號 [原因]`');
-    const o = M.refundOrder(msg.guild.id, no, msg.author.tag, rest.join(' '));
-    await msg.reply({ embeds: [ok(msg.guild.id, `訂單 ${no} 已退單`, `已退還老闆 **${n(o.amount)}** 雨幣，並扣回陪玩分潤。`)] });
+    const reason = rest.join(' ');
+    const o = M.refundOrder(msg.guild.id, no, msg.author.tag, reason);
+    const notice = require('../util/checkout').refundNotice(msg.guild.id, o,
+      { reason, refundCoins: true, operator: msg.author.tag });
+    await msg.reply({ embeds: [notice] });
+    // 退單會動到錢，備份一份到金流紀錄頻道
+    await require('../util/announce').financeLog(msg.guild.id, notice);
   },
 
   async 提領(msg, args) {

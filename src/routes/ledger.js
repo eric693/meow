@@ -68,8 +68,15 @@ router.delete('/ledger/:no', (req, res) => res.json(M.deleteOrder(req.orgId, req
 // force=true 才會放行匯入的歷史單（前端會先跳確認），一般核銷維持擋下
 router.post('/ledger/:no/settle', (req, res) =>
   res.json(M.settleOrder(req.orgId, req.params.no, who(req), { force: !!req.body?.force })));
-router.post('/ledger/:no/refund', (req, res) =>
-  res.json(M.refundOrder(req.orgId, req.params.no, who(req), req.body?.reason || '')));
+router.post('/ledger/:no/refund', (req, res) => {
+  const reason = req.body?.reason || '';
+  const o = M.refundOrder(req.orgId, req.params.no, who(req), reason);
+  // 後台退的單也要在備份頻道留紀錄，不然只有點的人知道
+  require('../util/announce').financeLog(req.guildId,
+    require('../util/checkout').refundNotice(req.guildId, o,
+      { reason, refundCoins: true, operator: `${who(req)}（後台）` })).catch(() => {});
+  res.json(o);
+});
 
 // 批次核銷
 router.post('/ledger/bulk/settle', (req, res) => {

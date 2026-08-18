@@ -110,7 +110,12 @@ function refundNotice(guildId, o, { reason = '', refundCoins = true, operator = 
       `▫️ 扣除點數：\`${n(o.intimacy)}\` 點`,
       '',
       '💰 **雨幣處理狀態**',
-      refundCoins ? `✅ 已退還 \`${n(o.amount)}\` 雨幣` : '❌ 未退還雨幣',
+      // 現金／轉帳的單當初沒扣過雨幣，退單自然也退不出雨幣，這裡要照實寫
+      !refundCoins ? '❌ 未退還雨幣（指定不退幣）'
+        : (o.refunded_coins > 0 ? `✅ 已退還 \`${n(o.refunded_coins)}\` 雨幣`
+                                : '➖ 原單未扣雨幣（現金／轉帳或匯入的歷史單），無雨幣可退'),
+      ...(o.restored_coupons && o.restored_coupons.length
+        ? ['', '🎟️ **折價券回溯**', `▫️ 已退回背包：${o.restored_coupons.join('、')}`] : []),
       '',
       `經辦人：${operator || '—'}`
     ].join('\n')
