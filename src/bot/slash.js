@@ -480,9 +480,10 @@ const handlers = {
     }
     if (s.cs_only && !isCS(i.member)) return deny(i);
     SN.bump(s.id);
-    // 斜線指令才有真正的「只有自己看得到」
-    await i.reply({ embeds: [emb(i.guildId, { title: s.title || `📋 ${s.key}`, desc: s.content })],
-                    ephemeral: true });
+    // 斜線指令才有真正的「只有自己看得到」；內容用一般訊息送，手機長按才複製得到
+    const chunks = SN.renderChunks(s);
+    await i.reply({ content: chunks[0], ephemeral: true });
+    for (const c of chunks.slice(1)) await i.followUp({ content: c, ephemeral: true });
   },
 
   async 入職(i) {

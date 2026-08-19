@@ -508,12 +508,18 @@ function snippetHandler(guildId, name) {
   return async msg => {
     if (s.cs_only && !isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     SN.bump(s.id);
-    const payload = { embeds: [emb(msg.guild.id, { title: s.title || `📋 ${s.key}`, desc: s.content })] };
-    if (s.visible === 'public') return void await msg.channel.send(payload);
+    // 用一般訊息送，手機才複製得到（embed 在手機上選不起來）
+    const chunks = SN.renderChunks(s);
+    if (s.visible === 'public') {
+      for (const c of chunks) await msg.channel.send({ content: c });
+      return;
+    }
     // 一般訊息沒有「只給一個人看」，所以改私訊本人，並把指令訊息收掉不洗版
-    await msg.author.send(payload).catch(() => {
-      throw new Error('私訊傳送失敗，請先允許來自伺服器成員的私訊，或把這個指令改成「直接發到頻道」。');
-    });
+    for (const c of chunks) {
+      await msg.author.send({ content: c }).catch(() => {
+        throw new Error('私訊傳送失敗，請先允許來自伺服器成員的私訊，或把這個指令改成「直接發到頻道」。');
+      });
+    }
     if (msg.deletable) await msg.delete().catch(() => {});
   };
 }

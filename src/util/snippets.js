@@ -52,4 +52,23 @@ function remove(guildId, id, operator = '') {
 
 const bump = id => db.prepare('UPDATE snippets SET used = used + 1 WHERE id = ?').run(id);
 
-module.exports = { list, find, save, remove, bump, clean };
+/**
+ * 模板的輸出內容。
+ *
+ * 刻意用「一般訊息」而不是 embed：手機版 Discord 沒辦法選取 embed 裡的文字，
+ * 而模板存在的目的就是要複製貼給客人，選不起來等於白做。
+ * 回傳陣列是因為一般訊息有 2000 字上限，太長要拆成幾則送。
+ */
+function renderChunks(s) {
+  const text = (s.title ? `**${s.title}**\n` : '') + s.content;
+  const chunks = [];
+  let buf = '';
+  for (const line of text.split('\n')) {
+    if ((buf + line).length > 1900) { chunks.push(buf); buf = ''; }
+    buf += (buf ? '\n' : '') + line;
+  }
+  if (buf) chunks.push(buf);
+  return chunks;
+}
+
+module.exports = { list, find, save, remove, bump, clean, renderChunks };
