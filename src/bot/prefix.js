@@ -144,12 +144,14 @@ const handlers = {
     const top = r.rows.filter(x => x.settled > 0).slice(0, 20);
     const body = top.length
       ? top.map((x, i) => `\`${String(i + 1).padStart(2)}\` ${mention(x.user_id)} ➜ \`${n(x.settled)}\` 元`
-          + `（${x.cnt} 單${x.paid ? `，已領 ${n(x.paid)}` : ''}）`).join('\n')
+          + `（${x.cnt} 單${x.paid ? `，已領 ${n(x.paid)}` : ''}${x.in_roster ? '' : '　⚠️ 不在名冊'}）`).join('\n')
       : '這週還沒有核銷入帳。';
     const csvText = R.toCSV
       ? ''
-      : ['代號,姓名,本週核銷入帳,單數,本週退單扣回,本週已提領,目前可提領,暫存薪水']
-        .concat(r.rows.map(x => [x.code, x.name, x.settled, x.cnt, x.refunded, x.paid, x.income, x.pending_income]
+      : ['代號,姓名,在職狀態,本週核銷入帳,單數,本週退單扣回,本週已提領,目前可提領,暫存薪水']
+        .concat(r.rows.map(x => [x.code, x.name,
+          x.in_roster ? (x.active ? '在職' : '已離職') : '不在名冊',
+          x.settled, x.cnt, x.refunded, x.paid, x.income, x.pending_income]
           .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))).join('\r\n');
     await msg.reply({
       embeds: [money(msg.guild.id, `🗓️ 週結薪資（${r.start} ~ ${r.end}）`,
@@ -158,7 +160,11 @@ const handlers = {
         + `💸 **本週已提領：** \`${n(r.total.paid)}\` 元\n`
         + `🏦 **目前可提領總額：** \`${n(r.total.income)}\` 元\n`
         + `⏳ **暫存薪水（未核銷）：** \`${n(r.total.pending)}\` 元\n`
-        + `（共 ${r.total.staff} 位，完整名單見附件）`)],
+        + `（共 ${r.total.staff} 位，完整名單見附件）`
+        + (r.total.off_roster
+          ? `\n\n⚠️ 其中 **${r.total.off_roster}** 位不在員工名冊（已離職或未建檔），`
+            + `本週入帳 \`${n(r.total.off_roster_amount)}\` 元，發薪前請先確認`
+          : ''))],
       files: [csv(`週結_${r.start}.csv`, '\ufeff' + csvText)]
     });
   },

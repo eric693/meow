@@ -175,30 +175,63 @@ function weeklyPayroll(guildId, weekStart = '') {
     || db.prepare("SELECT date('now','localtime','weekday 0','-6 days') d").get().d;
   const end = db.prepare("SELECT date(?, '+6 days') d").get(start).d;
 
-  const rows = db.prepare(`
-    SELECT s.user_id, s.code, s.name, s.income, s.pending_income,
-      COALESCE((SELECT SUM(o.staff_share) FROM orders o
-        WHERE o.guild_id=s.guild_id AND o.staff_id=s.user_id AND o.status='settled'
-          AND date(o.settled_at) BETWEEN date(?) AND date(?)), 0) settled,
-      COALESCE((SELECT COUNT(*) FROM orders o
-        WHERE o.guild_id=s.guild_id AND o.staff_id=s.user_id AND o.status='settled'
-          AND date(o.settled_at) BETWEEN date(?) AND date(?)), 0) cnt,
-      COALESCE((SELECT SUM(o.staff_share) FROM orders o
-        WHERE o.guild_id=s.guild_id AND o.staff_id=s.user_id AND o.status='refunded'
-          AND date(o.created_at) BETWEEN date(?) AND date(?)), 0) refunded,
-      COALESCE((SELECT SUM(w.amount) FROM withdrawals w
-        WHERE w.guild_id=s.guild_id AND w.staff_id=s.user_id AND w.status!='rejected'
-          AND date(COALESCE(w.done_at, w.created_at)) BETWEEN date(?) AND date(?)), 0) paid
-    FROM staff s WHERE s.guild_id=? AND s.kind='player'
-    ORDER BY settled DESC, s.name`)
-    .all(start, end, start, end, start, end, start, end, guildId)
-    .filter(r => r.settled || r.paid || r.refunded || r.income);
+  // 名單要從「這週實際有金流的人」出發，不能只從員工名冊撈：
+  // 匯入的舊單有不少陪玩已離職或從沒建檔，只看名冊會整批漏掉（曾漏掉 37,370 元）。
+  const ids = db.prepare(`
+    SELECT staff_id FROM orders
+      WHERE guild_id=? AND status='settled' AND staff_id!=''
+        AND date(settled_at) BETWEEN date(?) AND date(?)
+    UNION
+    SELECT staff_id FROM orders
+      WHERE guild_id=? AND status='refunded' AND staff_id!=''
+        AND date(created_at) BETWEEN date(?) AND date(?)
+    UNION
+    SELECT staff_id FROM withdrawals
+      WHERE guild_id=? AND status!='rejected' AND staff_id!=''
+        AND date(COALESCE(done_at, created_at)) BETWEEN date(?) AND date(?)
+    UNION
+    SELECT user_id FROM staff WHERE guild_id=? AND kind='player' AND (income > 0 OR pending_income > 0)
+  `).all(guildId, start, end, guildId, start, end, guildId, start, end, guildId).map(r => r.staff_id);
+
+  const one = db.prepare(`SELECT
+      COALESCE((SELECT SUM(staff_share) FROM orders WHERE guild_id=? AND staff_id=? AND status='settled'
+                AND date(settled_at) BETWEEN date(?) AND date(?)), 0) settled,
+      COALESCE((SELECT COUNT(*) FROM orders WHERE guild_id=? AND staff_id=? AND status='settled'
+                AND date(settled_at) BETWEEN date(?) AND date(?)), 0) cnt,
+      COALESCE((SELECT SUM(staff_share) FROM orders WHERE guild_id=? AND staff_id=? AND status='refunded'
+                AND date(created_at) BETWEEN date(?) AND date(?)), 0) refunded,
+      COALESCE((SELECT SUM(amount) FROM withdrawals WHERE guild_id=? AND staff_id=? AND status!='rejected'
+                AND date(COALESCE(done_at, created_at)) BETWEEN date(?) AND date(?)), 0) paid`);
+  const info = db.prepare('SELECT code, name, income, pending_income, active FROM staff WHERE guild_id=? AND user_id=?');
+  const fallbackName = db.prepare(`SELECT staff_name FROM orders
+    WHERE guild_id=? AND staff_id=? AND staff_name!='' ORDER BY id DESC LIMIT 1`);
+
+  const rows = ids.map(id => {
+    const v = one.get(guildId, id, start, end, guildId, id, start, end,
+                      guildId, id, start, end, guildId, id, start, end);
+    const s = info.get(guildId, id);
+    return {
+      user_id: id,
+      code: s ? s.code : '',
+      name: (s && s.name) || fallbackName.get(guildId, id)?.staff_name || id,
+      // 不在名冊的人沒有餘額欄位，週結時要看得出來是誰，才不會默默少發
+      in_roster: !!s,
+      active: s ? !!s.active : false,
+      income: s ? s.income : 0,
+      pending_income: s ? s.pending_income : 0,
+      ...v
+    };
+  }).filter(r => r.settled || r.paid || r.refunded || r.income || r.pending_income)
+    .sort((a, b) => b.settled - a.settled || String(a.name).localeCompare(String(b.name)));
 
   const sum = k => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
   return {
     start, end, rows,
     total: { settled: sum('settled'), paid: sum('paid'), refunded: sum('refunded'),
-             income: sum('income'), pending: sum('pending_income'), staff: rows.length }
+             income: sum('income'), pending: sum('pending_income'), staff: rows.length,
+             // 這週有入帳但不在名冊的人，要另外提醒
+             off_roster: rows.filter(r => !r.in_roster && r.settled > 0).length,
+             off_roster_amount: rows.filter(r => !r.in_roster).reduce((a, r) => a + r.settled, 0) }
   };
 }
 
