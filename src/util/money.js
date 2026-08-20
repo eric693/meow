@@ -279,7 +279,7 @@ function settleOrder(guildId, orderNo, operator = '', { force = false } = {}) {
 }
 
 /** 退單／撤銷：退還老闆實收金額、扣回陪玩抽成 */
-function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins = true } = {}) {
+function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins = true, forceLegacyCoins = false } = {}) {
   guildId = orgOf(guildId);
   const o = db.prepare('SELECT * FROM orders WHERE guild_id = ? AND order_no = ?').get(guildId, orderNo);
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
@@ -287,7 +287,11 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
 
   // 退幣一律以「當初真的從錢包扣走多少」為準，而不是訂單金額：
   // 現金／轉帳的單當初沒扣過雨幣，若照訂單金額退就等於平白送老闆一筆雨幣。
-  const charged = chargedCoins(guildId, o);
+  // 匯入的歷史單：舊系統的扣款早就反映在轉入的餘額裡，流水只是把歷史搬過來，
+  // 照著退等於同一筆錢退兩次（月冠母單就是這樣白送了 65,000）。
+  // 真的要退，得明確指定 forceLegacyCoins。
+  const legacyNoCoin = isLegacyOrder(o) && !forceLegacyCoins;
+  const charged = legacyNoCoin ? 0 : chargedCoins(guildId, o);
   const noCoinPaid = refundCoins && o.customer_id && charged <= 0;
   let restored = [];
 
@@ -328,7 +332,8 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
   return {
     ...db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id),
     refunded_coins: refundCoins ? charged : 0,
-    restored_coupons: restored.map(c => c.name)
+    restored_coupons: restored.map(c => c.name),
+    legacy_no_coin: legacyNoCoin
   };
 }
 
