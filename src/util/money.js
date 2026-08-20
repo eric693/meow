@@ -36,9 +36,20 @@ const intimacyRate = guildId => getNum('order_intimacy_rate', 100, orgOf(guildId
 const isLegacyOrder = o =>
   ['legacy', 'import'].includes(o.source) || String(o.order_no || '').startsWith('IMP-');
 
-// 這筆單當初是不是真的從錢包扣了雨幣。現金／轉帳與匯入的歷史單都沒扣過，
-// 事後改單、刪單、退單就不能照訂單金額動錢包，否則等於平白生出雨幣。
-const paidByCoins = o => /雨幣/.test(o.pay_method || '');
+// 這筆單當初是不是真的從錢包扣了雨幣。
+//
+// 不能只看 pay_method：補單、匯入的歷史單都走 skipWallet 沒扣過錢，付款方式卻仍寫「雨幣扣款」，
+// 事後改單／刪單就會照帳面金額退錢出去（曾因此憑空生出 6,241 雨幣）。
+// 以「這張單有沒有留下扣款流水」為準最實在。
+function chargedCoins(guildId, o) {
+  if (!o.customer_id) return 0;
+  // 取「淨扣款」：扣過的減掉改單時已退還的，否則先改金額再退單會多退一次差額
+  const v = db.prepare(`SELECT COALESCE(SUM(-delta),0) v FROM coin_tx
+                        WHERE guild_id=? AND user_id=? AND ref=?`)
+    .get(orgOf(guildId), o.customer_id, o.order_no).v;
+  return Math.max(0, v);
+}
+const paidByCoins = (guildId, o) => /雨幣/.test(o.pay_method || '') && chargedCoins(guildId, o) > 0;
 
 function recalcPending(guildId, staffId) {
   if (!staffId) return;
@@ -144,7 +155,7 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
 
   db.transaction(() => {
     // 現金／轉帳的單只改帳面數字，不動雨幣錢包（當初就沒扣過）
-    if (dAmount && o.status !== 'refunded' && paidByCoins(o) && o.customer_id) {
+    if (dAmount && o.status !== 'refunded' && paidByCoins(guildId, o) && o.customer_id) {
       // 實收變多 → 老闆再扣款；變少 → 退還差額
       addCoins(guildId, o.customer_id, -dAmount, `修改訂單 ${orderNo}`, { ref: orderNo, operator, allowNegative: true });
     }
@@ -180,7 +191,7 @@ function deleteOrder(guildId, orderNo, operator = '') {
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
   db.transaction(() => {
     if (o.status !== 'refunded') {
-      if (paidByCoins(o) && o.customer_id) {
+      if (paidByCoins(guildId, o) && o.customer_id) {
         addCoins(guildId, o.customer_id, o.amount, `刪除訂單 ${orderNo}`, { ref: orderNo, operator, allowNegative: true });
       }
       db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend - ?) WHERE guild_id=? AND user_id=?')
@@ -276,11 +287,7 @@ function refundOrder(guildId, orderNo, operator = '', reason = '', { refundCoins
 
   // 退幣一律以「當初真的從錢包扣走多少」為準，而不是訂單金額：
   // 現金／轉帳的單當初沒扣過雨幣，若照訂單金額退就等於平白送老闆一筆雨幣。
-  const charged = o.customer_id
-    ? db.prepare(`SELECT COALESCE(SUM(-delta),0) v FROM coin_tx
-                  WHERE guild_id=? AND user_id=? AND ref=? AND delta < 0`)
-      .get(guildId, o.customer_id, o.order_no).v
-    : 0;
+  const charged = chargedCoins(guildId, o);
   const noCoinPaid = refundCoins && o.customer_id && charged <= 0;
   let restored = [];
 
