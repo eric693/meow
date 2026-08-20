@@ -162,6 +162,46 @@ function patronOrdersPlain(guildId, customerId, name = '') {
   return [`${name || ''}的點單紀錄`.trim(), ...lines, ...tail].join('\n');
 }
 
+/**
+ * 週結薪資：某一週每位陪玩該領多少。
+ *
+ * 一律以「核銷日」為準——核銷才是薪水真正進到可提領的時點。
+ * 用下單日算會對不上：這週核銷上週的單很常見，兩種算法每週都會差幾百到上萬。
+ * weekStart 給該週的第一天（預設本週一，台北時間）。
+ */
+function weeklyPayroll(guildId, weekStart = '') {
+  guildId = orgOf(guildId);
+  const start = weekStart
+    || db.prepare("SELECT date('now','localtime','weekday 0','-6 days') d").get().d;
+  const end = db.prepare("SELECT date(?, '+6 days') d").get(start).d;
+
+  const rows = db.prepare(`
+    SELECT s.user_id, s.code, s.name, s.income, s.pending_income,
+      COALESCE((SELECT SUM(o.staff_share) FROM orders o
+        WHERE o.guild_id=s.guild_id AND o.staff_id=s.user_id AND o.status='settled'
+          AND date(o.settled_at) BETWEEN date(?) AND date(?)), 0) settled,
+      COALESCE((SELECT COUNT(*) FROM orders o
+        WHERE o.guild_id=s.guild_id AND o.staff_id=s.user_id AND o.status='settled'
+          AND date(o.settled_at) BETWEEN date(?) AND date(?)), 0) cnt,
+      COALESCE((SELECT SUM(o.staff_share) FROM orders o
+        WHERE o.guild_id=s.guild_id AND o.staff_id=s.user_id AND o.status='refunded'
+          AND date(o.created_at) BETWEEN date(?) AND date(?)), 0) refunded,
+      COALESCE((SELECT SUM(w.amount) FROM withdrawals w
+        WHERE w.guild_id=s.guild_id AND w.staff_id=s.user_id AND w.status!='rejected'
+          AND date(COALESCE(w.done_at, w.created_at)) BETWEEN date(?) AND date(?)), 0) paid
+    FROM staff s WHERE s.guild_id=? AND s.kind='player'
+    ORDER BY settled DESC, s.name`)
+    .all(start, end, start, end, start, end, start, end, guildId)
+    .filter(r => r.settled || r.paid || r.refunded || r.income);
+
+  const sum = k => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
+  return {
+    start, end, rows,
+    total: { settled: sum('settled'), paid: sum('paid'), refunded: sum('refunded'),
+             income: sum('income'), pending: sum('pending_income'), staff: rows.length }
+  };
+}
+
 /** 消費榜 / 金主榜 */
 function spendRanking(guildId, limit = 10) {
   guildId = orgOf(guildId);
@@ -433,7 +473,7 @@ const withdrawRows = (guildId, f = {}) => {
 
 module.exports = {
   customerSpend, customerOrders, pairSpend, staffDetail, spendRanking, patronBoard,
-  staffRanking, financeReport, dashboardCharts, csRanking, totalCoins, unsettled,
+  staffRanking, financeReport, dashboardCharts, csRanking, totalCoins, unsettled, weeklyPayroll,
   ledgerQuery, withdrawRows, patronOrders, patronOrdersText, patronOrdersPlain,
   LEDGER_COLUMNS, PATRON_COLUMNS, STAFF_COLUMNS, WITHDRAW_COLUMNS,
   vipName, vipNames, DEFAULT_VIP_NAMES, KINDS, STATUS, kindLabel

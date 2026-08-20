@@ -130,6 +130,39 @@ const handlers = {
       `🏆 喚雨｜${monthPrefix()} 高薪陪玩 (達 ${n(LINE_UP / 10000)} 萬以上)`, body.slice(0, 3900))] });
   },
 
+  // ---------- 週結 ----------
+  // 薪水一律以「核銷日」計：核銷才是錢真正進到可提領的時點。
+  // 用下單日算會對不上——這週核銷上週的單很常見，兩種算法每週都會差。
+  async 週結(msg, args) {
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    const d = (args || '').trim().match(/\d{4}-\d{2}-\d{2}/);
+    const r = R.weeklyPayroll(msg.guild.id, d ? d[0] : '');
+    if (!r.rows.length) {
+      await msg.reply({ embeds: [ok(msg.guild.id, '本週沒有資料', `${r.start} ~ ${r.end}`)] });
+      return;
+    }
+    const top = r.rows.filter(x => x.settled > 0).slice(0, 20);
+    const body = top.length
+      ? top.map((x, i) => `\`${String(i + 1).padStart(2)}\` ${mention(x.user_id)} ➜ \`${n(x.settled)}\` 元`
+          + `（${x.cnt} 單${x.paid ? `，已領 ${n(x.paid)}` : ''}）`).join('\n')
+      : '這週還沒有核銷入帳。';
+    const csvText = R.toCSV
+      ? ''
+      : ['代號,姓名,本週核銷入帳,單數,本週退單扣回,本週已提領,目前可提領,暫存薪水']
+        .concat(r.rows.map(x => [x.code, x.name, x.settled, x.cnt, x.refunded, x.paid, x.income, x.pending_income]
+          .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))).join('\r\n');
+    await msg.reply({
+      embeds: [money(msg.guild.id, `🗓️ 週結薪資（${r.start} ~ ${r.end}）`,
+        `${body}\n\n────────────────\n`
+        + `💰 **本週核銷入帳合計：** \`${n(r.total.settled)}\` 元\n`
+        + `💸 **本週已提領：** \`${n(r.total.paid)}\` 元\n`
+        + `🏦 **目前可提領總額：** \`${n(r.total.income)}\` 元\n`
+        + `⏳ **暫存薪水（未核銷）：** \`${n(r.total.pending)}\` 元\n`
+        + `（共 ${r.total.staff} 位，完整名單見附件）`)],
+      files: [csv(`週結_${r.start}.csv`, '\ufeff' + csvText)]
+    });
+  },
+
   async 匯出報表(msg) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     await msg.reply({ content: `✅ **${monthPrefix()} 財務報表已成功匯出！**\n，請下載附件查看。`,
