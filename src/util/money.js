@@ -156,8 +156,11 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
   db.transaction(() => {
     // 現金／轉帳的單只改帳面數字，不動雨幣錢包（當初就沒扣過）
     if (dAmount && o.status !== 'refunded' && paidByCoins(guildId, o) && o.customer_id) {
-      // 實收變多 → 老闆再扣款；變少 → 退還差額
-      addCoins(guildId, o.customer_id, -dAmount, `修改訂單 ${orderNo}`, { ref: orderNo, operator, allowNegative: true });
+      // 實收變多 → 老闆再扣款；變少 → 退還差額。
+      // 補收的方向不允許扣成負數：餘額不夠就要先請老闆儲值，
+      // 讓餘額默默變負只會把問題往後推，之後結帳與對帳都會怪怪的。
+      addCoins(guildId, o.customer_id, -dAmount, `修改訂單 ${orderNo}`,
+        { ref: orderNo, operator, allowNegative: dAmount < 0 });
     }
     if (dAmount && o.status !== 'refunded' && o.customer_id) {
       db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend + ?) WHERE guild_id=? AND user_id=?')
