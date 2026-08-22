@@ -59,13 +59,42 @@ check('雨幣單退掉時都有退還雨幣',
                      WHERE t.guild_id=o.guild_id AND t.ref=o.order_no AND t.delta > 0)`).all(),
   r => r.order_no);
 
-check('現金單退掉時沒有誤退雨幣',
-  db.prepare(`SELECT o.order_no FROM orders o WHERE ${LIVE_ORDER}
+// 判準是「這張單的雨幣淨效果」，不是「有沒有出現過退幣分錄」：
+// 誤退之後已用『更正』分錄收回的，淨額會回到 0，那筆錢並沒有真的漏掉。
+// 早期版本改看時間基準，結果每次補完更正還是一直誤報 11 筆已收回的舊帳。
+check('現金單退掉時沒有誤退雨幣（看淨效果）',
+  db.prepare(`SELECT o.order_no, o.amount,
+       (SELECT COALESCE(SUM(t.delta),0) FROM coin_tx t
+        WHERE t.guild_id=o.guild_id AND t.ref=o.order_no) net
+     FROM orders o WHERE ${LIVE_ORDER}
      AND o.status='refunded' AND o.pay_method NOT LIKE '%雨幣%' AND o.amount > 0
-     AND EXISTS (SELECT 1 FROM coin_tx t
-                 WHERE t.guild_id=o.guild_id AND t.ref=o.order_no AND t.delta > 0
-                   AND t.created_at > '${FIXED_AT}')`).all(),
+     AND (SELECT COALESCE(SUM(t.delta),0) FROM coin_tx t
+          WHERE t.guild_id=o.guild_id AND t.ref=o.order_no) > 0`).all(),
+  r => `${r.order_no} 憑空多出 ${N(r.net)} 雨幣`);
+
+// ---- 收款確認（現金／轉帳單不能在確認收款前就把抽成付出去）----
+check('待確認收款的單都還沒核銷',
+  db.prepare(`SELECT order_no FROM orders WHERE ${LIVE_ORDER}
+     AND cash_confirmed = 0 AND status = 'settled'`).all(),
   r => r.order_no);
+
+check('已核銷的現金單都確認過收款',
+  db.prepare(`SELECT order_no, amount FROM orders WHERE ${LIVE_ORDER}
+     AND pay_method NOT LIKE '%雨幣%' AND status = 'settled' AND cash_confirmed = 0`).all(),
+  r => `${r.order_no} ${N(r.amount)}`);
+
+// 「儲值必填匯款憑證」是後來才加的規則，之前的舊儲值沒有憑證是正常的。
+// 基準點取第一筆真的留了憑證的儲值＝規則上線的時間，這樣不用寫死日期也不會誤報舊帳。
+const PROOF_SINCE = db.prepare("SELECT MIN(created_at) t FROM coin_tx WHERE proof <> ''").get().t;
+if (!PROOF_SINCE) {
+  console.log('⏭️  儲值匯款憑證：規則尚未產生任何資料，略過');
+} else {
+  check('儲值都有留匯款憑證',
+    db.prepare(`SELECT id, user_id, delta, created_at FROM coin_tx
+       WHERE delta > 0 AND proof = '' AND created_at >= ?
+         AND (reason LIKE '%儲值%' OR reason LIKE '%調整%')`).all(PROOF_SINCE),
+    r => `#${r.id} ${r.user_id} +${N(r.delta)}（${r.created_at}）`);
+}
 
 check('雨幣流水沒有金額為 0 的空紀錄',
   db.prepare(`SELECT id, user_id, reason FROM coin_tx WHERE delta = 0 AND created_at > '${FIXED_AT}'`).all(),
