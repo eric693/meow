@@ -52,6 +52,8 @@ const GUILD_KEYS = [
   'channel_vip_announce', 'channel_gift_announce', 'channel_title_announce',
   // 後台類
   'channel_update_log', 'channel_bug_report', 'channel_finance', 'channel_export',
+  // 結帳明細備份（含金額）另開一個頻道，沒設就沿用 channel_finance
+  'channel_checkout_log',
   // 會員售後類
   'channel_member_system', 'channel_notice_log', 'channel_cs_lobby',
   // 入口類

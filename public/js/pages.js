@@ -106,10 +106,13 @@ Pages.bank = async view => {
     title: '雨幣調整',
     bodyHTML: `<label class="f"><span>老闆 Discord ID</span><input name="user_id"></label>
       <label class="f"><span>異動金額（正數儲值、負數扣款）</span><input name="delta" type="number"></label>
+      <label class="f"><span>匯款憑證（儲值必填）</span>
+        <input name="proof" placeholder="例：帳號後五碼 12345，或匯款時間 08-22 14:30"></label>
       <label class="f"><span>事由</span><input name="reason" placeholder="例：現金儲值 500 元"></label>`,
     onOk: async back => {
       await POST('/bank/adjust', {
-        user_id: UI.val(back, 'user_id'), delta: Number(UI.val(back, 'delta')), reason: UI.val(back, 'reason')
+        user_id: UI.val(back, 'user_id'), delta: Number(UI.val(back, 'delta')),
+        reason: UI.val(back, 'reason'), proof: UI.val(back, 'proof')
       });
       UI.ok('已調整'); load();
     }

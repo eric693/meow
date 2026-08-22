@@ -51,11 +51,21 @@ function chargedCoins(guildId, o) {
 }
 const paidByCoins = (guildId, o) => /雨幣/.test(o.pay_method || '') && chargedCoins(guildId, o) > 0;
 
+// 現金／轉帳是場外收款，系統無從得知錢有沒有真的進來。
+// 這種單一律先卡在「待確認收款」：陪玩抽成不入帳、也不能核銷，
+// 等老闆／管理員在後台按下「已收到款」才轉正，錢沒到就不會先把抽成付出去。
+const CASH_METHODS = /現金|轉帳|匯款/;
+const isCashPay = payMethod => CASH_METHODS.test(String(payMethod || ''));
+/** 這張單現在是不是還卡在待確認收款 */
+const isUnconfirmedCash = o => Number(o?.cash_confirmed ?? 1) === 0;
+
 function recalcPending(guildId, staffId) {
   if (!staffId) return;
   guildId = orgOf(guildId);
+  // 待確認收款的現金單不算進暫存薪水：錢還沒進來，帳面上就不該顯示欠陪玩這筆
   db.prepare(`UPDATE staff SET pending_income = COALESCE(
-      (SELECT SUM(staff_share) FROM orders WHERE guild_id=? AND staff_id=? AND status='pending'), 0)
+      (SELECT SUM(staff_share) FROM orders
+       WHERE guild_id=? AND staff_id=? AND status='pending' AND cash_confirmed=1), 0)
     WHERE guild_id=? AND user_id=?`).run(guildId, staffId, guildId, staffId);
 }
 
@@ -70,7 +80,8 @@ function createOrder({
   kind = 'order', item = '', qty = 1, unitPrice = 0, listPrice = null, amount = null,
   staffShare = null, source = 'self', note = '', operator = '', orderNo = null, createdAt = null,
   status = 'pending', skipWallet = false, payMethod = '雨幣扣款',
-  intimacy = null, allowNoStaff = false, allowZero = false, orderPrefix = 'ORD'
+  intimacy = null, allowNoStaff = false, allowZero = false, orderPrefix = 'ORD',
+  cashConfirmed = null
 }) {
   guildId = orgOf(guildId);
   // 伺服器冠名、財務調整這類收入沒有對應陪玩，staffId 允許留空
@@ -95,6 +106,13 @@ function createOrder({
   const no = orderNo || nextOrderNo(orderPrefix);
   const vipBefore = customerId ? getCustomer(guildId, customerId).vip_level : 0;
 
+  // 現金／轉帳的新單預設卡在待確認收款；匯入的歷史單是既成事實，不用再確認一次
+  const legacySource = ['legacy', 'import'].includes(source) || String(no).startsWith('IMP-');
+  const confirmed = cashConfirmed != null ? (cashConfirmed ? 1 : 0)
+    : (isCashPay(payMethod) && !legacySource ? 0 : 1);
+  // 錢還沒確認收到，就不能讓抽成入可提領：先壓回未核銷
+  if (!confirmed && status === 'settled') status = 'pending';
+
   db.transaction(() => {
     // 匯入歷史資料時不動錢包（skipWallet），避免把過去的帳重算一次
     if (!skipWallet && paid !== 0 && customerId) {
@@ -108,13 +126,14 @@ function createOrder({
     db.prepare(`INSERT INTO orders
         (order_no, guild_id, customer_id, staff_id, cs_id, customer_name, staff_name, cs_name,
          kind, item, qty, unit_price, list_price, amount, staff_share, net, source, status, note,
-         pay_method, intimacy, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?, datetime('now','localtime')))`)
+         pay_method, intimacy, cash_confirmed, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?, datetime('now','localtime')))`)
       .run(no, guildId, customerId, staffId, csId,
            customerName || (customerId ? getCustomer(guildId, customerId).name || customerId : ''),
            staffName || (staff ? staff.name || staff.code : ''), csName,
            kind, item, Number(qty) || 1, Math.round(unitPrice) || 0,
-           list, paid, share, net, source, status, note, payMethod || '雨幣扣款', bond, createdAt);
+           list, paid, share, net, source, status, note, payMethod || '雨幣扣款', bond,
+           confirmed, createdAt);
     // 一建立就是「已核銷」的單（身分組結帳、補單）也要有核銷時間，否則報表以核銷日篩選會漏掉
     if (status === 'settled') {
       db.prepare("UPDATE orders SET settled_at = COALESCE(settled_at, created_at) WHERE order_no = ? AND guild_id = ?")
@@ -169,6 +188,16 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
     if (dShare && o.status === 'settled') {
       db.prepare('UPDATE staff SET income = MAX(0, income + ?) WHERE guild_id=? AND user_id=?')
         .run(dShare, guildId, o.staff_id);
+    }
+    // 付款方式被改掉時，待確認收款狀態要跟著調整：
+    // 改成雨幣扣款（錢已經在系統裡收到）就解除待確認，否則這張單會永遠卡著不能核銷。
+    if (patch.pay_method != null && patch.pay_method !== o.pay_method) {
+      if (!isCashPay(patch.pay_method)) {
+        db.prepare('UPDATE orders SET cash_confirmed=1 WHERE id=?').run(o.id);
+      } else if (Number(o.cash_confirmed) === 1 && !isCashPay(o.pay_method) && o.status !== 'settled') {
+        // 反過來改成現金，錢就跑到系統外了，未核銷的單要退回待確認
+        db.prepare('UPDATE orders SET cash_confirmed=0 WHERE id=?').run(o.id);
+      }
     }
     db.prepare(`UPDATE orders SET kind=?, item=?, qty=?, unit_price=?, list_price=?, amount=?,
                 staff_share=?, net=?, note=?, cs_id=?, cs_name=?, customer_name=?, staff_name=?,
@@ -260,6 +289,10 @@ function settleOrder(guildId, orderNo, operator = '', { force = false } = {}) {
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
   if (o.status === 'settled') throw new Error(`這筆訂單（${o.order_no}）已經核銷過了！`);
   if (o.status === 'refunded') throw new Error(`訂單 ${orderNo} 已退單，無法核銷`);
+  // 現金單沒確認收到款就核銷，等於錢還沒進來就先把抽成付給陪玩
+  if (isUnconfirmedCash(o))
+    throw new Error(`${o.order_no} 是現金／轉帳單，還沒確認收到款，`
+      + '請先到後台「收款對帳」按「已收到款」再核銷。');
   if (isLegacyOrder(o) && !force) {
     const e = new Error(`${o.order_no} 是從舊系統匯入的歷史訂單（${String(o.created_at).slice(0, 10)}），`
       + '舊系統可能已經發過這筆薪水，核銷會再發一次。確定要發放請改用「強制核銷」。');
@@ -279,6 +312,49 @@ function settleOrder(guildId, orderNo, operator = '', { force = false } = {}) {
     `${orderNo} 陪玩入帳 ${o.staff_share}${isLegacyOrder(o) ? '（強制核銷匯入的歷史單）' : ''}`,
     guildId, { source: 'salary' });
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id);
+}
+
+/**
+ * 確認現金／轉帳單已經收到款：解除待確認狀態，抽成才回到暫存薪水、才准核銷。
+ * proof 建議填匯款帳號後五碼或匯款時間，事後對銀行帳單才查得到。
+ */
+function confirmCashPayment(guildId, orderNo, operator = '', { proof = '' } = {}) {
+  guildId = orgOf(guildId);
+  const o = db.prepare('SELECT * FROM orders WHERE guild_id=? AND order_no=?').get(guildId, orderNo);
+  if (!o) throw new Error(`查無訂單 ${orderNo}`);
+  if (o.status === 'refunded') throw new Error(`訂單 ${orderNo} 已退單，不需確認收款`);
+  if (!isUnconfirmedCash(o)) throw new Error(`訂單 ${orderNo} 不在待確認收款狀態`);
+
+  db.transaction(() => {
+    db.prepare('UPDATE orders SET cash_confirmed=1, cash_proof=? WHERE id=?')
+      .run(String(proof || '').trim(), o.id);
+    recalcPending(guildId, o.staff_id);
+  })();
+  audit(operator, '確認收款', `${orderNo} ${o.amount}${proof ? `（憑證：${proof}）` : ''}`,
+    guildId, { source: 'orders' });
+
+  // 送禮與身分組結帳本來就是「建立即核銷」，只是被待確認收款擋著；
+  // 收到款就補完那一步，不然客服還要多跑一次核銷，也容易忘記。
+  if (['gift', 'role'].includes(o.kind) && o.status === 'pending' && o.staff_id) {
+    try { return settleOrder(guildId, orderNo, operator); }
+    catch { /* 核銷失敗（例如匯入的歷史單）不影響收款確認本身 */ }
+  }
+  return db.prepare('SELECT * FROM orders WHERE id=?').get(o.id);
+}
+
+/**
+ * 儲值一定要留匯款憑證（帳號後五碼／匯款時間）。
+ * 只記金額不記憑證的話，事後跟銀行帳單對不起來，也查不出是誰、哪一筆匯的。
+ */
+function checkTopupProof(delta, proof) {
+  if (Number(delta) > 0 && !String(proof || '').trim())
+    throw new Error('儲值必須填寫匯款憑證（例：帳號後五碼 12345，或匯款時間 08/22 14:30），才對得上銀行帳單。');
+}
+
+/** 待確認收款的現金單（後台對帳頁用） */
+function unconfirmedCashOrders(guildId) {
+  return db.prepare(`SELECT * FROM orders WHERE guild_id=? AND cash_confirmed=0 AND status<>'refunded'
+                     ORDER BY created_at DESC`).all(orgOf(guildId));
 }
 
 /** 退單／撤銷：退還老闆實收金額、扣回陪玩抽成 */
@@ -385,7 +461,8 @@ function reviewWithdraw(guildId, id, status, operator = '') {
 
 module.exports = {
   createOrder, updateOrder, deleteOrder, getOrder, reportOrder, unreportOrder, settleOrder, refundOrder,
-  recalcPending, isLegacyOrder,
+  recalcPending, isLegacyOrder, isCashPay, isUnconfirmedCash,
+  confirmCashPayment, unconfirmedCashOrders, checkTopupProof,
   requestWithdraw, reviewWithdraw, payoutStaff,
   shareRate, giftShareRate, intimacyRate, KINDS, STATUS, kindLabel
 };

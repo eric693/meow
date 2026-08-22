@@ -9,6 +9,7 @@ const MODULES = [
   { key: 'dashboard', label: '總覽' },
   { key: 'orders',    label: '交易流水帳與匯出' },
   { key: 'bank',      label: '地下金庫（雨幣）' },
+  { key: 'reconcile', label: '收款對帳（現金單／儲值）' },
   { key: 'salary',    label: '薪資與提領' },
   { key: 'payroll',   label: '記帳（未發放薪資）' },
   { key: 'customers', label: '老闆與 VIP' },

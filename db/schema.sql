@@ -117,6 +117,9 @@ CREATE TABLE IF NOT EXISTS orders (
   note         TEXT NOT NULL DEFAULT '',
   pay_method   TEXT NOT NULL DEFAULT '雨幣扣款', -- 支付方式（雨幣扣款／現金／免費體驗…）
   intimacy     INTEGER NOT NULL DEFAULT 0,     -- 本單產生的親密度（退單時原數回沖）
+  -- 現金／轉帳單的收款確認：0 = 待確認收款（陪玩抽成不入帳、不可核銷），1 = 已收款或不適用
+  cash_confirmed INTEGER NOT NULL DEFAULT 1,
+  cash_proof   TEXT NOT NULL DEFAULT '',       -- 收款憑證：匯款後五碼／時間
   reporter_id  TEXT NOT NULL DEFAULT '',    -- 回報此單的員工 Discord ID
   reported_at  TEXT,                        -- 陪玩在員工群報單的時間
   created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
@@ -138,6 +141,7 @@ CREATE TABLE IF NOT EXISTS coin_tx (
   balance    INTEGER NOT NULL,
   reason     TEXT NOT NULL DEFAULT '',
   ref        TEXT NOT NULL DEFAULT '',     -- 關聯訂單編號等
+  proof      TEXT NOT NULL DEFAULT '',     -- 匯款憑證：帳號後五碼／匯款時間，儲值必填
   operator   TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );

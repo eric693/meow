@@ -107,13 +107,18 @@ const handlers = {
     const u = i.options.getUser('對象');
     const amt = i.options.getInteger('金額');
     const reason = i.options.getString('原因') || '人工儲值';
-    addCoins(i.guildId, u.id, amt, reason, { operator: i.user.tag, name: u.username });
+    const proof = (i.options.getString('匯款憑證') || '').trim();
+    // 儲值一定要留憑證，事後才對得上銀行帳單
+    try { M.checkTopupProof(amt, proof); }
+    catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
+    addCoins(i.guildId, u.id, amt, reason, { operator: i.user.tag, name: u.username, proof });
     await i.reply({ content: `✅ **儲值成功！** 已將 \`${n(amt)}\` 雨幣 放入 ${mention(u.id)} 的金庫。`,
       ephemeral: true });
     return moneyLog(i, emb(i.guildId, {
       title: '💰 儲值紀錄',
       color: COLOR.ok,
-      desc: `**對象：** ${mention(u.id)}\n**金額：** \`${n(amt)}\` 雨幣\n**經辦：** ${mention(i.user.id)}`
+      desc: `**對象：** ${mention(u.id)}\n**金額：** \`${n(amt)}\` 雨幣\n`
+          + `**匯款憑證：** \`${proof}\`\n**經辦：** ${mention(i.user.id)}`
     }));
   },
 

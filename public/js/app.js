@@ -7,6 +7,7 @@ const svg = d => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="curre
 const ICONS = {
   dashboard: svg('<path d="M4 19V5"/><path d="M4 19h16"/><rect x="7" y="11" width="3" height="5" rx="1"/><rect x="12" y="7" width="3" height="9" rx="1"/><rect x="17" y="13" width="3" height="3" rx="1"/>'),
   orders:    svg('<path d="M6 3.5 7.5 5 9 3.5 10.5 5 12 3.5 13.5 5 15 3.5 16.5 5 18 3.5v15.9a1.6 1.6 0 0 1-1.6 1.6H7.6A1.6 1.6 0 0 1 6 19.4Z"/><path d="M9.5 9h5"/><path d="M9.5 13h5"/><path d="M9.5 17h3"/>'),
+  reconcile: svg('<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M7.5 9.5h9"/><path d="m7.5 14 2 2 4-4.5"/><path d="M15 16h2"/>'),
   bank:      svg('<path d="M3 10 12 4l9 6"/><path d="M5 10v8"/><path d="M9.5 10v8"/><path d="M14.5 10v8"/><path d="M19 10v8"/><path d="M3 21h18"/>'),
   salary:    svg('<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><path d="M6 10v4"/><path d="M18 10v4"/>'),
   payroll:   svg('<rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M3.5 9h17"/><path d="M7.5 13h4"/><path d="M7.5 16.5h7"/><path d="M16.5 12.5v5"/><path d="M14.5 15h4"/>'),
@@ -31,6 +32,7 @@ const NAV = [
   { key: 'dashboard', label: '總覽' },
   { key: 'orders',    label: '交易流水帳' },
   { key: 'bank',      label: '地下金庫' },
+  { key: 'reconcile', label: '收款對帳' },
   { key: 'salary',    label: '薪資與提領' },
   { key: 'payroll',   label: '記帳・未發薪資' },
   { key: 'customers', label: '老闆與 VIP' },

@@ -40,6 +40,8 @@ const commands = [
   b('儲值', '為金主手動增加雨幣餘額')
     .addUserOption(o => o.setName('對象').setDescription('請選擇要儲值的金主').setRequired(true))
     .addIntegerOption(o => o.setName('金額').setDescription('輸入儲值數量 (純數字)').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('匯款憑證')
+      .setDescription('帳號後五碼或匯款時間，例：12345 / 08-22 14:30').setRequired(true))
     .addStringOption(o => o.setName('原因').setDescription('例：轉帳儲值、活動補償')),
 
   b('扣款', '手動扣除金主帳戶的雨幣餘額')

@@ -574,7 +574,7 @@ const PANEL_DOC = [
     ['!結單', '在訂單包廂裡＝結束這張單（歸檔、鎖發言、1 天後自動刪頻道）；在其他頻道＝發「今日已結單」公告'],
     ['!抽籤', '喚雨星象：每日一次運勢抽籤，抽中吉籤掉折價券（全員可用）'],
     ['!退單 [訂單編號] [原因]', '退還老闆全額雨幣並扣回陪玩分潤'],
-    ['!儲值 [@老闆] [金額]', '為老闆儲值雨幣（客服／管理員）'],
+    ['!儲值 [@老闆] [金額] [匯款後五碼]', '為老闆儲值雨幣，匯款憑證必填（客服／管理員）'],
     ['!扣款 [@老闆] [金額]', '扣除老闆雨幣（客服／管理員）'],
     ['!提領 [金額]', '陪玩自行申請提領，待管理員於後台撥款'],
     ['!離職 [名稱]', '從公司名單中開除該名員工，並永久刪除其相關資料庫紀錄'],
@@ -758,6 +758,7 @@ Pages.settings = async view => {
         <label class="f"><span>更新日誌</span><select name="channel_update_log">${opts(res.channels, v.channel_update_log)}</select></label>
         <label class="f"><span>Bug 回報</span><select name="channel_bug_report">${opts(res.channels, v.channel_bug_report)}</select></label>
         <label class="f"><span>後台結帳／財務</span><select name="channel_finance">${opts(res.channels, v.channel_finance)}</select></label>
+        <label class="f"><span>結帳明細備份（含金額）</span><select name="channel_checkout_log">${opts(res.channels, v.channel_checkout_log)}</select></label>
         <label class="f"><span>匯出區（機密）</span><select name="channel_export">${opts(res.channels, v.channel_export)}</select></label>
         <label class="f"><span>指令操作紀錄</span><select name="channel_command_log">${opts(res.channels, v.channel_command_log)}</select></label>
         <label class="f"><span>金流紀錄（儲值／扣款／發薪）</span><select name="channel_money_log">${opts(res.channels, v.channel_money_log)}</select></label>

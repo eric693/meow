@@ -9,6 +9,7 @@ const { sendExport } = require('../util/export');
 const router = express.Router();
 router.use(requireAuth());
 router.use(['/ledger', '/exports'], guardModule('orders'));
+router.use('/reconcile', guardModule('reconcile'));
 
 const who = req => req.user.name || req.user.username;
 const filtersFrom = q => ({
@@ -75,6 +76,48 @@ router.post('/ledger/:no/refund', (req, res) => {
   require('../util/announce').financeLog(req.guildId,
     require('../util/checkout').refundNotice(req.guildId, o,
       { reason, refundCoins: true, operator: `${who(req)}（後台）` })).catch(() => {});
+  res.json(o);
+});
+
+// ---------------- 收款對帳 ----------------
+// 現金／轉帳單與人工儲值是系統唯二「錢不在系統裡」的地方，
+// 這一頁把它們攤在同一個畫面上，讓老闆每天掃一次有沒有對不上的。
+router.get('/reconcile', (req, res) => {
+  // 訂單時間存的是 localtime，這裡的預設日期也要用本地日期，不然跨午夜會對錯天
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '')
+    ? req.query.date
+    : new Date().toLocaleDateString('sv-SE');
+
+  const pending = M.unconfirmedCashOrders(req.orgId);
+  const cash = db.prepare(`SELECT * FROM orders
+    WHERE guild_id=? AND pay_method LIKE '%現金%' AND substr(created_at,1,10)=?
+    ORDER BY created_at DESC`).all(req.orgId, date);
+  const topups = db.prepare(`SELECT * FROM coin_tx
+    WHERE guild_id=? AND delta > 0 AND substr(created_at,1,10)=?
+      AND reason NOT LIKE '退單%' AND reason NOT LIKE '%已取消%'
+      AND reason NOT LIKE '修改訂單%' AND reason NOT LIKE '刪除訂單%'
+    ORDER BY id DESC`).all(req.orgId, date);
+  const sum = (a, k) => a.reduce((t, r) => t + Number(r[k] || 0), 0);
+
+  res.json({
+    date,
+    pending,
+    cash,
+    topups,
+    summary: {
+      pending_count: pending.length, pending_amount: sum(pending, 'amount'),
+      pending_share: sum(pending, 'staff_share'),
+      cash_count: cash.length, cash_amount: sum(cash, 'amount'),
+      topup_count: topups.length, topup_amount: sum(topups, 'delta'),
+      // 沒留匯款憑證的儲值＝事後對不上銀行帳單的筆數
+      topup_noproof: topups.filter(t => !String(t.proof || '').trim()).length
+    }
+  });
+});
+
+// 確認現金單已收到款：抽成才回到暫存薪水、才准核銷
+router.post('/reconcile/:no/confirm', (req, res) => {
+  const o = M.confirmCashPayment(req.orgId, req.params.no, who(req), { proof: req.body?.proof || '' });
   res.json(o);
 });
 

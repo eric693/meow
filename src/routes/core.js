@@ -134,9 +134,11 @@ router.get('/bank', (req, res) => {
   });
 });
 router.post('/bank/adjust', (req, res) => {
-  const { user_id, delta, reason } = req.body || {};
+  const { user_id, delta, reason, proof } = req.body || {};
+  // 加幣（＝儲值）一定要留匯款憑證；扣款不用
+  M.checkTopupProof(delta, proof);
   const bal = addCoins(req.orgId, String(user_id), Number(delta), reason || '後台調整',
-    { operator: req.user.name || req.user.username, allowNegative: !!req.body.force });
+    { operator: req.user.name || req.user.username, allowNegative: !!req.body.force, proof });
   res.json({ ok: true, balance: bal });
 });
 

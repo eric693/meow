@@ -929,14 +929,19 @@ async function archiveCardChannel(guild, t) {
   }
 }
 
-/** 把結帳明細自動備份一份到財務頻道 */
+/**
+ * 把結帳明細自動備份一份到「結帳明細備份」頻道；沒設就退回後台財務頻道。
+ * 明細帶著實付金額與拆帳，老闆想跟一般訂單通知分開放時就設這個頻道。
+ */
 async function backupToFinance(i, r) {
-  const id = getSetting('channel_finance', '', i.guildId);
+  const id = getSetting('channel_checkout_log', '', i.guildId)
+    || getSetting('channel_finance', '', i.guildId);
   if (!id) return;
   const ch = await i.client.channels.fetch(id).catch(() => null);
   if (!ch || !ch.isTextBased()) return;
   await ch.send({
-    content: `📦 **[系統自動備份]** 結帳方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}`,
+    content: `📦 **[系統自動備份]** 結帳方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}`
+      + (r.cash ? `\n⚠️ 待確認收款：\`${r.order.order_no}\` 收到款後請到後台「收款對帳」確認。` : ''),
     embeds: [r.detail]
   }).catch(() => {});
 }
@@ -1273,7 +1278,14 @@ async function handleInteraction(i) {
       let r;
       try { r = GF.finish(sid, pay); }
       catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
-      await i.update({ content: r.detail, embeds: [], components: [] });
+      // 現金／轉帳的禮物同樣要確認收款才會發抽成，先提醒客服
+      await i.update({
+        content: r.detail + (r.cash
+          ? `\n⚠️ **現金／轉帳，已列入「待確認收款」**（\`${r.order.order_no}\`）：`
+            + '陪玩抽成要等後台「收款對帳」確認收到款才會入帳。'
+          : ''),
+        embeds: [], components: []
+      });
       return i.channel.send(r.message).catch(() => {});
     }
   }
@@ -1310,11 +1322,16 @@ async function handleInteraction(i) {
       let r;
       try { r = CF.finish(sid, pay); }
       catch (e) { return i.update({ content: '', embeds: [err(i.guildId, e.message)], components: [] }); }
+      // 現金／轉帳收在系統外，這張單會卡在待確認收款，要講清楚免得客服以為結完就沒事了
+      const cashNote = r.cash
+        ? '\n⚠️ **這筆是現金／轉帳，已列入「待確認收款」**：'
+          + '陪玩抽成尚未入帳，也不能核銷，請老闆／管理員在後台「收款對帳」確認收到款。'
+        : '';
       await i.update(viaPrefix
         ? { content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）`
-                   + '\n拆帳明細已備份到財務頻道。', embeds: [], components: [] }
+                   + '\n拆帳明細已備份到財務頻道。' + cashNote, embeds: [], components: [] }
         : {
-          content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）\n`
+          content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）${cashNote}\n`
                  + '**[客服專屬機密]** 帳務紀錄已同步至資料庫：',
           embeds: [r.detail], components: []
         });

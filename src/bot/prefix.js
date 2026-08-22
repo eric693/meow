@@ -352,10 +352,17 @@ const handlers = {
   async 儲值(msg, args) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     const target = firstId(msg, args);
-    const amount = Number((args.replace(/<@!?\d+>/g, '').match(/-?\d+/) || [])[0]);
-    if (!target || !Number.isFinite(amount)) throw new Error('用法：`!儲值 @老闆 1000`');
-    const bal = addCoins(msg.guild.id, target, amount, '人工儲值', { operator: msg.author.tag, allowNegative: false });
-    await msg.reply({ embeds: [ok(msg.guild.id, '儲值完成', `${mention(target)} ${amount > 0 ? '+' : ''}${n(amount)} 雨幣\n目前餘額：**${n(bal)}**`)] });
+    const rest = args.replace(/<@!?\d+>/g, '').trim();
+    const amount = Number((rest.match(/-?\d+/) || [])[0]);
+    if (!target || !Number.isFinite(amount))
+      throw new Error('用法：`!儲值 @老闆 1000 匯款後五碼`');
+    // 金額之後剩下的字就是匯款憑證（後五碼／匯款時間），儲值必填
+    const proof = rest.replace(String(amount), '').trim();
+    require('../util/money').checkTopupProof(amount, proof);
+    const bal = addCoins(msg.guild.id, target, amount, '人工儲值',
+      { operator: msg.author.tag, allowNegative: false, proof });
+    await msg.reply({ embeds: [ok(msg.guild.id, '儲值完成', `${mention(target)} ${amount > 0 ? '+' : ''}${n(amount)} 雨幣\n`
+      + `${proof ? `匯款憑證：\`${proof}\`\n` : ''}目前餘額：**${n(bal)}**`)] });
   },
 
   async 扣款(msg, args) {

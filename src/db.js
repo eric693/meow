@@ -34,8 +34,12 @@ ensureColumns('orders', [
   ['pay_method',    "TEXT NOT NULL DEFAULT '雨幣扣款'"],
   ['reporter_id',   "TEXT NOT NULL DEFAULT ''"],
   ['reported_at',   'TEXT'],
-  ['intimacy',      'INTEGER NOT NULL DEFAULT 0']
+  ['intimacy',      'INTEGER NOT NULL DEFAULT 0'],
+  // 現金／轉帳單的收款確認；舊資料一律視為已確認（1），只有之後開的新單才會卡待確認
+  ['cash_confirmed', 'INTEGER NOT NULL DEFAULT 1'],
+  ['cash_proof',     "TEXT NOT NULL DEFAULT ''"]
 ]);
+ensureColumns('coin_tx', [['proof', "TEXT NOT NULL DEFAULT ''"]]);
 ensureColumns('audit_logs', [
   ['actor_id',   "TEXT NOT NULL DEFAULT ''"],
   ['source',     "TEXT NOT NULL DEFAULT 'system'"],
@@ -220,7 +224,7 @@ function refreshVip(guildId, userId) {
 
 // ---------- 雨幣 ----------
 // delta 可正可負；扣款不足時丟錯（allowNegative=true 可強制）
-function addCoins(guildId, userId, delta, reason, { ref = '', operator = '', allowNegative = false, name = '' } = {}) {
+function addCoins(guildId, userId, delta, reason, { ref = '', operator = '', allowNegative = false, name = '', proof = '' } = {}) {
   guildId = orgOf(guildId);
   const c = getCustomer(guildId, userId, name);
   // 0 元不留流水：帳沒有變動卻多一筆看不懂的紀錄，只會讓日後對帳更難查
@@ -232,8 +236,9 @@ function addCoins(guildId, userId, delta, reason, { ref = '', operator = '', all
     throw e;
   }
   db.prepare('UPDATE customers SET coins = ? WHERE id = ?').run(next, c.id);
-  db.prepare('INSERT INTO coin_tx (guild_id, user_id, delta, balance, reason, ref, operator) VALUES (?,?,?,?,?,?,?)')
-    .run(guildId, userId, Math.round(delta), next, reason, ref, operator);
+  db.prepare(`INSERT INTO coin_tx (guild_id, user_id, delta, balance, reason, ref, proof, operator)
+              VALUES (?,?,?,?,?,?,?,?)`)
+    .run(guildId, userId, Math.round(delta), next, reason, ref, String(proof || '').trim(), operator);
   return next;
 }
 
