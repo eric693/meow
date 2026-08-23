@@ -209,7 +209,11 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
     recalcPending(guildId, o.staff_id);
   })();
 
-  refreshVip(guildId, o.customer_id);
+  // 改單把消費金額往上調也可能升等，一樣要播報（原本只有建立訂單時會發）
+  const vipBefore = o.customer_id ? getCustomer(guildId, o.customer_id).vip_level : 0;
+  const vipAfter = refreshVip(guildId, o.customer_id);
+  if (o.customer_id && vipAfter > vipBefore)
+    require('./announce').vipUpgraded(guildId, o.customer_id, vipBefore, vipAfter);
   audit(operator, '修改交易', `${orderNo}`, guildId, { source: 'orders' });
   return db.prepare('SELECT * FROM orders WHERE id=?').get(o.id);
 }

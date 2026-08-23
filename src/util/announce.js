@@ -1,12 +1,29 @@
 // 自動播報：VIP 升級等會員狀態變化
-const { getSetting, orgOf } = require('../db');
+const { db, orgOf } = require('../db');
 const { emb, COLOR, mention } = require('./embed');
 const { vipName } = require('./reports');
+
+/**
+ * 播報頻道的設定要用「開單的那個群」去查，但金流函式內部早就把 guildId 換成 org_id 了
+ * （抽成、VIP 門檻這類設定是整個組織共用的）。org_id 底下沒有頻道設定，
+ * 結果就是 VIP 升級、金流備份通通默默不發——升到 VIP 2 也沒人看到。
+ * 這裡改成：先看這個群自己的設定；只有「完全沒設定過這個 key」才往同組織的其他群找。
+ * 設過但留空＝老闆刻意關掉播報，要尊重，不能拿別的群的頻道來頂。
+ */
+function channelSetting(key, guildId) {
+  const own = db.prepare('SELECT value FROM settings WHERE guild_id=? AND key=?').get(guildId, key);
+  if (own) return own.value;
+  const org = orgOf(guildId);
+  const rows = db.prepare(`SELECT s.value FROM settings s
+      WHERE s.key=? AND s.value<>'' AND (s.guild_id=? OR s.guild_id IN
+        (SELECT guild_id FROM guild_org WHERE org_id=?))`).all(key, org, org);
+  return rows.length ? rows[0].value : '';
+}
 
 /** VIP 升級播報到「VIP 升級播報」頻道；沒設定就不發 */
 async function vipUpgraded(guildId, userId, from, to) {
   try {
-    const id = getSetting('channel_vip_announce', '', guildId);
+    const id = channelSetting('channel_vip_announce', guildId);
     if (!id) return;
     const client = require('../bot').getClient();
     if (!client) return;
@@ -22,7 +39,8 @@ async function vipUpgraded(guildId, userId, from, to) {
  */
 async function financeLog(guildId, embed) {
   try {
-    const id = getSetting('channel_money_log', '', guildId) || getSetting('channel_finance', '', guildId);
+    const id = channelSetting('channel_money_log', guildId)
+      || channelSetting('channel_finance', guildId);
     if (!id) return false;
     const client = require('../bot').getClient();
     if (!client) return false;
@@ -33,4 +51,4 @@ async function financeLog(guildId, embed) {
   } catch { return false; }   // 備份失敗不能影響金流本身
 }
 
-module.exports = { vipUpgraded, financeLog };
+module.exports = { vipUpgraded, financeLog, channelSetting };
