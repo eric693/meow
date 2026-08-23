@@ -54,6 +54,25 @@ function attach(client) {
         await after.member.voice.setChannel(room).catch(() => {});
       }
 
+      // 被客服搬進私人房的陪玩：Discord 的語音內建聊天室要有 ViewChannel 才看得到，
+      // 但私人房把 @everyone 的 ViewChannel 關掉了，陪玩人在房裡卻看不到聊天室。
+      // 進來時補一份個人權限（含發言、看歷史），離開時再收回，房間本身仍然是私人的。
+      if (after.channelId && after.channelId !== before.channelId
+          && created.has(after.channelId) && after.member) {
+        await after.channel.permissionOverwrites.edit(after.member.id, {
+          ViewChannel: true, Connect: true, Speak: true,
+          SendMessages: true, ReadMessageHistory: true
+        }).catch(() => {});
+      }
+      // 離開房間就把剛才補的個人權限收回（房主的那份是建房時給的，不動）
+      if (before.channelId && before.channelId !== after.channelId
+          && created.has(before.channelId) && before.member && before.channel) {
+        const owner = before.channel.permissionOverwrites.cache.get(before.member.id);
+        if (owner && !owner.allow.has(F.ManageChannels)) {
+          await before.channel.permissionOverwrites.delete(before.member.id).catch(() => {});
+        }
+      }
+
       // 離開自建房且已無人 → 刪除
       const left = before.channel;
       if (left && created.has(left.id) && left.members.size === 0) {
