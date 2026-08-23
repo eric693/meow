@@ -41,7 +41,7 @@ Pages.orders = async view => {
         </tr></thead>
         <tbody>${d.rows.map(o => `<tr>
           <td><input type="checkbox" class="lchk" value="${o.order_no}" style="width:auto"
-              ${o.status === 'pending' && o.cash_confirmed !== 0 ? '' : 'disabled'}></td>
+              ${o.status === 'pending' ? '' : 'disabled'}></td>
           <td><code>${UI.esc(o.order_no)}</code></td>
           <td>${H.esc(o.created_at)}</td>
           <td>${o.settled_at ? H.esc(o.settled_at) : '<span class="muted">未核銷</span>'}</td>
@@ -54,10 +54,10 @@ Pages.orders = async view => {
           <td class="num">${H.n(o.staff_share)}</td>
           <td class="num">${H.n(o.net)}</td>
           <td>${H.statusTag(o.status)}${o.cash_confirmed === 0 && o.status !== 'refunded'
-              ? ' <span class="tag warn" title="現金／轉帳單尚未確認收到款，抽成未入帳、不可核銷">待確認收款</span>' : ''}</td>
+              ? ' <span class="tag warn" title="現金／轉帳單，財務尚未對帳確認收到款（不影響核銷）">待對帳</span>' : ''}</td>
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${UI.esc(o.note || '')}</td>
           <td>
-            ${o.status === 'pending' && o.cash_confirmed !== 0
+            ${o.status === 'pending'
               ? `<button class="btn ok sm" data-settle="${o.order_no}">核銷</button> ` : ''}
             <button class="btn sm" data-edit='${UI.esc(JSON.stringify(o))}'>編輯</button>
             ${o.status !== 'refunded' ? `<button class="btn secondary sm" data-refund="${o.order_no}">退單</button> ` : ''}

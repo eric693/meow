@@ -867,7 +867,17 @@ function looksLikeOrderRoom(guildId, channel) {
   if (channel.parentId && cats.includes(channel.parentId)) return true;
   // 🎫 開頭就是包廂，後面接什麼不重要：冠名單那種「🎫│冠名單│260713-卡琳娜」結尾不是數字，
   // 之前被排除在外，!結單 就退回去發今日公告，頻道也不會歸檔。
-  return /^🎫│/.test(channel.name || '');
+  const name = channel.name || '';
+  if (/^🎫│/.test(name)) return true;
+  // 冠名單的包廂常常被手動改名（🎫 前綴被拿掉、或直接叫「冠名-卡琳娜」），
+  // 這種也要收得掉，結單卡片才會跟其他單一樣。比對所有單別名稱與「冠名」。
+  const labels = new Set(['冠名', ...Object.values(DEFAULT_TYPE_LABELS)]);
+  for (const pair of getSetting('order_type_labels', '', guildId).split(',')) {
+    const v = (pair.split('=')[1] || '').trim();
+    if (v) labels.add(v);
+  }
+  // 多要求一個分隔符（│ 或 -），免得把「語聊閒聊區」這種一般頻道也當成包廂收掉
+  return /[│|-]/.test(name) && [...labels].some(l => name.includes(l));
 }
 
 /** 名片專區刪除前，把裡面的對話整理成存底貼到老闆的訂單頻道 */
@@ -941,7 +951,7 @@ async function backupToFinance(i, r) {
   if (!ch || !ch.isTextBased()) return;
   await ch.send({
     content: `📦 **[系統自動備份]** 結帳方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}`
-      + (r.cash ? `\n⚠️ 待確認收款：\`${r.order.order_no}\` 收到款後請到後台「收款對帳」確認。` : ''),
+      + (r.cash ? `\n📌 待對帳：\`${r.order.order_no}\` 請財務到後台「收款對帳」核對這筆入帳。` : ''),
     embeds: [r.detail]
   }).catch(() => {});
 }
@@ -1278,11 +1288,11 @@ async function handleInteraction(i) {
       let r;
       try { r = GF.finish(sid, pay); }
       catch (e) { return i.update({ embeds: [err(i.guildId, e.message)], components: [] }); }
-      // 現金／轉帳的禮物同樣要確認收款才會發抽成，先提醒客服
+      // 現金／轉帳的禮物照常入帳，只是要提醒財務去對帳
       await i.update({
         content: r.detail + (r.cash
-          ? `\n⚠️ **現金／轉帳，已列入「待確認收款」**（\`${r.order.order_no}\`）：`
-            + '陪玩抽成要等後台「收款對帳」確認收到款才會入帳。'
+          ? `\n📌 **現金／轉帳，已列入「待對帳」**（\`${r.order.order_no}\`）：`
+            + '抽成照常入帳，請財務到後台「收款對帳」核對；沒收到款可在那裡取消核銷。'
           : ''),
         embeds: [], components: []
       });
@@ -1322,10 +1332,11 @@ async function handleInteraction(i) {
       let r;
       try { r = CF.finish(sid, pay); }
       catch (e) { return i.update({ content: '', embeds: [err(i.guildId, e.message)], components: [] }); }
-      // 現金／轉帳收在系統外，這張單會卡在待確認收款，要講清楚免得客服以為結完就沒事了
+      // 現金／轉帳收在系統外，核銷不擋，但要留給財務事後對帳
       const cashNote = r.cash
-        ? '\n⚠️ **這筆是現金／轉帳，已列入「待確認收款」**：'
-          + '陪玩抽成尚未入帳，也不能核銷，請老闆／管理員在後台「收款對帳」確認收到款。'
+        ? '\n📌 **這筆是現金／轉帳，已列入「待對帳」**：'
+          + '抽成照常入帳、也可以正常核銷；請財務在後台「收款對帳」核對，'
+          + '若查無入帳可在那裡按「沒收到款」取消核銷。'
         : '';
       await i.update(viaPrefix
         ? { content: `✅ 結帳建檔完成！（方式：${r.cash ? '💸 現金 / 轉帳' : '🪙 雨幣扣款'}）`

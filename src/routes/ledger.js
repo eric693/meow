@@ -66,7 +66,8 @@ router.post('/ledger', (req, res) => {
 // ---------------- 編輯 / 刪除 / 核銷 / 退單 ----------------
 router.put('/ledger/:no', (req, res) => res.json(M.updateOrder(req.orgId, req.params.no, req.body || {}, who(req))));
 router.delete('/ledger/:no', (req, res) => res.json(M.deleteOrder(req.orgId, req.params.no, who(req))));
-// force=true 才會放行匯入的歷史單（前端會先跳確認），一般核銷維持擋下
+// force=true 才會放行匯入的歷史單（前端會先跳確認），一般核銷維持擋下。
+// 現金單不再擋核銷：財務事後對帳，沒收到款再用 /reconcile/:no/unpaid 取消
 router.post('/ledger/:no/settle', (req, res) =>
   res.json(M.settleOrder(req.orgId, req.params.no, who(req), { force: !!req.body?.force })));
 router.post('/ledger/:no/refund', (req, res) => {
@@ -115,11 +116,15 @@ router.get('/reconcile', (req, res) => {
   });
 });
 
-// 確認現金單已收到款：抽成才回到暫存薪水、才准核銷
+// 財務對完帳，確認這張現金單真的收到款
 router.post('/reconcile/:no/confirm', (req, res) => {
   const o = M.confirmCashPayment(req.orgId, req.params.no, who(req), { proof: req.body?.proof || '' });
   res.json(o);
 });
+
+// 對帳發現沒收到款：取消核銷、把抽成扣回來
+router.post('/reconcile/:no/unpaid', (req, res) =>
+  res.json(M.revokeCashPayment(req.orgId, req.params.no, who(req), req.body?.reason || '')));
 
 // 批次核銷
 router.post('/ledger/bulk/settle', (req, res) => {

@@ -1,5 +1,6 @@
 // 收款對帳：把「錢不在系統裡」的兩種紀錄攤在同一頁
-// 1) 現金／轉帳單：系統收不到款，開單時一律卡「待確認收款」，抽成不入帳、不可核銷
+// 1) 現金／轉帳單：系統收不到款，開單時標「待對帳」（不擋核銷），財務在這裡逐筆確認；
+//    對完帳發現沒收到錢就按「沒收到款」取消核銷、把抽成扣回來
 // 2) 人工儲值：一定要留匯款憑證（後五碼／時間），沒留的在這裡標紅
 
 Pages.reconcile = async view => {
@@ -11,20 +12,22 @@ Pages.reconcile = async view => {
     const s = d.summary;
 
     document.getElementById('rsum').innerHTML = `
-      ${H.stat('待確認收款', H.n(s.pending_count) + ' 筆', { accent: s.pending_count > 0 })}
-      ${H.stat('待確認金額', H.n(s.pending_amount))}
-      ${H.stat('未付出的抽成', H.n(s.pending_share), { small: true })}
+      ${H.stat('待對帳', H.n(s.pending_count) + ' 筆', { accent: s.pending_count > 0 })}
+      ${H.stat('待對帳金額', H.n(s.pending_amount))}
+      ${H.stat('其中陪玩抽成', H.n(s.pending_share), { small: true })}
       ${H.stat('當日現金單', `${H.n(s.cash_count)} 筆 / ${H.n(s.cash_amount)}`)}
       ${H.stat('當日儲值', `${H.n(s.topup_count)} 筆 / ${H.n(s.topup_amount)}`, { accent: true })}
       ${H.stat('儲值缺憑證', H.n(s.topup_noproof) + ' 筆', { accent: s.topup_noproof > 0 })}`;
 
-    // ---- 待確認收款（不分日期，全部列出來，這是真正的曝險）----
+    // ---- 待對帳（不分日期，全部列出來，這是真正的曝險）----
     document.getElementById('rpending').innerHTML = `
-      <h3>⚠️ 待確認收款的現金／轉帳單（全部）</h3>
-      <p class="muted">錢還沒確認進來，陪玩抽成不會入帳、也不能核銷。收到款後按「已收到款」才轉正。</p>
+      <h3>⚠️ 尚未對帳的現金／轉帳單（全部）</h3>
+      <p class="muted">這些單客服已經可以照常核銷、抽成也照常入帳；
+        財務對完銀行帳單／現金後在這裡逐筆確認。真的沒收到錢就按「沒收到款」，
+        系統會取消核銷並把已發的抽成扣回來。</p>
       ${d.pending.length ? `<div class="table-wrap"><table>
         <thead><tr><th>交易時間</th><th>訂單編號</th><th>金主</th><th>陪玩</th>
-          <th class="num">實收</th><th class="num">陪玩抽成</th><th>經辦客服</th><th>操作</th></tr></thead>
+          <th class="num">實收</th><th class="num">陪玩抽成</th><th>核銷狀態</th><th>經辦客服</th><th>操作</th></tr></thead>
         <tbody>${d.pending.map(o => `<tr>
           <td>${H.esc(o.created_at)}</td>
           <td><code>${UI.esc(o.order_no)}</code></td>
@@ -32,9 +35,13 @@ Pages.reconcile = async view => {
           <td title="${UI.esc(o.staff_id)}">${UI.esc(o.staff_name || o.staff_id)}</td>
           <td class="num"><b>${H.n(o.amount)}</b></td>
           <td class="num">${H.n(o.staff_share)}</td>
+          <td>${H.statusTag(o.status)}</td>
           <td>${UI.esc(o.cs_name || '')}</td>
           <td><button class="btn ok sm" data-confirm="${UI.esc(o.order_no)}"
-                data-amount="${o.amount}">已收到款</button></td>
+                data-amount="${o.amount}">已收到款</button>
+              <button class="btn danger sm" data-unpaid="${UI.esc(o.order_no)}"
+                data-amount="${o.amount}" data-share="${o.staff_share}"
+                data-settled="${o.status === 'settled' ? 1 : 0}">沒收到款</button></td>
         </tr>`).join('')}</tbody></table></div>`
         : '<div class="empty">沒有待確認的現金單 👍</div>'}`;
 
@@ -44,11 +51,29 @@ Pages.reconcile = async view => {
       bodyHTML: `<div class="muted">金額：<b>${H.n(b.dataset.amount)}</b></div>
         <label class="f"><span>匯款憑證（選填但建議填）</span>
           <input name="proof" placeholder="例：帳號後五碼 12345，或匯款時間 14:30"></label>
-        <div class="muted">確認後陪玩抽成才會入帳、這張單才能核銷。</div>`,
+        <div class="muted">確認後這筆就從待對帳清單移除。</div>`,
       onOk: async back => {
         await POST(`/reconcile/${encodeURIComponent(b.dataset.confirm)}/confirm`,
           { proof: UI.val(back, 'proof') });
         UI.ok('已確認收款'); load();
+      }
+    }));
+
+    view.querySelectorAll('[data-unpaid]').forEach(b => b.onclick = () => UI.modal({
+      title: `確定沒收到款 ${b.dataset.unpaid}`,
+      okText: '取消核銷', okClass: 'btn danger',
+      bodyHTML: `<div class="muted">金額：<b>${H.n(b.dataset.amount)}</b></div>
+        ${Number(b.dataset.settled)
+          ? `<div class="muted">這張單已核銷，會退回未核銷，並從陪玩可提領薪水扣回抽成
+             <b>${H.n(b.dataset.share)}</b>。</div>`
+          : '<div class="muted">這張單尚未核銷，只會留下未收款註記。</div>'}
+        <label class="f"><span>原因（選填）</span>
+          <input name="reason" placeholder="例：對帳查無此筆入帳"></label>
+        <div class="muted">訂單本身不會作廢；要整筆撤銷請到流水帳用「退單」。</div>`,
+      onOk: async back => {
+        await POST(`/reconcile/${encodeURIComponent(b.dataset.unpaid)}/unpaid`,
+          { reason: UI.val(back, 'reason') });
+        UI.ok('已取消核銷'); load();
       }
     }));
 
@@ -64,8 +89,8 @@ Pages.reconcile = async view => {
           <td>${UI.esc(o.customer_name || o.customer_id)}</td>
           <td class="num"><b>${H.n(o.amount)}</b></td>
           <td>${o.status === 'refunded' ? '<span class="tag err">已退單</span>'
-              : (Number(o.cash_confirmed) ? '<span class="tag ok">已收款</span>'
-                                          : '<span class="tag warn">待確認</span>')}</td>
+              : (Number(o.cash_confirmed) ? '<span class="tag ok">已對帳</span>'
+                                          : '<span class="tag warn">待對帳</span>')}</td>
           <td>${UI.esc(o.cash_proof || '') || '<span class="muted">—</span>'}</td>
           <td>${UI.esc(o.cs_name || '')}</td>
         </tr>`).join('')}</tbody></table></div>`

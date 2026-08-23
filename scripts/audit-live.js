@@ -72,16 +72,25 @@ check('現金單退掉時沒有誤退雨幣（看淨效果）',
           WHERE t.guild_id=o.guild_id AND t.ref=o.order_no) > 0`).all(),
   r => `${r.order_no} 憑空多出 ${N(r.net)} 雨幣`);
 
-// ---- 收款確認（現金／轉帳單不能在確認收款前就把抽成付出去）----
-check('待確認收款的單都還沒核銷',
-  db.prepare(`SELECT order_no FROM orders WHERE ${LIVE_ORDER}
-     AND cash_confirmed = 0 AND status = 'settled'`).all(),
-  r => r.order_no);
-
-check('已核銷的現金單都確認過收款',
-  db.prepare(`SELECT order_no, amount FROM orders WHERE ${LIVE_ORDER}
-     AND pay_method NOT LIKE '%雨幣%' AND status = 'settled' AND cash_confirmed = 0`).all(),
-  r => `${r.order_no} ${N(r.amount)}`);
+// ---- 收款對帳 ----
+// 現金單現在可以先核銷（財務不會隨時在線，擋著客服沒辦法即時幫陪玩核銷），
+// 由財務事後對帳、沒收到款再取消核銷。所以「未對帳」是待辦事項而非帳務錯誤，
+// 這裡只把曝險列出來提醒，不計入 problems。
+const unreconciled = db.prepare(`SELECT order_no, amount, staff_share, status, created_at
+   FROM orders WHERE ${LIVE_ORDER}
+   AND cash_confirmed = 0 AND status <> 'refunded' ORDER BY created_at`).all();
+if (!unreconciled.length) {
+  console.log('✅ 現金／轉帳單都已對帳確認收款');
+} else {
+  const amt = unreconciled.reduce((t, r) => t + Number(r.amount || 0), 0);
+  const paid = unreconciled.filter(r => r.status === 'settled')
+    .reduce((t, r) => t + Number(r.staff_share || 0), 0);
+  console.log(`⚠️  尚未對帳的現金／轉帳單：${unreconciled.length} 筆／${N(amt)}`
+    + `（其中已核銷、抽成已付出 ${N(paid)}）— 請財務到後台「收款對帳」處理`);
+  unreconciled.slice(0, 10).forEach(r =>
+    console.log(`   ${r.order_no} ${N(r.amount)} ${r.status === 'settled' ? '已核銷' : '未核銷'}（${r.created_at}）`));
+  if (unreconciled.length > 10) console.log(`   …另有 ${unreconciled.length - 10} 筆`);
+}
 
 // 「儲值必填匯款憑證」是後來才加的規則，之前的舊儲值沒有憑證是正常的。
 // 基準點取第一筆真的留了憑證的儲值＝規則上線的時間，這樣不用寫死日期也不會誤報舊帳。
