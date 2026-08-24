@@ -27,10 +27,13 @@ async function vipUpgraded(guildId, userId, from, to) {
     if (!id) return;
     const client = require('../bot').getClient();
     if (!client) return;
-    const ch = await client.channels.fetch(id).catch(() => null);
-    if (!ch || !ch.isTextBased?.()) return;
+    const ch = await client.channels.fetch(id).catch(e => { throw new Error(`取不到頻道 ${id}：${e.message}`); });
+    if (!ch || !ch.isTextBased?.()) throw new Error(`頻道 ${id} 不是文字頻道`);
     await ch.send(`${mention(userId)} 的 VIP 等級已從 **${vipName(guildId, from)}** 升級至 **${vipName(guildId, to)}** 🎉`);
-  } catch { /* 播報失敗不能影響金流 */ }
+  } catch (e) {
+    // 播報失敗不能影響金流，但要留下痕跡——之前整段吞掉，沒發也沒人知道為什麼
+    console.warn('VIP 升級播報失敗：', e.message);
+  }
 }
 
 /**

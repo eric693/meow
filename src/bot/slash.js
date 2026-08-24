@@ -346,6 +346,9 @@ const handlers = {
     }
     db.prepare('UPDATE customers SET vip_level = ?, vip_locked = 1 WHERE id = ?').run(lv, c.id);
     audit(i.user.tag, '設定 VIP', `${u.id} → ${lv}`, i.guildId);
+    // 手動調高等級一樣要播報到 VIP 提醒區（原本只有自動升等會發）
+    if (lv > c.vip_level)
+      require('../util/announce').vipUpgraded(i.guildId, u.id, c.vip_level, lv);
     await i.reply({
       content: `✅ **已成功為 ${mention(u.id)} 設定 VIP 等級！**\n`
              + `原等級：**${before}**\n新等級：**${vipName(i.guildId, lv)}**（手動設定值: \`${lv}\`）`,
