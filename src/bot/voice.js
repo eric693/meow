@@ -8,6 +8,37 @@ const F = PermissionsBitField.Flags;
 // 機器人這次上線期間建立的房間，避免誤刪既有頻道
 const created = new Set();
 
+const roomTemplate = gid => getSetting('voice_room_name', '', gid) || '{name} 老闆的專屬語音';
+
+// 重開機後 created 會清空，之前開的房就變成沒人管的孤兒、永遠不會自動關。
+// 所以除了記憶體，再用「在自動語音分類底下 + 房名符合設定的格式」把它認出來。
+function isAutoRoom(ch) {
+  if (!ch || ch.type !== ChannelType.GuildVoice) return false;
+  if (created.has(ch.id)) return true;
+  const gid = ch.guild.id;
+  if (ch.id === getSetting('channel_voice_hub', '', gid)) return false;   // 大廳本身不能刪
+  const cat = getSetting('category_voice', '', gid);
+  if (!cat || ch.parentId !== cat) return false;
+  // 由房名格式推出比對規則：{name} 是使用者暱稱，其餘是固定字樣
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = roomTemplate(gid).split('{name}').map(esc).join('.{1,80}');
+  return new RegExp(`^${pattern}$`).test(ch.name);
+}
+
+// 上線時把分類底下沒人的自建房掃掉（多半是上一次重啟留下的）
+async function sweepEmpty(client) {
+  for (const guild of client.guilds.cache.values()) {
+    const cat = getSetting('category_voice', '', guild.id);
+    if (!cat) continue;
+    for (const ch of guild.channels.cache.values()) {
+      if (isAutoRoom(ch) && ch.members.size === 0) {
+        created.delete(ch.id);
+        await ch.delete('自動語音房：重啟後清理無人房間').catch(() => {});
+      }
+    }
+  }
+}
+
 // 私人房的權限配置：@everyone 看不到也進不來，只有老闆本人、客服／管理身分組與機器人進得去。
 // 陪玩由客服在開單流程確認後人工拉進來，所以客服必須有 MoveMembers＋Connect
 //（Discord 搬人時檢查的是「搬的人」在目標頻道的權限，被搬的人不需要事先開通）。
@@ -31,6 +62,7 @@ function publicOverwrites(ownerId) {
 }
 
 function attach(client) {
+  client.once(Events.ClientReady, () => sweepEmpty(client).catch(() => {}));
   client.on(Events.VoiceStateUpdate, async (before, after) => {
     try {
       // 進入大廳 → 開房並把人搬進去
@@ -58,7 +90,9 @@ function attach(client) {
       // 但私人房把 @everyone 的 ViewChannel 關掉了，陪玩人在房裡卻看不到聊天室。
       // 進來時補一份個人權限（含發言、看歷史），離開時再收回，房間本身仍然是私人的。
       if (after.channelId && after.channelId !== before.channelId
-          && created.has(after.channelId) && after.member) {
+          && after.member && isAutoRoom(after.channel)
+          // 房主建房時就給過權限（含 ManageChannels），再 edit 一次會把那份蓋掉
+          && !after.channel.permissionOverwrites.cache.get(after.member.id)) {
         await after.channel.permissionOverwrites.edit(after.member.id, {
           ViewChannel: true, Connect: true, Speak: true,
           SendMessages: true, ReadMessageHistory: true
@@ -66,7 +100,7 @@ function attach(client) {
       }
       // 離開房間就把剛才補的個人權限收回（房主的那份是建房時給的，不動）
       if (before.channelId && before.channelId !== after.channelId
-          && created.has(before.channelId) && before.member && before.channel) {
+          && before.member && isAutoRoom(before.channel)) {
         const owner = before.channel.permissionOverwrites.cache.get(before.member.id);
         if (owner && !owner.allow.has(F.ManageChannels)) {
           await before.channel.permissionOverwrites.delete(before.member.id).catch(() => {});
@@ -75,7 +109,7 @@ function attach(client) {
 
       // 離開自建房且已無人 → 刪除
       const left = before.channel;
-      if (left && created.has(left.id) && left.members.size === 0) {
+      if (left && isAutoRoom(left) && left.members.size === 0) {
         created.delete(left.id);
         await left.delete().catch(() => {});
       }
