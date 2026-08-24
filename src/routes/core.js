@@ -40,6 +40,12 @@ router.get('/dashboard', (req, res) => {
     cs_count: db.prepare("SELECT COUNT(*) c FROM staff WHERE guild_id=? AND active=1 AND kind='cs'").get(g).c,
     open_tickets: db.prepare("SELECT COUNT(*) c FROM tickets WHERE guild_id=? AND status!='closed'").get(g).c,
     pending_withdrawals: db.prepare("SELECT COUNT(*) c FROM withdrawals WHERE guild_id=? AND status='pending'").get(g).c,
+    // 全期累計：原本掛在「交易流水帳」頁上方，但那頁之後要開給客服看訂單，
+    // 財務數字不能讓他們看到，所以搬到只有管理層進得來的總覽。
+    lifetime: db.prepare(`SELECT COUNT(*) cnt, COALESCE(SUM(list_price),0) list,
+         COALESCE(SUM(amount),0) amount, COALESCE(SUM(staff_share),0) share,
+         COALESCE(SUM(net),0) net
+       FROM orders WHERE guild_id=? AND status<>'refunded'`).get(g),
     charts: R.dashboardCharts(g, f.month),
     recent: db.prepare('SELECT * FROM orders WHERE guild_id=? ORDER BY id DESC LIMIT 10').all(g),
     logs: db.prepare("SELECT * FROM audit_logs WHERE guild_id IN (?, '') ORDER BY id DESC LIMIT 15").all(g)

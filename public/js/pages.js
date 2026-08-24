@@ -20,6 +20,16 @@ Pages.dashboard = async view => {
       ${H.stat('進行中客服單', d.open_tickets)}
       ${H.stat('待審提領', d.pending_withdrawals)}
     </div>
+    <div class="card" style="margin-bottom:16px">
+      <h3>全期累計（不含已退單）</h3>
+      <div class="grid c4">
+        ${H.stat('筆數', H.n(d.lifetime.cnt))}
+        ${H.stat('訂單原價', H.n(d.lifetime.list))}
+        ${H.stat('實收金額', H.n(d.lifetime.amount), { accent: true })}
+        ${H.stat('陪玩抽成', H.n(d.lifetime.share))}
+        ${H.stat('伺服器淨利', H.n(d.lifetime.net), { accent: true })}
+      </div>
+    </div>
     ${Chart.card('近 12 個月營收與淨利',
       Chart.bars(c.monthly, [{ key: 'revenue', label: '營收' }, { key: 'net', label: '伺服器淨利' },
                              { key: 'share', label: '陪玩抽成' }], { height: 250 }))}

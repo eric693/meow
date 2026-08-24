@@ -11,19 +11,19 @@ const LedgerState = {
 
 Pages.orders = async view => {
   const S = LedgerState;
+  // 沒勾「財務金額與改單／退單」的帳號（＝客服）只能查看：
+  // 原價／抽成／淨利不顯示，改單、退單、核銷、匯入匯出全部收起來。
+  // 後端也擋了同一組動作，這裡只是不要放沒有用的按鈕出來。
+  const FIN = App.can('finance');
   const qs = extra => new URLSearchParams(
     Object.entries({ ...S.f, ...extra }).filter(([, v]) => v !== '' && v != null));
 
   const load = async () => {
     const d = await GET('/ledger?' + qs({ limit: S.limit, offset: S.page * S.limit }));
     S.meta = d;
-    const sum = d.summary;
-    document.getElementById('lsum').innerHTML = `
-      ${H.stat('筆數', H.n(sum.cnt))}
-      ${H.stat('訂單原價', H.n(sum.list))}
-      ${H.stat('實收金額', H.n(sum.amount), { accent: true })}
-      ${H.stat('陪玩抽成', H.n(sum.share))}
-      ${H.stat('伺服器淨利', H.n(sum.net), { accent: true })}`;
+    // 這裡只留篩選結果的筆數。營收／抽成／淨利這些財務數字改放在「總覽」頁，
+    // 因為這頁之後要開給客服查訂單，店長不希望他們看到財務內容。
+    document.getElementById('lsum').innerHTML = H.stat('符合條件的筆數', H.n(d.summary.cnt));
 
     const th = (key, label, num) =>
       `<th class="${num ? 'num' : ''}" data-sort="${key}" style="cursor:pointer">${label}${
@@ -32,16 +32,16 @@ Pages.orders = async view => {
     document.getElementById('ltable').innerHTML = d.rows.length ? `
       <div class="table-wrap"><table class="has-actions">
         <thead><tr>
-          <th><input type="checkbox" id="lall" style="width:auto"></th>
+          ${FIN ? '<th><input type="checkbox" id="lall" style="width:auto"></th>' : ''}
           ${th('order_no', '訂單編號')}${th('created_at', '交易時間')}${th('settled_at', '核銷時間')}${th('kind', '交易類型')}
           <th>經辦客服</th><th>金主名稱</th><th>陪玩名稱</th>
-          ${th('list_price', '訂單原價', 1)}${th('amount', '實收金額', 1)}
-          ${th('staff_share', '陪玩抽成', 1)}${th('net', '伺服器淨利', 1)}
-          ${th('status', '狀態')}<th>備註</th><th>操作</th>
+          ${FIN ? th('list_price', '訂單原價', 1) : ''}${th('amount', '實收金額', 1)}
+          ${FIN ? th('staff_share', '陪玩抽成', 1) + th('net', '伺服器淨利', 1) : ''}
+          ${th('status', '狀態')}<th>備註</th>${FIN ? '<th>操作</th>' : ''}
         </tr></thead>
         <tbody>${d.rows.map(o => `<tr>
-          <td><input type="checkbox" class="lchk" value="${o.order_no}" style="width:auto"
-              ${o.status === 'pending' ? '' : 'disabled'}></td>
+          ${FIN ? `<td><input type="checkbox" class="lchk" value="${o.order_no}" style="width:auto"
+              ${o.status === 'pending' ? '' : 'disabled'}></td>` : ''}
           <td><code>${UI.esc(o.order_no)}</code></td>
           <td>${H.esc(o.created_at)}</td>
           <td>${o.settled_at ? H.esc(o.settled_at) : '<span class="muted">未核銷</span>'}</td>
@@ -49,20 +49,20 @@ Pages.orders = async view => {
           <td>${UI.esc(o.cs_name || '')}</td>
           <td title="${UI.esc(o.customer_id)}">${UI.esc(o.customer_name || o.customer_id)}</td>
           <td title="${UI.esc(o.staff_id)}">${UI.esc(o.staff_name || o.staff_id)}</td>
-          <td class="num">${H.n(o.list_price)}</td>
+          ${FIN ? `<td class="num">${H.n(o.list_price)}</td>` : ''}
           <td class="num"><b>${H.n(o.amount)}</b></td>
-          <td class="num">${H.n(o.staff_share)}</td>
-          <td class="num">${H.n(o.net)}</td>
+          ${FIN ? `<td class="num">${H.n(o.staff_share)}</td>
+          <td class="num">${H.n(o.net)}</td>` : ''}
           <td>${H.statusTag(o.status)}${o.cash_confirmed === 0 && o.status !== 'refunded'
               ? ' <span class="tag warn" title="現金／轉帳單，財務尚未對帳確認收到款（不影響核銷）">待對帳</span>' : ''}</td>
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${UI.esc(o.note || '')}</td>
-          <td>
+          ${FIN ? `<td>
             ${o.status === 'pending'
               ? `<button class="btn ok sm" data-settle="${o.order_no}">核銷</button> ` : ''}
             <button class="btn sm" data-edit='${UI.esc(JSON.stringify(o))}'>編輯</button>
             ${o.status !== 'refunded' ? `<button class="btn secondary sm" data-refund="${o.order_no}">退單</button> ` : ''}
             <button class="btn danger sm" data-del="${o.order_no}">刪除</button>
-          </td></tr>`).join('')}</tbody>
+          </td>` : ''}</tr>`).join('')}</tbody>
       </table></div>` : '<div class="empty">沒有符合條件的交易紀錄</div>';
 
     // 分頁
@@ -243,7 +243,7 @@ Pages.orders = async view => {
 
     <div class="grid c4" id="lsum" style="margin-bottom:16px"></div>
 
-    <div class="card"><div class="row">
+    ${FIN ? `<div class="card"><div class="row">
       <div class="fit"><button class="btn" id="lnew">＋ 新增交易</button></div>
       <div class="fit"><button class="btn ok" id="lbulk">✅ 批次核銷勾選</button></div>
       <div class="grow"></div>
@@ -252,7 +252,7 @@ Pages.orders = async view => {
       <div class="fit"><button class="btn secondary" id="ex_pdf">📕 匯出 PDF</button></div>
       <div class="fit"><button class="btn secondary" id="l_import">📥 匯入歷史 CSV</button></div>
     </div>
-    <div class="muted" style="margin-top:6px">匯出會套用目前的篩選條件，不受分頁限制。</div></div>
+    <div class="muted" style="margin-top:6px">匯出會套用目前的篩選條件，不受分頁限制。</div></div>` : ''}
 
     <div class="card" id="ltable"><div class="empty">載入中…</div></div>
     <div class="row" id="lpage" style="align-items:center"></div>`;
@@ -281,6 +281,8 @@ Pages.orders = async view => {
     App.reload();
   };
 
+  // 以下按鈕在沒有財務權限時根本沒畫出來，掛事件前要先確認存在
+  if (FIN) {
   document.getElementById('lnew').onclick = () => openForm(null);
   document.getElementById('lbulk').onclick = async () => {
     const nos = [...view.querySelectorAll('.lchk:checked')].map(c => c.value);
@@ -337,6 +339,7 @@ Pages.orders = async view => {
       return true;
     }
   });
+  }
 
   // 先載一次拿 kinds/statuses，再把下拉填好
   await load();
@@ -436,6 +439,7 @@ Pages.orders = async view => {
       UI.ok('已撤銷'); load();
     }
   });
+
 };
 
 LedgerState.kindLabel = k => {

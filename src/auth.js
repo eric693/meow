@@ -8,6 +8,9 @@ const TOKEN_TTL = '7d';
 const MODULES = [
   { key: 'dashboard', label: '總覽' },
   { key: 'orders',    label: '交易流水帳與匯出' },
+  // 給客服查訂單用：有 orders 沒有 finance 的帳號看得到訂單與實收金額，
+  // 但看不到原價／抽成／淨利，也不能改單、退單、匯入匯出。
+  { key: 'finance',   label: '　└ 財務金額與改單／退單（未勾＝只能查看）' },
   { key: 'bank',      label: '地下金庫（雨幣）' },
   { key: 'reconcile', label: '收款對帳（現金單／儲值）' },
   { key: 'salary',    label: '薪資與提領' },

@@ -1,7 +1,7 @@
 // 後台 API：交易流水帳（全欄位 CRUD、篩選、匯出 CSV/Excel/PDF、歷史 CSV 匯入）
 const express = require('express');
 const { db, monthPrefix, orgOf, getStaff, getCustomer, audit } = require('../db');
-const { requireAuth, guardModule } = require('../auth');
+const { requireAuth, guardModule, requireModule } = require('../auth');
 const M = require('../util/money');
 const R = require('../util/reports');
 const { sendExport } = require('../util/export');
@@ -12,6 +12,12 @@ router.use(['/ledger', '/exports'], guardModule('orders'));
 router.use('/reconcile', guardModule('reconcile'));
 
 const who = req => req.user.name || req.user.username;
+// 只有勾了「財務金額與改單／退單」的帳號能動錢；客服帳號只給查詢
+const finance = requireModule('finance');
+const canFinance = req => req.user.role === 'admin'
+  || require('../auth').parsePermissions(req.user.permissions).includes('finance');
+// 沒有財務權限就把原價／抽成／淨利抹掉，不能只靠前端不畫（API 直接打得到）
+const strip = rows => rows.map(o => ({ ...o, list_price: null, staff_share: null, net: null }));
 const filtersFrom = q => ({
   month: q.month || '', from: q.from || '', to: q.to || '',
   // 月份／起訖日要套在交易時間還是核銷時間
@@ -28,6 +34,10 @@ router.get('/ledger', (req, res) => {
   f.limit = Math.min(500, Math.max(1, Number(req.query.limit) || 50));
   f.offset = Math.max(0, Number(req.query.offset) || 0);
   const r = R.ledgerQuery(req.orgId, f);
+  if (!canFinance(req)) {
+    r.rows = strip(r.rows);
+    r.summary = { cnt: r.summary.cnt };   // 統計數字同樣只留筆數
+  }
   res.json({
     ...r,
     kinds: Object.entries(M.KINDS).map(([k, v]) => ({ key: k, label: `${v.emoji} ${v.label}` })),
@@ -36,7 +46,7 @@ router.get('/ledger', (req, res) => {
 });
 
 // ---------------- 新增 ----------------
-router.post('/ledger', (req, res) => {
+router.post('/ledger', finance, (req, res) => {
   const b = req.body || {};
   const o = M.createOrder({
     guildId: req.orgId,
@@ -64,13 +74,13 @@ router.post('/ledger', (req, res) => {
 });
 
 // ---------------- 編輯 / 刪除 / 核銷 / 退單 ----------------
-router.put('/ledger/:no', (req, res) => res.json(M.updateOrder(req.orgId, req.params.no, req.body || {}, who(req))));
-router.delete('/ledger/:no', (req, res) => res.json(M.deleteOrder(req.orgId, req.params.no, who(req))));
+router.put('/ledger/:no', finance, (req, res) => res.json(M.updateOrder(req.orgId, req.params.no, req.body || {}, who(req))));
+router.delete('/ledger/:no', finance, (req, res) => res.json(M.deleteOrder(req.orgId, req.params.no, who(req))));
 // force=true 才會放行匯入的歷史單（前端會先跳確認），一般核銷維持擋下。
 // 現金單不再擋核銷：財務事後對帳，沒收到款再用 /reconcile/:no/unpaid 取消
-router.post('/ledger/:no/settle', (req, res) =>
+router.post('/ledger/:no/settle', finance, (req, res) =>
   res.json(M.settleOrder(req.orgId, req.params.no, who(req), { force: !!req.body?.force })));
-router.post('/ledger/:no/refund', (req, res) => {
+router.post('/ledger/:no/refund', finance, (req, res) => {
   const reason = req.body?.reason || '';
   const o = M.refundOrder(req.orgId, req.params.no, who(req), reason);
   // 後台退的單也要在備份頻道留紀錄，不然只有點的人知道
@@ -127,7 +137,7 @@ router.post('/reconcile/:no/unpaid', (req, res) =>
   res.json(M.revokeCashPayment(req.orgId, req.params.no, who(req), req.body?.reason || '')));
 
 // 批次核銷
-router.post('/ledger/bulk/settle', (req, res) => {
+router.post('/ledger/bulk/settle', finance, (req, res) => {
   const list = Array.isArray(req.body?.order_nos) ? req.body.order_nos : [];
   const force = !!req.body?.force;
   const done = [], failed = [], legacy = [];
@@ -146,7 +156,7 @@ const FORMATS = ['csv', 'xlsx', 'pdf'];
 const fmt = req => (FORMATS.includes(req.query.format) ? req.query.format : 'csv');
 const money = v => Number(v || 0).toLocaleString('en-US');
 
-router.get('/exports/ledger', async (req, res) => {
+router.get('/exports/ledger', finance, async (req, res) => {
   const f = filtersFrom(req.query);
   f.limit = 0;
   const { rows, summary } = R.ledgerQuery(req.orgId, f);
@@ -161,7 +171,7 @@ router.get('/exports/ledger', async (req, res) => {
   });
 });
 
-router.get('/exports/patrons', async (req, res) => {
+router.get('/exports/patrons', finance, async (req, res) => {
   const month = req.query.month || monthPrefix();
   const rows = R.patronBoard(req.orgId, month);
   await sendExport(res, fmt(req), {
@@ -172,7 +182,7 @@ router.get('/exports/patrons', async (req, res) => {
   });
 });
 
-router.get('/exports/staff', async (req, res) => {
+router.get('/exports/staff', finance, async (req, res) => {
   const month = req.query.month || monthPrefix();
   const rows = R.staffRanking(req.orgId, month);
   await sendExport(res, fmt(req), {
@@ -183,7 +193,7 @@ router.get('/exports/staff', async (req, res) => {
   });
 });
 
-router.get('/exports/withdrawals', async (req, res) => {
+router.get('/exports/withdrawals', finance, async (req, res) => {
   const month = req.query.month || monthPrefix();
   const rows = R.withdrawRows(req.orgId, { month, status: req.query.status || '' });
   await sendExport(res, fmt(req), {
@@ -260,7 +270,7 @@ function resolveCustomerByName(orgId, name) {
   return getCustomer(orgId, `name:${n}`, n);
 }
 
-router.post('/ledger/import', express.text({ type: '*/*', limit: '32mb' }), (req, res) => {
+router.post('/ledger/import', finance, express.text({ type: '*/*', limit: '32mb' }), (req, res) => {
   const orgId = req.orgId;
   const rows = parseCSV(typeof req.body === 'string' ? req.body : String(req.body?.csv || ''));
   if (rows.length < 2) return res.status(400).json({ error: 'CSV 內容為空或格式不正確' });
