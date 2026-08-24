@@ -27,6 +27,27 @@ async function channelOf(guildId, channelId) {
 const fail = (res, e) => res.status(400).json({ error: e.message || String(e) });
 
 // ---------------- 面板建置 ----------------
+// ---------------- /help 指令表文案 ----------------
+// 指令會一直增修，之前每次改文案都要動 code、重啟機器人；改成後台可編輯。
+router.get('/help-copy', guardModule('panels'), (req, res) => {
+  const H = require('../util/help');
+  res.json({
+    ...H.getHelp(req.guildId),
+    defaults: { title: H.DEFAULT_TITLE, desc: H.DEFAULT_DESC, sections: H.DEFAULT_SECTIONS }
+  });
+});
+router.put('/help-copy', guardModule('panels'), (req, res) => {
+  const H = require('../util/help');
+  const b = req.body || {};
+  if (!Array.isArray(b.sections) || !b.sections.length)
+    return res.status(400).json({ error: '至少要留一個區塊' });
+  res.json(H.saveHelp(req.guildId, b, req.user.name));
+});
+router.delete('/help-copy', guardModule('panels'), (req, res) => {
+  const H = require('../util/help');
+  res.json(H.saveHelp(req.guildId, null, req.user.name));
+});
+
 router.get('/panels/list', guardModule('panels'), (req, res) => {
   const { PANELS } = require('../bot/panels');
   res.json(Object.entries(PANELS).map(([key, p]) => ({ key, label: p.label, command: '!' + key })));

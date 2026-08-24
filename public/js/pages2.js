@@ -613,6 +613,26 @@ Pages.panels = async view => {
     </div>
 
     <div class="card">
+      <h3>／help 指令表文案</h3>
+      <div class="muted" style="margin-bottom:10px">
+        這裡改的內容就是 <code>!指令</code>／<code>!help</code>／<code>/help</code> 出現的那份總覽，存檔後立即生效、不用重啟機器人。
+        每個區塊是一個標題＋內容，內容支援 Discord 的 <code>**粗體**</code>、<code>\`程式碼\`</code> 與換行。
+        （標題上限 256 字、內容上限 1024 字，最多 25 個區塊，超過會被截掉。）
+      </div>
+      <div class="grid c2">
+        <label class="f"><span>總覽標題</span><input id="hcTitle"></label>
+        <label class="f"><span>目前狀態</span><input id="hcState" disabled></label>
+      </div>
+      <label class="f"><span>開頭說明</span><textarea id="hcDesc" rows="3"></textarea></label>
+      <div id="hcList"></div>
+      <div class="row" style="margin-top:10px">
+        <div class="fit"><button class="btn ghost" id="hcAdd">＋ 新增區塊</button></div>
+        <div class="fit"><button class="btn" id="hcSave">儲存文案</button></div>
+        <div class="fit"><button class="btn danger" id="hcReset">還原成系統預設</button></div>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>公告與訊息</h3>
       <div class="grid c2">
         <label class="f"><span>發送到頻道</span><select id="anCh">${chOptions}</select></label>
@@ -656,6 +676,60 @@ Pages.panels = async view => {
       <label class="f"><span>內容</span><textarea id="dmBody" rows="3"></textarea></label>
       <div class="muted">對方若關閉私訊會失敗，系統會告訴你。</div>
     </div>`;
+
+  // ---- /help 指令表文案 ----
+  const hcRow = (sec, i) => `
+    <div class="card" data-hc style="margin:8px 0;padding:12px">
+      <div class="row">
+        <label class="f"><span>區塊標題</span><input data-hcname value="${UI.esc(sec.name || '')}"></label>
+        <div class="fit" style="align-self:flex-end">
+          <button class="btn sm ghost" data-hcup title="上移">▲</button>
+          <button class="btn sm ghost" data-hcdown title="下移">▼</button>
+          <button class="btn sm danger" data-hcdel>刪除</button>
+        </div>
+      </div>
+      <label class="f"><span>內容</span><textarea data-hcvalue rows="5">${UI.esc(sec.value || '')}</textarea></label>
+    </div>`;
+
+  const hcRender = h => {
+    document.getElementById('hcTitle').value = h.title || '';
+    document.getElementById('hcDesc').value = h.desc || '';
+    document.getElementById('hcState').value = h.custom ? '已使用後台自訂文案' : '目前是系統預設文案';
+    document.getElementById('hcList').innerHTML = (h.sections || []).map(hcRow).join('');
+  };
+  const hcCollect = () => ({
+    title: document.getElementById('hcTitle').value,
+    desc: document.getElementById('hcDesc').value,
+    sections: [...document.querySelectorAll('[data-hc]')].map(d => ({
+      name: d.querySelector('[data-hcname]').value,
+      value: d.querySelector('[data-hcvalue]').value
+    })).filter(x => x.name || x.value)
+  });
+  hcRender(await GET('/help-copy'));
+
+  document.getElementById('hcAdd').onclick = () => {
+    document.getElementById('hcList').insertAdjacentHTML('beforeend', hcRow({}, 0));
+  };
+  // 上移／下移／刪除都用事件代理，才不會每次重繪都要重掛
+  document.getElementById('hcList').onclick = e => {
+    const box = e.target.closest('[data-hc]');
+    if (!box) return;
+    if (e.target.closest('[data-hcdel]')) box.remove();
+    else if (e.target.closest('[data-hcup]') && box.previousElementSibling)
+      box.previousElementSibling.before(box);
+    else if (e.target.closest('[data-hcdown]') && box.nextElementSibling)
+      box.nextElementSibling.after(box);
+  };
+  document.getElementById('hcSave').onclick = async () => {
+    const body = hcCollect();
+    if (!body.sections.length) return UI.err('至少要留一個區塊');
+    try { hcRender(await PUT('/help-copy', body)); UI.ok('已儲存，/help 立即生效'); }
+    catch (err) { UI.err(err.message); }
+  };
+  document.getElementById('hcReset').onclick = async () => {
+    if (!await UI.confirm('還原成系統預設？你自訂的文案會被清掉。')) return;
+    hcRender(await DEL('/help-copy')); UI.ok('已還原成系統預設');
+  };
 
   document.querySelectorAll('[data-send]').forEach(b => b.onclick = async () => {
     const key = b.dataset.send;

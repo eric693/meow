@@ -1,9 +1,11 @@
 // 指令總覽（!指令 / !help / /help 共用同一份內容）
+// 內建這份是預設值；後台「指令表文案」改過之後，改以 settings.help_sections 為準。
 const { emb } = require('./embed');
+const { getSetting, setSetting, orgOf, audit } = require('../db');
 
 const SITE = 'https://meow.crownai.ink';
 
-const SECTIONS = [
+const DEFAULT_SECTIONS = [
   { name: '💳 金流操作（客服／管理員）',
     value: '`!結帳 @老闆 陪玩 原價 [折抵]` — 選券→選付款方式（現金／雨幣）→發結帳明細\n'
          + '`!核銷 訂單編號` `!未銷` `!儲值 @老闆 金額 匯款後五碼` `!扣款 @老闆 金額`\n'
@@ -69,11 +71,58 @@ const SECTIONS = [
          + '　 結帳**不會**自動結單；要收單請按「結束此訂單／關閉訂單」' }
 ];
 
-/** 指令總覽嵌入訊息 */
-const helpEmbed = guildId => emb(guildId, {
-  title: '📖 喚雨機器喵 指令總覽',
-  desc: `完整說明與後台管理：${SITE}\n所有機器人指令客服身分組都可以使用；權限不足時會回覆「你沒有使用這個指令的權限」，請向管理員確認身分組。`,
-  fields: SECTIONS
-});
+const DEFAULT_TITLE = '📖 喚雨機器喵 指令總覽';
+const DEFAULT_DESC = `完整說明與後台管理：${SITE}\n所有機器人指令客服身分組都可以使用；權限不足時會回覆「你沒有使用這個指令的權限」，請向管理員確認身分組。`;
 
-module.exports = { helpEmbed, SECTIONS, SITE };
+// Discord 對 embed 欄位有硬性上限，後台存進來的文案一定要先裁切，
+// 否則整則 /help 會被 API 退回、變成完全發不出來。
+const CAP = { name: 256, value: 1024, title: 256, desc: 4096 };
+const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
+
+/** 目前生效的指令表（後台改過就用後台的，否則用內建預設） */
+function getHelp(guildId) {
+  const raw = getSetting('help_sections', '', orgOf(guildId));
+  let custom = null;
+  if (raw) {
+    try {
+      const p = JSON.parse(raw);
+      if (Array.isArray(p.sections) && p.sections.length) custom = p;
+    } catch { /* 存壞了就當作沒改過，至少 /help 還發得出來 */ }
+  }
+  return {
+    custom: !!custom,
+    title: clip(custom?.title || DEFAULT_TITLE, CAP.title),
+    desc: clip(custom?.desc ?? DEFAULT_DESC, CAP.desc),
+    sections: (custom?.sections || DEFAULT_SECTIONS)
+      .filter(x => x && (x.name || x.value))
+      .map(x => ({ name: clip(x.name, CAP.name), value: clip(x.value, CAP.value) }))
+      .slice(0, 25)      // embed 最多 25 個欄位
+  };
+}
+
+/** 後台儲存；傳 null 代表還原成內建預設 */
+function saveHelp(guildId, data, operator = '') {
+  const gid = orgOf(guildId);
+  if (!data) setSetting('help_sections', '', gid);
+  else setSetting('help_sections', JSON.stringify({
+    title: clip(data.title, CAP.title),
+    desc: clip(data.desc, CAP.desc),
+    sections: (data.sections || []).filter(x => x && (x.name || x.value))
+      .map(x => ({ name: clip(x.name, CAP.name), value: clip(x.value, CAP.value) })).slice(0, 25)
+  }), gid);
+  audit(operator, data ? '修改指令表文案' : '還原指令表文案', '', gid, { source: 'settings' });
+  return getHelp(gid);
+}
+
+/** 指令總覽嵌入訊息 */
+const helpEmbed = guildId => {
+  const h = getHelp(guildId);
+  return emb(guildId, { title: h.title, desc: h.desc, fields: h.sections });
+};
+
+module.exports = {
+  helpEmbed, getHelp, saveHelp, SITE,
+  DEFAULT_SECTIONS, DEFAULT_TITLE, DEFAULT_DESC,
+  // 舊的具名匯出還有地方在用，指向目前生效的內容
+  get SECTIONS() { return getHelp('').sections; }
+};
