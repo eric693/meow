@@ -105,8 +105,10 @@ function patronOrders(guildId, customerId, limit = 0) {
   // 否則這裡的總計會跟「地下金庫／老闆與 VIP」的歷史消費對不上，老闆就會來問。
   const spend = db.prepare('SELECT total_spend FROM customers WHERE guild_id=? AND user_id=?')
     .get(guildId, customerId);
-  all.legacy = Math.max(0, Number(spend?.total_spend || 0) - Number(all.paid || 0));
-  all.lifetime = Number(spend?.total_spend || 0);
+  // 總計直接用會員資料上的歷史消費，跟地下金庫、老闆與 VIP 同一個數字。
+  // 明細列的是訂單原價，加起來會比總計少——差額是舊系統只留扣款流水、
+  // 沒有訂單可列的那些消費，不另外拆行說明（店長要求只看到一個數字）。
+  all.lifetime = Math.max(Number(spend?.total_spend || 0), Number(all.list || 0));
   return { rows, total: all };
 }
 
@@ -124,13 +126,10 @@ function patronOrdersText(guildId, customerId, limit = 0) {
     return `・${who}：共消費 \`${n(r.list)}\` 元${extra ? `（${extra}）` : ''}`;
   });
 
-  const tail = ['\n━━━━━━━━━━━━━━━━━━', `💰 **歷史總計消費：** \`${n(total.list)}\` 元`];
+  const tail = ['\n━━━━━━━━━━━━━━━━━━', `💰 **歷史總計消費：** \`${n(total.lifetime)}\` 元`];
   if (total.gift > 0) tail.push(`🎁 其中禮物：\`${n(total.gift)}\` 元`);
   if (total.discount > 0) tail.push(`🎟️ 累計折抵：\`${n(total.discount)}\` 元`);
-  if (total.legacy > 0) {
-    tail.push(`📼 舊系統無訂單紀錄的消費：\`${n(total.legacy)}\` 元`);
-    tail.push(`🏦 會員資料上的歷史消費：\`${n(total.lifetime)}\` 元（＝實付 ${n(total.paid)} ＋ 舊系統 ${n(total.legacy)}）`);
-  }
+
 
   // 預設列出全部陪玩；Discord 的 embed 說明欄有 4096 字上限，真的塞不下才截斷，
   // 並明講少列了幾位（總計一律是全部的金額，不受截斷影響）。
@@ -167,13 +166,10 @@ function patronOrdersPlain(guildId, customerId, name = '') {
     ].filter(Boolean).join('、');
     return `${who}：共消費 ${n(r.list)} 元${extra ? `（${extra}）` : ''}`;
   });
-  const tail = ['────────────────', `歷史總計消費：${n(total.list)} 元`];
+  const tail = ['────────────────', `歷史總計消費：${n(total.lifetime)} 元`];
   if (total.gift > 0) tail.push(`其中禮物：${n(total.gift)} 元`);
   if (total.discount > 0) tail.push(`累計折抵：${n(total.discount)} 元`);
-  if (total.legacy > 0) {
-    tail.push(`舊系統無訂單紀錄的消費：${n(total.legacy)} 元`);
-    tail.push(`會員資料上的歷史消費：${n(total.lifetime)} 元（＝實付 ${n(total.paid)} ＋ 舊系統 ${n(total.legacy)}）`);
-  }
+
   return [`${name || ''}的點單紀錄`.trim(), ...lines, ...tail].join('\n');
 }
 
