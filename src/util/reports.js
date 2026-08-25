@@ -109,6 +109,9 @@ function patronOrders(guildId, customerId, limit = 0) {
   // 明細列的是訂單原價，加起來會比總計少——差額是舊系統只留扣款流水、
   // 沒有訂單可列的那些消費，不另外拆行說明（店長要求只看到一個數字）。
   all.lifetime = Math.max(Number(spend?.total_spend || 0), Number(all.list || 0));
+  // 早期有一批消費只留下扣款紀錄、查不到是哪位陪玩，列不進上面的明細。
+  // 不補這一行的話，明細加起來就是不等於總計，老闆一定會來問。
+  all.unlisted = all.lifetime - Number(all.list || 0);
   return { rows, total: all };
 }
 
@@ -125,6 +128,8 @@ function patronOrdersText(guildId, customerId, limit = 0) {
     ].filter(Boolean).join('、');
     return `・${who}：共消費 \`${n(r.list)}\` 元${extra ? `（${extra}）` : ''}`;
   });
+  if (total.unlisted > 0)
+    lines.push(`・*早期紀錄（查不到陪玩）*：共消費 \`${n(total.unlisted)}\` 元`);
 
   const tail = ['\n━━━━━━━━━━━━━━━━━━', `💰 **歷史總計消費：** \`${n(total.lifetime)}\` 元`];
   if (total.gift > 0) tail.push(`🎁 其中禮物：\`${n(total.gift)}\` 元`);
@@ -166,6 +171,8 @@ function patronOrdersPlain(guildId, customerId, name = '') {
     ].filter(Boolean).join('、');
     return `${who}：共消費 ${n(r.list)} 元${extra ? `（${extra}）` : ''}`;
   });
+  if (total.unlisted > 0)
+    lines.push(`早期紀錄（查不到陪玩）：共消費 ${n(total.unlisted)} 元`);
   const tail = ['────────────────', `歷史總計消費：${n(total.lifetime)} 元`];
   if (total.gift > 0) tail.push(`其中禮物：${n(total.gift)} 元`);
   if (total.discount > 0) tail.push(`累計折抵：${n(total.discount)} 元`);
