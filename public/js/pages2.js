@@ -940,7 +940,12 @@ Pages.users = async view => {
       ['帳號', '姓名', '角色', '權限', '狀態', '操作'],
       rows.map(u => `<tr><td>${UI.esc(u.username)}</td><td>${UI.esc(u.name)}</td>
         <td>${u.role === 'admin' ? '<span class="tag">總管理員</span>' : '一般'}</td>
-        <td style="white-space:normal;max-width:340px" class="muted">${u.role === 'admin' ? '全部' : UI.esc(u.permissions || '無')}</td>
+        <td style="white-space:normal;max-width:340px;line-height:1.7" class="muted">${
+          u.role === 'admin' ? '全部'
+            : (u.permissions ? UI.esc(u.permissions.split(',')
+                // 顯示中文名稱，原本直接印英文 key，又長又看不懂還會壓到後面的欄位
+                .map(k => (mods.find(m => m.key === k) || {}).label || k)
+                .map(l => l.replace(/^　└ /, '└ ')).join('、')) : '無')}</td>
         <td>${u.active ? '<span class="tag ok">啟用</span>' : '<span class="tag err">停用</span>'}</td>
         <td><button class="btn sm" data-ue='${UI.esc(JSON.stringify(u))}'>編輯</button>
             <button class="btn danger sm" data-ud="${u.id}">刪除</button></td></tr>`));
