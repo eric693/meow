@@ -938,7 +938,10 @@ Pages.users = async view => {
     const mods = App.me.all_modules;
     document.getElementById('ut').innerHTML = H.table(
       ['帳號', '姓名', '角色', '權限', '最後登入', '狀態', '操作'],
-      rows.map(u => `<tr><td>${UI.esc(u.username)}</td><td>${UI.esc(u.name)}</td>
+      rows.map(u => `<tr><td>${UI.esc(u.username)}</td><td style="white-space:normal">${UI.esc(u.name)}${u.discord_id
+          ? `<div class="muted" style="font-size:12px">🔗 ${UI.esc(
+              u.discord_name || u.discord_id)}</div>`
+          : ''}</td>
         <td>${u.role === 'admin' ? '<span class="tag">總管理員</span>' : '一般'}</td>
         <td style="white-space:normal;max-width:340px;line-height:1.7" class="muted">${
           u.role === 'admin' ? '全部'
@@ -965,6 +968,9 @@ Pages.users = async view => {
         <label class="f"><span>姓名</span><input name="name" value="${UI.esc(u?.name || '')}"></label>
       </div>
       <label class="f"><span>${u ? '新密碼（留空不改）' : '密碼（至少 8 碼）'}</span><input name="password" type="password"></label>
+      <label class="f"><span>綁定的 Discord 帳號（選填）</span>
+        <input name="discord_id" value="${UI.esc(u?.discord_id || '')}" placeholder="貼上 Discord ID 或 @提及">
+        <span class="muted" style="font-size:12.5px">用來對應後台帳號與 Discord 上的同一個人。留空＝不綁定。</span></label>
       <label class="f"><span>角色</span><select name="role">
         <option value="staff" ${u?.role !== 'admin' ? 'selected' : ''}>一般（依權限）</option>
         <option value="admin" ${u?.role === 'admin' ? 'selected' : ''}>總管理員（全開）</option></select></label>
@@ -990,7 +996,7 @@ Pages.users = async view => {
         await POST('/users', {
           username: UI.val(back, 'username'), password: UI.val(back, 'password'),
           name: UI.val(back, 'name'), role: UI.val(back, 'role'), permissions: collect(back),
-          guild_ids: collectGuilds(back)
+          guild_ids: collectGuilds(back), discord_id: UI.val(back, 'discord_id')
         });
         UI.ok('已新增'); load();
       }
@@ -1004,7 +1010,7 @@ Pages.users = async view => {
           const body = {
             name: UI.val(back, 'name'), role: UI.val(back, 'role'),
             permissions: collect(back), guild_ids: collectGuilds(back),
-            active: UI.val(back, 'active')
+            discord_id: UI.val(back, 'discord_id'), active: UI.val(back, 'active')
           };
           const pw = UI.val(back, 'password');
           if (pw) body.password = pw;

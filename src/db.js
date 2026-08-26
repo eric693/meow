@@ -26,6 +26,7 @@ function ensureColumns(table, cols) {
 }
 // 誰登入過、什麼時候登入的——原本只有 audit_logs 一行文字，翻不出來
 ensureColumns('admin_users', [
+  ['discord_id',    "TEXT NOT NULL DEFAULT ''"],
   ['last_login_at', "TEXT NOT NULL DEFAULT ''"],
   ['last_login_ip', "TEXT NOT NULL DEFAULT ''"],
   ['login_count',   'INTEGER NOT NULL DEFAULT 0']

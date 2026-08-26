@@ -172,21 +172,34 @@ router.get('/discord/member/:id', async (req, res) => {
 });
 
 // ---------------- 帳號權限 ----------------
+// 綁定的 Discord 帳號：可以直接貼 @提及或整串 ID，取當中的數字就好
+const discordId = v => (String(v || '').match(/\d{15,25}/) || [''])[0];
 router.use('/users', guardModule('users'));
 router.get('/users', (req, res) => {
+  // 綁定的 Discord 帳號順便查出名字，前端才不用再對一次名冊
+  const nameOf = id => {
+    if (!id) return '';
+    const st = db.prepare('SELECT name, code FROM staff WHERE user_id=? LIMIT 1').get(id);
+    if (st) return st.name || st.code || '';
+    const c = db.prepare('SELECT name FROM customers WHERE user_id=? LIMIT 1').get(id);
+    return c ? (c.name || '') : '';
+  };
   res.json(db.prepare(`SELECT id, username, name, role, permissions, guild_ids, active, created_at,
-            last_login_at, last_login_ip, login_count FROM admin_users ORDER BY id`).all());
+            discord_id, last_login_at, last_login_ip, login_count FROM admin_users ORDER BY id`)
+    .all().map(u => ({ ...u, discord_name: nameOf(u.discord_id) })));
 });
 router.post('/users', (req, res) => {
-  const { username, password, name = '', role = 'staff', permissions = [], guild_ids = [] } = req.body || {};
+  const { username, password, name = '', role = 'staff', permissions = [], guild_ids = [],
+          discord_id = '' } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: '請填寫帳號與密碼' });
   if (String(password).length < 8) return res.status(400).json({ error: '密碼至少 8 碼' });
   const perms = (Array.isArray(permissions) ? permissions : parsePermissions(permissions))
     .filter(p => MODULE_KEYS.includes(p)).join(',');
   try {
-    db.prepare('INSERT INTO admin_users (username, password_hash, name, role, permissions, guild_ids) VALUES (?,?,?,?,?,?)')
+    db.prepare(`INSERT INTO admin_users
+        (username, password_hash, name, role, permissions, guild_ids, discord_id) VALUES (?,?,?,?,?,?,?)`)
       .run(username, bcrypt.hashSync(password, 10), name, role === 'admin' ? 'admin' : 'staff', perms,
-           (Array.isArray(guild_ids) ? guild_ids : []).join(','));
+           (Array.isArray(guild_ids) ? guild_ids : []).join(','), discordId(discord_id));
   } catch { return res.status(400).json({ error: '帳號已存在' }); }
   audit(req.user.name, '新增後台帳號', username, '', { source: 'web' });
   res.json({ ok: true });
@@ -199,9 +212,11 @@ router.put('/users/:id', (req, res) => {
     ? (Array.isArray(b.permissions) ? b.permissions : parsePermissions(b.permissions))
         .filter(p => MODULE_KEYS.includes(p)).join(',')
     : u.permissions;
-  db.prepare('UPDATE admin_users SET name=?, role=?, permissions=?, guild_ids=?, active=? WHERE id=?')
+  db.prepare(`UPDATE admin_users SET name=?, role=?, permissions=?, guild_ids=?, discord_id=?, active=?
+              WHERE id=?`)
     .run(b.name ?? u.name, b.role === 'admin' ? 'admin' : (b.role ? 'staff' : u.role), perms,
          b.guild_ids ? (Array.isArray(b.guild_ids) ? b.guild_ids.join(',') : b.guild_ids) : u.guild_ids,
+         b.discord_id == null ? u.discord_id : discordId(b.discord_id),
          b.active == null ? u.active : (b.active ? 1 : 0), u.id);
   if (b.password) {
     if (String(b.password).length < 8) return res.status(400).json({ error: '密碼至少 8 碼' });
