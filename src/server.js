@@ -38,6 +38,80 @@ app.post('/api/login', rateLimit({ windowMs: 5 * 60 * 1000, max: 30, prefix: 'lo
   res.json({ ok: true });
 });
 
+// ---- 用 Discord 登入 ----
+// 手動建帳號的流程對不起來：管理員在後台開一個帳號，員工那邊卻不知道帳密，
+// 而員工自己點連結進來又不會出現在帳號清單裡。改成讓他們用 Discord 登入——
+// 第一次登入就自動建檔並綁好 discord_id，管理員只要去勾權限。
+const OAUTH = {
+  id: process.env.DISCORD_CLIENT_ID || '',
+  secret: process.env.DISCORD_CLIENT_SECRET || '',
+  // 這個網址必須跟 Discord 開發者後台 OAuth2 → Redirects 填的一字不差
+  redirect: process.env.OAUTH_REDIRECT || ''
+};
+const oauthReady = () => !!(OAUTH.id && OAUTH.secret && OAUTH.redirect);
+
+app.get('/api/auth/discord', (req, res) => {
+  if (!oauthReady()) return res.status(503).send('尚未設定 Discord 登入');
+  const url = 'https://discord.com/api/oauth2/authorize?' + new URLSearchParams({
+    client_id: OAUTH.id, redirect_uri: OAUTH.redirect, response_type: 'code', scope: 'identify'
+  });
+  res.redirect(url);
+});
+
+app.get('/api/auth/discord/callback', async (req, res) => {
+  if (!oauthReady()) return res.status(503).send('尚未設定 Discord 登入');
+  try {
+    const code = String(req.query.code || '');
+    if (!code) return res.redirect('/?login=cancel');
+    const tok = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: OAUTH.id, client_secret: OAUTH.secret,
+        grant_type: 'authorization_code', code, redirect_uri: OAUTH.redirect
+      })
+    }).then(r => r.json());
+    if (!tok.access_token) throw new Error(tok.error_description || 'Discord 沒有回傳授權');
+    const du = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tok.access_token}` }
+    }).then(r => r.json());
+    if (!du.id) throw new Error('取不到 Discord 帳號資料');
+
+    let user = db.prepare('SELECT * FROM admin_users WHERE discord_id = ?').get(du.id);
+    if (!user) {
+      // 沒綁過就一律新建一個「零權限」帳號，等管理員去勾。
+      // 不用「名字相同就自動認領既有帳號」那種做法——Discord 使用者名稱是自己取的，
+      // 撞到管理員的名字就等於把後台送出去了。要對應到既有帳號請管理員手動填 Discord ID。
+      {
+        // 帳號名稱可能撞到，撞了就接一段 Discord ID
+        let username = du.username;
+        if (db.prepare('SELECT 1 FROM admin_users WHERE username = ?').get(username))
+          username = `${du.username}.${du.id.slice(-4)}`;
+        const info = db.prepare(`INSERT INTO admin_users
+            (username, password_hash, name, role, permissions, discord_id)
+            VALUES (?,?,?,'staff','',?)`)
+          .run(username, '!discord-only', du.global_name || du.username, du.id);
+        user = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(info.lastInsertRowid);
+        audit(user.name || user.username, '自助建立後台帳號', `Discord ${du.id}`, '', { source: 'web' });
+      }
+    }
+    if (!user.active) return res.redirect('/?login=disabled');
+
+    const ip = clientIp(req);
+    db.prepare(`UPDATE admin_users SET last_login_at = datetime('now','localtime'),
+                  last_login_ip = ?, login_count = login_count + 1 WHERE id = ?`).run(ip, user.id);
+    setAuthCookie(res, signToken({ id: user.id }));
+    audit(user.name || user.username, '登入後台（Discord）', `IP ${ip}`, '', { source: 'web' });
+    res.redirect('/');
+  } catch (e) {
+    console.warn('Discord 登入失敗：', e.message);
+    res.redirect('/?login=error');
+  }
+});
+
+// 登入頁要知道能不能顯示「用 Discord 登入」；這支不需要登入
+app.get('/api/auth/config', (req, res) => res.json({ discord: oauthReady() }));
+
 app.post('/api/logout', (req, res) => { clearAuthCookie(res); res.json({ ok: true }); });
 
 app.get('/api/me', requireAuth(), (req, res) => {

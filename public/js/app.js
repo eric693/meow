@@ -59,20 +59,50 @@ const App = {
     try { this.me = await GET('/me'); } catch { return this.renderLogin(); }
     await this.loadGuilds();
     this.render();
+    this.watchPermissions();
+  },
+
+  // 權限是登入當下抓的，管理員在後台改完，對方的畫面不會變——側邊欄還留著
+  // 他已經不該看到的頁面（點下去 API 會擋，但看起來就像權限沒生效）。
+  // 定時回頭問一次 /me，變了就重畫。
+  watchPermissions() {
+    clearInterval(this._permTimer);
+    this._permTimer = setInterval(() => this.refreshMe(), 60000);
+  },
+  async refreshMe() {
+    if (!this.me) return;
+    let me;
+    try { me = await GET('/me'); } catch { return; }   // 斷線時什麼都不做，下次再問
+    const changed = me.modules.join(',') !== this.me.modules.join(',') || me.role !== this.me.role;
+    this.me = me;
+    if (!changed) return;
+    UI.ok('你的權限已更新');
+    this.render();
   },
 
   onUnauthorized() { this.me = null; this.renderLogin(); },
 
   renderLogin(msg = '') {
+    // 從 Discord 導回來時可能帶著結果，讓使用者知道發生什麼事
+    const R = { cancel: '你取消了 Discord 授權。', error: 'Discord 登入失敗，請再試一次。',
+                disabled: '這個帳號已被停用，請聯絡管理員。' };
+    msg = msg || R[new URLSearchParams(location.search).get('login')] || '';
     document.getElementById('app').innerHTML = `
       <div class="login-wrap"><form class="login-card" id="lf">
         <h1>☔ 喚雨機器喵</h1>
         <p class="sub">陪玩接單管理後台</p>
+        <a class="btn" id="dcbtn" href="/api/auth/discord"
+           style="display:none;width:100%;justify-content:center;margin-bottom:10px;text-decoration:none">
+          用 Discord 登入</a>
         <label class="f"><span>帳號</span><input name="username" autocomplete="username" required></label>
         <label class="f"><span>密碼</span><input name="password" type="password" autocomplete="current-password" required></label>
         <div style="color:var(--err);font-size:13px;min-height:20px">${UI.esc(msg)}</div>
         <button class="btn" style="width:100%;margin-top:6px">登入</button>
       </form></div>`;
+    // 沒設定 OAuth 就不要放一顆按不動的按鈕
+    GET('/auth/config').then(c => {
+      if (c.discord) document.getElementById('dcbtn').style.display = 'flex';
+    }).catch(() => {});
     document.getElementById('lf').onsubmit = async e => {
       e.preventDefault();
       const f = e.target;
@@ -129,6 +159,7 @@ const App = {
       localStorage.setItem('meow_page', this.page);
       document.getElementById('side').classList.remove('open');
       this.render();
+      this.refreshMe();     // 換頁順便對一次權限，不用等下一輪定時
     });
     document.querySelector('[data-act="logout"]').onclick = async () => { await POST('/logout'); location.reload(); };
     document.querySelector('[data-act="pwd"]').onclick = () => this.changePassword();
@@ -143,6 +174,13 @@ const App = {
 
     const fn = Pages[this.page];
     const view = document.getElementById('view');
+    // 剛用 Discord 登入、管理員還沒勾任何權限的帳號會走到這裡，
+    // 不講清楚的話畫面是一片空白，看起來像壞掉。
+    if (!items.length) return view.innerHTML = `<div class="card">
+      <h3>尚未開通權限</h3>
+      <div class="muted">你的帳號（${UI.esc(this.me.name || this.me.username)}）已經建立，
+      但管理員還沒指派任何功能權限。請聯絡管理員到「帳號權限」勾選你需要的項目，
+      勾好之後這個畫面會自動更新，不用重新登入。</div></div>`;
     if (!fn) return view.innerHTML = '<div class="empty">此功能尚未開放</div>';
     Promise.resolve(fn(view)).catch(e => view.innerHTML = `<div class="empty">載入失敗：${UI.esc(e.message)}</div>`);
   },

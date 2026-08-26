@@ -1,7 +1,7 @@
 // 後台 API：總覽、訂單、金庫、薪資、老闆、人事
 const express = require('express');
 const { db, monthPrefix, addCoins, getCustomer, refreshVip, audit } = require('../db');
-const { requireAuth, guardModule } = require('../auth');
+const { requireAuth, guardModule, requireModule } = require('../auth');
 const { sendExport } = require('../util/export');
 const M = require('../util/money');
 const R = require('../util/reports');
@@ -24,7 +24,7 @@ const EXPORT_FORMATS = ['csv', 'xlsx', 'pdf'];
 const exportFormat = req => (EXPORT_FORMATS.includes(req.query.format) ? req.query.format : 'csv');
 
 // ---------------- 總覽 ----------------
-router.get('/dashboard', (req, res) => {
+router.get('/dashboard', requireModule('dashboard'), (req, res) => {
   const g = req.orgId;
   const f = R.financeReport(g);
   const coins = R.totalCoins(g);
