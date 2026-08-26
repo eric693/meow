@@ -12,7 +12,7 @@ const { parseSlots } = require('../util/slots');
 const S = require('../util/session');
 const CF = require('../util/checkout-flow');
 const GF = require('../util/gift-flow');
-const { isCS } = require('./perm');
+const { isCS, isPlayer } = require('./perm');
 const CardMedia = require('../util/cardmedia');
 
 const btn = (id, label, style = ButtonStyle.Primary, emoji) => {
@@ -1110,11 +1110,16 @@ async function handleInteraction(i) {
   }
 
   // ---- 報單 ----
-  const canReport = () => isCS(i.member) || getStaff(i.guildId, i.user.id);
+  // 新報到的陪玩通常先拿到身分組、隔幾天才由客服 /入職 建檔，
+  // 只認名冊的話他們第一天就報不了單。isPlayer 會同時認名冊與後台設定的陪玩身分組。
+  const canReport = () => isCS(i.member) || isPlayer(i.member) || getStaff(i.guildId, i.user.id);
+  const reportDeny = '你目前還不能報單。\n'
+    + '・如果你是新報到的陪玩：請找客服用 `/入職` 幫你建檔，或確認你已經拿到陪玩身分組。\n'
+    + '・客服：後台「系統設定 → 陪玩身分組」若還沒填，只有建過檔的人能報單。';
 
   // 自主報單：先問名稱 → 建立個人報單頻道 → 在頻道內填寫明細
   if (id === 'report:self') {
-    if (!canReport()) return denyEph(i, '只有在職員工可以報單。');
+    if (!canReport()) return denyEph(i, reportDeny);
     return i.showModal(new ModalBuilder().setCustomId('reportch').setTitle('📄 自主報單系統')
       .addComponents(input('name', '請輸入此份報單的名稱', { ph: '例：羊毛毛' })));
   }
@@ -1153,7 +1158,7 @@ async function handleInteraction(i) {
   // 跨服報單／頻道內的填寫按鈕，都直接開表單
   if (id.startsWith('report:') || id.startsWith('reportform:')) {
     const kind = id.split(':')[1];
-    if (!canReport()) return denyEph(i, '只有在職員工可以報單。');
+    if (!canReport()) return denyEph(i, reportDeny);
     return i.showModal(reportModal(kind));
   }
   if (id.startsWith('reportm:')) {
