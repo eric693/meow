@@ -945,7 +945,12 @@ Pages.users = async view => {
             : (u.permissions ? UI.esc(u.permissions.split(',')
                 // 顯示中文名稱，原本直接印英文 key，又長又看不懂還會壓到後面的欄位
                 .map(k => (mods.find(m => m.key === k) || {}).label || k)
-                .map(l => l.replace(/^　└ /, '└ ')).join('、')) : '無')}</td>
+                .map(l => l.replace(/^　└ /, '└ ')).join('、')) : '無')}${
+          u.role === 'admin' ? '' : `<div style="margin-top:4px;font-size:12.5px">🖥️ ${
+            u.guild_ids
+              ? UI.esc(u.guild_ids.split(',')
+                  .map(id => ((App.guilds || []).find(g => g.guild_id === id) || {}).name || id).join('、'))
+              : '主要伺服器'}</div>`}</td>
         <td>${u.active ? '<span class="tag ok">啟用</span>' : '<span class="tag err">停用</span>'}</td>
         <td><button class="btn sm" data-ue='${UI.esc(JSON.stringify(u))}'>編輯</button>
             <button class="btn danger sm" data-ud="${u.id}">刪除</button></td></tr>`));
@@ -963,16 +968,25 @@ Pages.users = async view => {
         <div class="grid c3" style="gap:4px">${mods.map(m => `<label style="font-size:13.5px">
           <input type="checkbox" name="p_${m.key}" style="width:auto"
             ${(u?.permissions || '').split(',').includes(m.key) ? 'checked' : ''}> ${UI.esc(m.label)}</label>`).join('')}</div>
+      </div>
+      <div class="f"><span>可存取的伺服器</span>
+        <div class="grid c2" style="gap:4px">${(App.guilds || []).map(g => `<label style="font-size:13.5px">
+          <input type="checkbox" name="g_${g.guild_id}" style="width:auto"
+            ${(u?.guild_ids || '').split(',').includes(g.guild_id) ? 'checked' : ''}> ${UI.esc(g.label || g.name || g.guild_id)}</label>`).join('')}</div>
+        <div class="muted" style="margin-top:4px">全部不勾＝只能存取主要伺服器。總管理員不受此限制。</div>
       </div>`;
 
     const collect = back => mods.map(m => m.key).filter(k => back.querySelector(`[name="p_${k}"]`).checked);
+    const collectGuilds = back => (App.guilds || []).map(g => g.guild_id)
+      .filter(id => back.querySelector(`[name="g_${id}"]`)?.checked);
 
     document.getElementById('unew').onclick = () => UI.modal({
       title: '新增後台帳號', bodyHTML: form(null),
       onOk: async back => {
         await POST('/users', {
           username: UI.val(back, 'username'), password: UI.val(back, 'password'),
-          name: UI.val(back, 'name'), role: UI.val(back, 'role'), permissions: collect(back)
+          name: UI.val(back, 'name'), role: UI.val(back, 'role'), permissions: collect(back),
+          guild_ids: collectGuilds(back)
         });
         UI.ok('已新增'); load();
       }
@@ -985,7 +999,8 @@ Pages.users = async view => {
         onOk: async back => {
           const body = {
             name: UI.val(back, 'name'), role: UI.val(back, 'role'),
-            permissions: collect(back), active: UI.val(back, 'active')
+            permissions: collect(back), guild_ids: collectGuilds(back),
+            active: UI.val(back, 'active')
           };
           const pw = UI.val(back, 'password');
           if (pw) body.password = pw;
