@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS admin_users (
   permissions   TEXT NOT NULL DEFAULT '',        -- 逗號分隔的模組 key
   guild_ids     TEXT NOT NULL DEFAULT '',        -- 逗號分隔；空= 主伺服器
   active        INTEGER NOT NULL DEFAULT 1,
+  last_login_at TEXT NOT NULL DEFAULT '',        -- 最後一次登入成功的時間
+  last_login_ip TEXT NOT NULL DEFAULT '',
+  login_count   INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 

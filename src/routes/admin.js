@@ -174,7 +174,8 @@ router.get('/discord/member/:id', async (req, res) => {
 // ---------------- 帳號權限 ----------------
 router.use('/users', guardModule('users'));
 router.get('/users', (req, res) => {
-  res.json(db.prepare('SELECT id, username, name, role, permissions, guild_ids, active, created_at FROM admin_users ORDER BY id').all());
+  res.json(db.prepare(`SELECT id, username, name, role, permissions, guild_ids, active, created_at,
+            last_login_at, last_login_ip, login_count FROM admin_users ORDER BY id`).all());
 });
 router.post('/users', (req, res) => {
   const { username, password, name = '', role = 'staff', permissions = [], guild_ids = [] } = req.body || {};

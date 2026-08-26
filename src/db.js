@@ -24,6 +24,12 @@ function ensureColumns(table, cols) {
     if (!have.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`);
   }
 }
+// 誰登入過、什麼時候登入的——原本只有 audit_logs 一行文字，翻不出來
+ensureColumns('admin_users', [
+  ['last_login_at', "TEXT NOT NULL DEFAULT ''"],
+  ['last_login_ip', "TEXT NOT NULL DEFAULT ''"],
+  ['login_count',   'INTEGER NOT NULL DEFAULT 0']
+]);
 ensureColumns('orders', [
   ['customer_name', "TEXT NOT NULL DEFAULT ''"],
   ['staff_name',    "TEXT NOT NULL DEFAULT ''"],

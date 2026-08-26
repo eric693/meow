@@ -937,7 +937,7 @@ Pages.users = async view => {
     const rows = await GET('/users');
     const mods = App.me.all_modules;
     document.getElementById('ut').innerHTML = H.table(
-      ['帳號', '姓名', '角色', '權限', '狀態', '操作'],
+      ['帳號', '姓名', '角色', '權限', '最後登入', '狀態', '操作'],
       rows.map(u => `<tr><td>${UI.esc(u.username)}</td><td>${UI.esc(u.name)}</td>
         <td>${u.role === 'admin' ? '<span class="tag">總管理員</span>' : '一般'}</td>
         <td style="white-space:normal;max-width:340px;line-height:1.7" class="muted">${
@@ -951,6 +951,10 @@ Pages.users = async view => {
               ? UI.esc(u.guild_ids.split(',')
                   .map(id => ((App.guilds || []).find(g => g.guild_id === id) || {}).name || id).join('、'))
               : '主要伺服器'}</div>`}</td>
+        <td style="white-space:normal">${u.last_login_at
+          ? `${UI.esc(u.last_login_at)}<div class="muted" style="font-size:12px">
+               ${UI.esc(u.last_login_ip || '')}・共 ${u.login_count} 次</div>`
+          : '<span class="tag warn">從未登入</span>'}</td>
         <td>${u.active ? '<span class="tag ok">啟用</span>' : '<span class="tag err">停用</span>'}</td>
         <td><button class="btn sm" data-ue='${UI.esc(JSON.stringify(u))}'>編輯</button>
             <button class="btn danger sm" data-ud="${u.id}">刪除</button></td></tr>`));

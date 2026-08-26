@@ -9,7 +9,7 @@ const { db, getSetting, audit } = require('./db');
 const {
   signToken, setAuthCookie, clearAuthCookie, requireAuth,
   MODULES, MODULE_KEYS, parsePermissions,
-  loginLockedMinutes, loginFailed, loginSucceeded, rateLimit
+  loginLockedMinutes, loginFailed, loginSucceeded, rateLimit, clientIp
 } = require('./auth');
 const bot = require('./bot');
 
@@ -31,7 +31,10 @@ app.post('/api/login', rateLimit({ windowMs: 5 * 60 * 1000, max: 30, prefix: 'lo
   }
   loginSucceeded(lockKey);
   setAuthCookie(res, signToken({ id: user.id }));
-  audit(user.name || user.username, '登入後台', '', '', { source: 'web' });
+  const ip = clientIp(req);
+  db.prepare(`UPDATE admin_users SET last_login_at = datetime('now','localtime'),
+                last_login_ip = ?, login_count = login_count + 1 WHERE id = ?`).run(ip, user.id);
+  audit(user.name || user.username, '登入後台', `IP ${ip}`, '', { source: 'web' });
   res.json({ ok: true });
 });
 
