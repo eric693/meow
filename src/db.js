@@ -263,8 +263,22 @@ function findStaff(guildId, keyword) {
     const byId = getStaff(guildId, id);
     if (byId) return byId;
   }
-  return db.prepare(`SELECT * FROM staff WHERE guild_id = ? AND (code = ? OR name = ?) ORDER BY active DESC LIMIT 1`)
+  const exact = db.prepare(`SELECT * FROM staff WHERE guild_id = ? AND (code = ? OR name = ?) ORDER BY active DESC LIMIT 1`)
     .get(guildId, k, k);
+  if (exact) return exact;
+
+  // 客服常常直接把整串暱稱貼進來（例：「poster (138) ・poster｜頂賦 娛樂」），
+  // 照字面比對永遠查無此人。拆成詞再逐個對代號／藝名，只有唯一命中才算數，
+  // 對到兩個以上就當作查不到，寧可讓客服自己確認也不要結錯人的帳。
+  const tokens = [...new Set(k.split(/[\s()（）・、|｜/\\,，]+/).map(t => t.trim()).filter(t => t.length >= 2))];
+  const hit = db.prepare(`SELECT * FROM staff WHERE guild_id = ? AND (code = ? OR name = ?) ORDER BY active DESC`);
+  const found = [];
+  for (const t of tokens) {
+    for (const s of hit.all(guildId, t, t)) {
+      if (!found.some(x => x.user_id === s.user_id)) found.push(s);
+    }
+  }
+  return found.length === 1 ? found[0] : null;
 }
 
 // ---------- 訂單編號 ----------

@@ -192,6 +192,17 @@ async function start() {
     const args = body.slice(name.length).trim();
     const h = require('./prefix').handlers[name] || require('./prefix').snippetHandler(msg.guild.id, name);
     if (!h) return;
+    // 有些訊息回覆不了（系統訊息、原訊息已被刪掉），Discord 會丟
+    // REPLIES_CANNOT_REPLY_TO_SYSTEM_MESSAGE / Unknown Message，整個指令就白做了。
+    // 包一層：回覆不了就直接在頻道發，結果不會憑空消失。
+    const nativeReply = msg.reply.bind(msg);
+    msg.reply = async payload => {
+      try { return await nativeReply(payload); }
+      catch (e) {
+        console.warn(`回覆訊息失敗，改用頻道發送：${e.message}`);
+        return msg.channel.send(payload);
+      }
+    };
     const base = { guildId: msg.guild.id, source: 'prefix', action: `${PREFIX}${name}`,
                    user: msg.author, channelId: msg.channelId };
     try {
