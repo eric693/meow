@@ -192,6 +192,7 @@ const PANELS = {
           '・確認自己可以配合考核流程',
           '・清楚考核期間需遵守店內規範',
           '・有任何疑問請先詢問管理，不要自行判斷',
+          '・喚雨電競不允許16歲以下孩童入職，未成年陪玩入職需先經過家長同意並出示證明',
           '',
           '開單後，考官會看到你的考核入職單，並依照流程進行後續考核流程',
           '',
@@ -1112,9 +1113,15 @@ async function handleInteraction(i) {
   // ---- 報單 ----
   // 新報到的陪玩通常先拿到身分組、隔幾天才由客服 /入職 建檔，
   // 只認名冊的話他們第一天就報不了單。isPlayer 會同時認名冊與後台設定的陪玩身分組。
-  const canReport = () => isCS(i.member) || isPlayer(i.member) || getStaff(i.guildId, i.user.id);
+  // 走過考核入職單的人也算數：考核通過到客服建檔常常隔好幾天，
+  // 這段空窗期他們已經在接單了，卡著不讓報單只會變成客服人工補單。
+  // 真正的把關在下面：報單一定要對到已結帳的訂單，而且只有訂單上登記的陪玩本人能報。
+  const hasExam = () => !!db.prepare('SELECT 1 FROM exams WHERE guild_id=? AND user_id=?')
+    .get(orgOf(i.guildId), i.user.id);
+  const canReport = () =>
+    isCS(i.member) || isPlayer(i.member) || getStaff(i.guildId, i.user.id) || hasExam();
   const reportDeny = '你目前還不能報單。\n'
-    + '・如果你是新報到的陪玩：請找客服用 `/入職` 幫你建檔，或確認你已經拿到陪玩身分組。\n'
+    + '・如果你是新報到的陪玩：請先在考核入職區開考核單，或找客服用 `/入職` 幫你建檔。\n'
     + '・客服：後台「系統設定 → 陪玩身分組」若還沒填，只有建過檔的人能報單。';
 
   // 自主報單：先問名稱 → 建立個人報單頻道 → 在頻道內填寫明細
