@@ -1661,6 +1661,13 @@ async function handleInteraction(i) {
     if (act === 'closecard' || act === 'end') {
       // 名片專區等一下會被刪掉，i.channel 會變成 null，所以先把身分記下來
       const inCardChannel = i.channelId === t.card_channel_id;
+      // 按鈕就按在名片專區時，等一下這個頻道會被刪掉；互動回覆是送到頻道的，
+      // 刪完才回等於送到不存在的頻道（Unknown Channel），客服會看到一個假的錯誤。
+      // 所以先把回覆送出去，後面再收頻道。
+      if (inCardChannel && act !== 'end') {
+        await eph(i, ok(i.guildId, '已關閉',
+          '名片專區已關閉，陪玩不會再看到這張單。\n（本頻道已移除，紀錄已存到老闆的包廂）'));
+      }
       if (t.card_channel_id && act === 'end') {
         // 結單：名片專區留著（陪玩可能事後才報單，要看得到訂單編號），只鎖發言改名
         await lockCardChannel(i.guild, t);
@@ -1699,6 +1706,7 @@ async function handleInteraction(i) {
         ? '訂單已結束，頻道已移到結單分類並鎖定發言，紀錄保留供日後查閱。'
         : '名片專區已關閉，陪玩不會再看到這張單。';
       // 按鈕若按在名片專區，那個頻道已經被刪掉了，一律用 ephemeral 回覆才不會送到死掉的頻道
+      if (i.replied || i.deferred) return;   // 上面已經先回過了
       return eph(i, ok(i.guildId, '已關閉', msg + (inCardChannel ? '\n（本頻道已移除，紀錄已存到老闆的包廂）' : '')));
     }
 
