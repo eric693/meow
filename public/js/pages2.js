@@ -210,7 +210,7 @@ Pages.backpack = async view => {
         <label class="f"><span>折價券面額（非折價券填 0）</span><input name="value" type="number" value="0"></label>
       </div>
       <div class="row">
-        <label class="f"><span>折扣百分比（95 折填 5，非折扣券填 0）</span><input name="percent" type="number" value="0"></label>
+        <label class="f"><span>折扣百分比（九折填 10、95 折填 5，非折扣券填 0）</span><input name="percent" type="number" value="0"></label>
         <label class="f"><span>最低消費門檻（無門檻填 0）</span><input name="min_spend" type="number" value="0"></label>
       </div>
       <label class="f"><span>到期日（選填）</span><input name="expires" type="date"></label>`,

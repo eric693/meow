@@ -489,6 +489,7 @@ const handlers = {
     if (!name) throw new Error(usage);
     if (!percent && !amount) throw new Error(`請給折抵金額或折扣百分比。\n${usage}`);
     if (percent > 100) throw new Error('折扣百分比不能超過 100。');
+    G.assertPercent(percent);
 
     const key = `c${Date.now().toString(36)}`;   // 每次發券都是獨立一種，不會覆蓋既有的券
     G.addItem(msg.guild.id, target, { key, name, qty, value: amount || 0, percent, minSpend, expires });

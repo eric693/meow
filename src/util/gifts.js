@@ -135,6 +135,17 @@ function addItem(guildId, userId, { key, name, qty = 1, value = 0, percent = 0, 
 // ---------- 折價券 ----------
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
 
+/**
+ * percent 欄位存的是「折掉幾 %」（九折＝10），但很多人會照「打幾折」填成 90，
+ * 結果整單只收一折。超過 50% 的折扣幾乎都是這種填反，擋下來要求確認。
+ */
+function assertPercent(percent) {
+  const p = Number(percent) || 0;
+  if (p > 50) throw new Error(
+    `折扣填的是「折掉幾 %」不是「打幾折」：九折請填 10、95 折填 5。目前填 ${p} 等於只收 ${100 - p} 折。`);
+  return p;
+}
+
 /** 這筆金額可用的折價券（面額或折扣、未過期、達門檻） */
 function usableCoupons(guildId, userId, amount) {
   // 0 元券（例如「指定稱呼不加價」）也要能挑：它不折抵金額，但結帳時要一起消耗掉，
@@ -245,5 +256,5 @@ module.exports = {
   seedGifts, listGifts, findGift, sendGift,
   addIntimacy, getIntimacy, rankOf, RANKS,
   listBackpack, addItem, addTerritory,
-  usableCoupons, couponDiscount, couponLabel, couponOption, useCoupon
+  assertPercent, usableCoupons, couponDiscount, couponLabel, couponOption, useCoupon
 };

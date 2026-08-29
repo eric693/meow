@@ -92,6 +92,7 @@ router.get('/backpack', (req, res) => {
 router.post('/backpack', (req, res) => {
   const { user_id, key, name, qty = 1, value = 0, percent = 0, min_spend = 0, expires = null } = req.body || {};
   if (!user_id || !key || !name) return res.status(400).json({ error: '請填寫對象、道具代號與名稱' });
+  try { G.assertPercent(percent); } catch (e) { return res.status(400).json({ error: e.message }); }
   G.addItem(req.orgId, String(user_id), { key, name, qty, value, percent, minSpend: min_spend, expires });
   audit(req.user.name, '發放道具', `${name}×${qty} → ${user_id}`, req.orgId, { source: 'web' });
   res.json({ ok: true });
@@ -277,6 +278,7 @@ const prizeFields = b => ({
 router.post('/lottery/prizes', (req, res) => {
   const f = prizeFields(req.body || {});
   if (!f.name) return res.status(400).json({ error: '請填籤名' });
+  try { G.assertPercent(f.percent); } catch (e) { return res.status(400).json({ error: e.message }); }
   const r = db.prepare(`INSERT INTO lottery_prizes
     (guild_id,name,emoji,type,value,percent,min_spend,expire_days,text,weight,sort,enabled)
     VALUES (@guild_id,@name,@emoji,@type,@value,@percent,@min_spend,@expire_days,@text,@weight,@sort,@enabled)`)
@@ -287,6 +289,7 @@ router.post('/lottery/prizes', (req, res) => {
 router.put('/lottery/prizes/:id', (req, res) => {
   const f = prizeFields(req.body || {});
   if (!f.name) return res.status(400).json({ error: '請填籤名' });
+  try { G.assertPercent(f.percent); } catch (e) { return res.status(400).json({ error: e.message }); }
   db.prepare(`UPDATE lottery_prizes SET name=@name, emoji=@emoji, type=@type, value=@value,
               percent=@percent, min_spend=@min_spend, expire_days=@expire_days, text=@text,
               weight=@weight, sort=@sort, enabled=@enabled
