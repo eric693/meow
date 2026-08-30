@@ -127,6 +127,33 @@ const App = {
 
   can(key) { return this.me && this.me.modules.includes(key); },
 
+  // 各模組的操作說明（內容在 help.js）。收合狀態記在 localStorage，
+  // 第一次進某頁預設展開，之後照使用者自己的收放。
+  helpOpen(key) {
+    try { return localStorage.getItem('help_open_' + key) !== '0'; } catch { return true; }
+  },
+  helpBox() {
+    const h = (window.PAGE_HELP || {})[this.page];
+    if (!h) return '';
+    const li = a => (a || []).map(t => `<li>${UI.esc(t)}</li>`).join('');
+    const open = this.helpOpen(this.page);
+    const sec = (title, inner) => inner ? `<div class="help-h">${title}</div>${inner}` : '';
+    return `<section class="help-box${open ? ' open' : ''}">
+      <button type="button" class="help-toggle" id="help-toggle">
+        <span class="help-mark">?</span>操作說明
+        <span class="grow"></span>
+        <span class="help-arrow">${open ? '收合' : '展開'}</span>
+      </button>
+      <div class="help-body">
+        ${h.intro ? `<p class="help-intro">${UI.esc(h.intro)}</p>` : ''}
+        ${sec('操作步驟', (h.steps || []).length ? `<ol>${li(h.steps)}</ol>` : '')}
+        ${sec('注意事項', (h.notes || []).length ? `<ul>${li(h.notes)}</ul>` : '')}
+        ${sec('名詞說明', (h.terms || []).length
+          ? `<dl>${h.terms.map(([t, d]) => `<dt>${UI.esc(t)}</dt><dd>${UI.esc(d)}</dd>`).join('')}</dl>` : '')}
+      </div>
+    </section>`;
+  },
+
   render() {
     const items = NAV.filter(n => this.can(n.key));
     if (!items.find(n => n.key === this.page)) this.page = items[0]?.key || 'dashboard';
@@ -150,6 +177,7 @@ const App = {
             <div class="grow"></div>
             <span class="tag ${this.botOnline ? 'ok' : 'err'}">${this.botOnline ? '機器人上線中' : '機器人離線'}</span>
           </div>
+          ${this.helpBox()}
           <div id="view"><div class="empty">載入中…</div></div>
         </main>
       </div>`;
@@ -163,6 +191,13 @@ const App = {
     });
     document.querySelector('[data-act="logout"]').onclick = async () => { await POST('/logout'); location.reload(); };
     document.querySelector('[data-act="pwd"]').onclick = () => this.changePassword();
+    const ht = document.getElementById('help-toggle');
+    if (ht) ht.onclick = () => {
+      const box = ht.closest('.help-box');
+      const open = box.classList.toggle('open');
+      ht.querySelector('.help-arrow').textContent = open ? '收合' : '展開';
+      try { localStorage.setItem('help_open_' + this.page, open ? '1' : '0'); } catch { /* 無痕模式 */ }
+    };
     const mb = document.getElementById('mbtn');
     if (mb) mb.onclick = () => document.getElementById('side').classList.toggle('open');
     const gs = document.getElementById('gsel');
