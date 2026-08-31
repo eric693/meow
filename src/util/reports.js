@@ -260,8 +260,11 @@ function spendRanking(guildId, limit = 10) {
                               WHERE guild_id=? AND total_spend > 0
                               ORDER BY total_spend DESC LIMIT ?`).all(guildId, limit)
     .map(c => ({ ...c, vip_name: vipName(guildId, c.vip_level) }));
+  // 財務調整（平帳）與沒填到老闆的單不是任何人的消費，混進榜上會冒出一行「<@>」，
+  // 而且金額往往很大，直接壓在榜首。
   const month = db.prepare(`SELECT customer_id user_id, customer_name name, SUM(amount) amount FROM orders
                             WHERE guild_id=? AND ${LIVE} AND created_at LIKE ?
+                              AND customer_id <> '' AND kind <> 'adjust'
                             GROUP BY customer_id ORDER BY amount DESC LIMIT ?`)
     .all(guildId, monthPrefix() + '%', limit);
   return { history, month };
@@ -272,7 +275,8 @@ function patronBoard(guildId, month = monthPrefix()) {
   guildId = orgOf(guildId);
   const monthMap = Object.fromEntries(
     db.prepare(`SELECT customer_id, SUM(amount) a FROM orders
-                WHERE guild_id=? AND ${LIVE} AND created_at LIKE ? GROUP BY customer_id`)
+                WHERE guild_id=? AND ${LIVE} AND created_at LIKE ?
+                  AND customer_id <> '' AND kind <> 'adjust' GROUP BY customer_id`)
       .all(guildId, month + '%').map(r => [r.customer_id, r.a]));
   return db.prepare('SELECT * FROM customers WHERE guild_id=? ORDER BY total_spend DESC').all(guildId)
     .map((c, i) => ({
