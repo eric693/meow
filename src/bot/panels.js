@@ -242,17 +242,15 @@ const PANELS = {
   },
 
   'setup-lottery': {
-    label: '喚雨星象（每日抽籤）',
+    label: '喚雨星象（不限次數）',
     build: guildId => ({
       embeds: [emb(guildId, {
-        title: '🔮 喚雨星象｜每日抽籤',
+        title: '🔮 喚雨星象',
         desc: [
-          '每天一次，讓星象替你看看今天的運勢 ✨',
+          '想抽就抽，不限次數，讓星象替你看看運勢 ✨',
           '',
-          '🎊 抽中吉籤還會掉**折價券**，直接進你的背包，',
-          '　 下單結帳或送禮時就能折抵。',
-          '',
-          '🕛 每日 0 點（台北時間）重置，明天記得再來。'
+          '🎊 若獎池裡設有**折價券**獎項，抽中會直接進你的背包，',
+          '　 下單結帳或送禮時就能折抵。'
         ].join('\n')
       })],
       components: [row(btn('lot:draw', '抽今日運勢', ButtonStyle.Primary, '🔮'))]
@@ -972,7 +970,7 @@ function lotteryEmbed(guildId, { prize, coupon }) {
     title: '🔮 喚雨星象｜今日運勢',
     desc: lines.filter(x => x !== undefined).join('\n'),
     color: coupon ? COLOR.ok : COLOR.main,
-    footer: '每天可抽一次，台北時間 0 點重置'
+    footer: '想抽就抽，不限次數'
   });
 }
 
@@ -1822,7 +1820,7 @@ async function handleInteraction(i) {
     return setTimeout(() => i.channel.delete().catch(() => {}), 5000);
   }
 
-  // ---- 喚雨星象：每日抽籤 ----
+  // ---- 喚雨星象：抽籤（不限次數）----
   if (id === 'lot:draw') {
     const L = require('../util/lottery');
     let r;

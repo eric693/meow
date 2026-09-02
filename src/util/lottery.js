@@ -36,11 +36,6 @@ function seed(guildId) {
   db.transaction(() => { for (const p of SEED) ins.run(org, ...p); })();
 }
 
-/** 今天抽過了嗎（台北時間，每日 0 點重置） */
-const drewToday = (guildId, userId) =>
-  !!db.prepare('SELECT 1 FROM lottery_draws WHERE guild_id=? AND user_id=? AND day=?')
-    .get(orgOf(guildId), userId, today());
-
 /** 到期日：expire_days 天後（0 代表不過期） */
 function expiresAt(days) {
   if (!days || days <= 0) return null;
@@ -82,4 +77,4 @@ function draw(guildId, userId, userName = '') {
   return { prize, coupon };
 }
 
-module.exports = { draw, pool, seed, drewToday, today, SEED };
+module.exports = { draw, pool, seed, today, SEED };
