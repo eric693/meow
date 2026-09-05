@@ -403,7 +403,7 @@ const DEFAULT_RANK_SERVICES = ['特戰英豪', '英雄聯盟'];
 // 指定定級的選項；限女生時沒有「頂尖賦能」這個定級，所以分成兩份
 // （可用設定 order_want_ranks／order_want_ranks_female 覆蓋）
 // 老闆不在意定級時選「不限段位」，派單就不做定級篩選
-const DEFAULT_WANT_RANKS = ['頂尖賦能 (600分以上)', '賦能', '神話', '超凡', '不限段位'];
+const DEFAULT_WANT_RANKS = ['頂尖賦能 (600分以上)', '賦能', '神話3', '神話', '超凡', '不限段位'];
 const DEFAULT_WANT_RANKS_F = ['賦能', '神話', '超凡', '不限段位'];
 // 英雄聯盟的定級名稱跟特戰不同，男女共用一份
 const DEFAULT_WANT_RANKS_LOL = ['菁英', '宗師', '大師', '不限段位'];
@@ -430,7 +430,7 @@ const rankKey = r => String(r || '').replace(/[（(].*$/, '').trim();
 // 定級階梯（由低到高，可用設定 order_rank_ladder 覆蓋）。
 // 老闆指定某定級時，「該定級以上」的陪玩都要看得到單——高定級本來就接得了低定級的單，
 // 例如神話單，超凡／賦能／頂尖賦能也該收到通知。
-const DEFAULT_RANK_LADDER = ['超凡', '神話', '賦能', '頂尖賦能'];
+const DEFAULT_RANK_LADDER = ['超凡', '神話', '神話3', '賦能', '頂尖賦能'];
 
 /** 指定定級 → 該定級與其以上的定級名清單（找不到就只用原本那個定級） */
 function ranksAtOrAbove(guildId, rank) {
@@ -594,13 +594,15 @@ const DEFAULT_ROLE_ROUTES = `
 
 技術|特戰英豪|限男生|頂尖=VAL男頂尖賦能
 技術|特戰英豪|限男生|賦能|!頂尖=VAL男頂尖賦能,VAL男賦能
-技術|特戰英豪|限男生|神話=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
+技術|特戰英豪|限男生|神話3=VAL男頂尖賦能,VAL男賦能,VAL男神話3
+技術|特戰英豪|限男生|神話|!神話3=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
 技術|特戰英豪|限男生|超凡=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
 技術|特戰英豪|限男生|不限段位=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
 
 技術|特戰英豪|不限男女|頂尖=VAL男頂尖賦能
 技術|特戰英豪|不限男女|賦能|!頂尖=VAL男頂尖賦能,VAL男賦能,VAL女賦能
-技術|特戰英豪|不限男女|神話=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話
+技術|特戰英豪|不限男女|神話3=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL女賦能
+技術|特戰英豪|不限男女|神話|!神話3=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話
 技術|特戰英豪|不限男女|超凡=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話,VAL女超凡
 技術|特戰英豪|不限男女|不限段位=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話,VAL女超凡
 
