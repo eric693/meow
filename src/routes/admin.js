@@ -65,7 +65,7 @@ const GUILD_KEYS = [
   'order_genders', 'order_services', 'order_categories', 'order_addons',
   'order_type_labels', 'ticket_seq_start', 'order_max_open', 'order_cooldown_sec',
   // 技術單定級與陪玩身分組分流
-  'order_rank_services', 'order_want_ranks', 'order_want_ranks_female', 'order_rank_ladder', 'order_role_routes',
+  'order_rank_services', 'order_want_ranks', 'order_want_ranks_female', 'order_want_ranks_lol', 'order_rank_ladder', 'order_role_routes',
   // 結單頻道幾天後自動刪除
   'ticket_delete_days'
 ];

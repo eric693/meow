@@ -374,6 +374,48 @@ const handlers = {
     await msg.reply({ embeds: [ok(msg.guild.id, '扣款完成', `${mention(target)} -${n(amount)} 雨幣\n目前餘額：**${n(bal)}**`)] });
   },
 
+  // 個別陪玩的分潤成數：`!分潤 @陪玩 85`、`!分潤 @陪玩 預設`（改回跟隨全域）、`!分潤 @陪玩`（查詢）
+  async 分潤(msg, args) {
+    const { isAdmin } = require('./perm');
+    if (!isAdmin(msg.member)) throw new Error('僅限管理員調整分潤成數。');
+    let target = firstId(msg, args);
+    let rest = args.replace(/<@!?\d+>/g, ' ').replace(/\d{15,25}/g, ' ').trim();
+    // 沒 @ 也可以直接打陪玩名字或編號：`!分潤 小雨 85`
+    if (!target) {
+      const first = rest.split(/\s+/)[0] || '';
+      const found = first && findStaff(msg.guild.id, first);
+      if (found) { target = found.user_id; rest = rest.slice(first.length).trim(); }
+    }
+    if (!target) throw new Error('用法：`!分潤 @陪玩 85`　改回全域：`!分潤 @陪玩 預設`');
+    const st = getStaff(msg.guild.id, target);
+    if (!st) throw new Error('這個人不在人事名單裡，請先用後台或 `/入職` 建檔。');
+    const global = getNum('staff_share_rate', 80, orgOf(msg.guild.id));
+    const now = Number(st.share_rate) >= 0 ? `${st.share_rate}%（個人設定）` : `${global}%（跟隨全域）`;
+
+    // 沒帶數字＝查詢目前成數
+    if (!rest) {
+      return msg.reply({ embeds: [money(msg.guild.id, '💰 分潤成數', `${mention(target)}　目前：**${now}**\n`
+        + '調整：`!分潤 @陪玩 85`　改回全域：`!分潤 @陪玩 預設`')] });
+    }
+
+    let rate;
+    if (/^(預設|全域|跟隨|清除|取消)$/.test(rest)) rate = -1;
+    else {
+      rate = Number((rest.match(/\d+(\.\d+)?/) || [])[0]);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100)
+        throw new Error('成數請填 0～100 的數字，或填「預設」改回跟隨全域。');
+      rate = Math.round(rate);
+    }
+    db.prepare('UPDATE staff SET share_rate=? WHERE guild_id=? AND user_id=?')
+      .run(rate, orgOf(msg.guild.id), target);
+    audit(msg.author.tag, 'staff.share_rate',
+      `${st.name || target}：${now} → ${rate < 0 ? `跟隨全域（${global}%）` : `${rate}%`}`,
+      msg.guild.id, { actorId: msg.author.id, source: 'discord', channelId: msg.channel.id });
+    await msg.reply({ embeds: [ok(msg.guild.id, '分潤成數已更新',
+      `${mention(target)}　**${rate < 0 ? `跟隨全域（${global}%）` : `${rate}%`}**\n`
+      + '之後報單、結帳都會用這個成數計算，已成立的舊單不受影響。')] });
+  },
+
   // ---------- 冠名／身份組期限 ----------
   // !冠名 名稱 @客人 @陪玩 30天 [備註...]　　!身份組 名稱 @對象 30天 [備註...]
   async 冠名(msg, args) {
@@ -540,6 +582,8 @@ handlers.金庫總覽 = handlers.全服雨幣;
 handlers.help = handlers.指令;
 handlers.玩家手冊 = handlers.手冊;
 handlers.規則 = handlers.手冊;
+handlers.抽成 = handlers.分潤;
+handlers.分潤成數 = handlers.分潤;
 
 // 面板建置指令（!sendrole / !setup-*）
 Object.assign(handlers, panels.commands);

@@ -389,7 +389,7 @@ const markOrderCreated = i => lastOrderAt.set(`${i.guildId}:${i.user.id}`, Date.
 
 // 下單選單的選項，皆可用後台設定覆蓋（逗號分隔）
 const DEFAULT_GENDERS = ['不限男女', '限女生', '限男生'];
-const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', 'Steam 小遊戲', '唱歌單曲', '語聊', '其他遊戲'];
+const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', '英雄聯盟', 'Steam 小遊戲', '唱歌單曲', '語聊', '其他遊戲'];
 // 需要再問子類型的服務（服務 → 子選項清單）
 const SERVICE_SUBTYPES = { '語聊': ['一般語聊', '戀愛語聊'] };
 // 不必問技術／娛樂分類的服務，選完（子類型後）直接問性別
@@ -399,17 +399,30 @@ const SKIP_ADDON = ['唱歌單曲'];
 // 需求單不問段位的服務（沒有段位可言）
 const SKIP_RANK = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊'];
 // 技術單要老闆指定陪玩定級的服務（可用設定 order_rank_services 覆蓋）
-const DEFAULT_RANK_SERVICES = ['特戰英豪'];
+const DEFAULT_RANK_SERVICES = ['特戰英豪', '英雄聯盟'];
 // 指定定級的選項；限女生時沒有「頂尖賦能」這個定級，所以分成兩份
 // （可用設定 order_want_ranks／order_want_ranks_female 覆蓋）
-const DEFAULT_WANT_RANKS = ['頂尖賦能 (600分以上)', '賦能', '神話', '超凡'];
-const DEFAULT_WANT_RANKS_F = ['賦能', '神話', '超凡'];
+// 老闆不在意定級時選「不限段位」，派單就不做定級篩選
+const DEFAULT_WANT_RANKS = ['頂尖賦能 (600分以上)', '賦能', '神話', '超凡', '不限段位'];
+const DEFAULT_WANT_RANKS_F = ['賦能', '神話', '超凡', '不限段位'];
+// 英雄聯盟的定級名稱跟特戰不同，男女共用一份
+const DEFAULT_WANT_RANKS_LOL = ['菁英', '宗師', '大師', '不限段位'];
 
-/** 依老闆選的性別給定級選項（限女生少一個頂尖賦能） */
-const wantRankOptions = (guildId, gender) =>
-  /限女/.test(String(gender || '')) && !/不限/.test(String(gender || ''))
-    ? optionList(guildId, 'order_want_ranks_female', DEFAULT_WANT_RANKS_F)
-    : optionList(guildId, 'order_want_ranks', DEFAULT_WANT_RANKS);
+// 服務 → 定級選項（男用 / 女用）的設定鍵與預設值
+const WANT_RANKS_BY_SERVICE = {
+  '英雄聯盟': ['order_want_ranks_lol', DEFAULT_WANT_RANKS_LOL, 'order_want_ranks_lol', DEFAULT_WANT_RANKS_LOL]
+};
+const DEFAULT_WANT_RANK_KEYS =
+  ['order_want_ranks', DEFAULT_WANT_RANKS, 'order_want_ranks_female', DEFAULT_WANT_RANKS_F];
+
+/** 依服務與老闆選的性別給定級選項（特戰限女生少一個頂尖賦能） */
+const wantRankOptions = (guildId, gender, service) => {
+  const [key, list, keyF, listF] = WANT_RANKS_BY_SERVICE[service] || DEFAULT_WANT_RANK_KEYS;
+  const g = String(gender || '');
+  return /限女/.test(g) && !/不限/.test(g)
+    ? optionList(guildId, keyF, listF)
+    : optionList(guildId, key, list);
+};
 
 /** 定級選項可能帶說明（「頂尖賦能 (600分以上)」），比對身分組時只取前面的定級名 */
 const rankKey = r => String(r || '').replace(/[（(].*$/, '').trim();
@@ -417,7 +430,7 @@ const rankKey = r => String(r || '').replace(/[（(].*$/, '').trim();
 // 定級階梯（由低到高，可用設定 order_rank_ladder 覆蓋）。
 // 老闆指定某定級時，「該定級以上」的陪玩都要看得到單——高定級本來就接得了低定級的單，
 // 例如神話單，超凡／賦能／頂尖賦能也該收到通知。
-const DEFAULT_RANK_LADDER = ['神話', '超凡', '賦能', '頂尖賦能'];
+const DEFAULT_RANK_LADDER = ['超凡', '神話', '賦能', '頂尖賦能'];
 
 /** 指定定級 → 該定級與其以上的定級名清單（找不到就只用原本那個定級） */
 function ranksAtOrAbove(guildId, rank) {
@@ -443,7 +456,7 @@ const DEFAULT_CATEGORIES = ['技術', '娛樂'];
 // 服務類型 → 頻道名稱用的單別，可用設定 order_type_labels 覆蓋（格式：服務=單別,服務=單別）
 const DEFAULT_TYPE_LABELS = {
   '雨幣儲值': '儲值單', '特戰英豪': '娛樂單', 'Steam 小遊戲': 'steam單',
-  '唱歌單曲': '唱歌單', '語聊': '語聊單',
+  '英雄聯盟': '娛樂單', '唱歌單曲': '唱歌單', '語聊': '語聊單',
   '一般語聊': '語聊單', '戀愛語聊': '語聊單', '其他遊戲': '娛樂單'
 };
 
@@ -567,6 +580,65 @@ function autoPlayerRoles(guild, t) {
 }
 
 /**
+ * 沒設定 order_role_routes 時用的預設派單表（規則語法同設定，按名稱找身分組）。
+ * 定級由低往高：特戰 超凡＜神話＜賦能＜頂尖賦能、英雄聯盟 大師＜宗師＜菁英，
+ * 指定某定級就連同更高的定級一起標到；「不限段位」則整組都標。
+ */
+const DEFAULT_ROLE_ROUTES = `
+唱歌=喚雨歌手
+
+技術|特戰英豪|限女生|賦能|!頂尖=VAL女賦能
+技術|特戰英豪|限女生|神話=VAL女賦能,VAL女神話
+技術|特戰英豪|限女生|超凡=VAL女賦能,VAL女神話,VAL女超凡
+技術|特戰英豪|限女生|不限段位=VAL女賦能,VAL女神話,VAL女超凡
+
+技術|特戰英豪|限男生|頂尖=VAL男頂尖賦能
+技術|特戰英豪|限男生|賦能|!頂尖=VAL男頂尖賦能,VAL男賦能
+技術|特戰英豪|限男生|神話=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
+技術|特戰英豪|限男生|超凡=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
+技術|特戰英豪|限男生|不限段位=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
+
+技術|特戰英豪|不限男女|頂尖=VAL男頂尖賦能
+技術|特戰英豪|不限男女|賦能|!頂尖=VAL男頂尖賦能,VAL男賦能,VAL女賦能
+技術|特戰英豪|不限男女|神話=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話
+技術|特戰英豪|不限男女|超凡=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話,VAL女超凡
+技術|特戰英豪|不限男女|不限段位=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話,VAL女超凡
+
+娛樂|特戰英豪|不限男女=VAL娛樂男陪,VAL娛樂女陪
+娛樂|特戰英豪|限女生=VAL娛樂女陪
+娛樂|特戰英豪|限男生=VAL娛樂男陪
+
+技術|英雄聯盟|限女生|菁英=LOL女菁英
+技術|英雄聯盟|限女生|宗師=LOL女菁英,LOL女宗師
+技術|英雄聯盟|限女生|大師=LOL女菁英,LOL女宗師,LOL女大師
+技術|英雄聯盟|限女生|不限段位=LOL女菁英,LOL女宗師,LOL女大師
+
+技術|英雄聯盟|限男生|菁英=LOL男菁英
+技術|英雄聯盟|限男生|宗師=LOL男菁英,LOL男宗師
+技術|英雄聯盟|限男生|大師=LOL男菁英,LOL男宗師,LOL男大師
+技術|英雄聯盟|限男生|不限段位=LOL男菁英,LOL男宗師,LOL男大師
+
+技術|英雄聯盟|不限男女|菁英=LOL男菁英,LOL女菁英
+技術|英雄聯盟|不限男女|宗師=LOL男菁英,LOL男宗師,LOL女菁英,LOL女宗師
+技術|英雄聯盟|不限男女|大師=LOL男菁英,LOL男宗師,LOL男大師,LOL女菁英,LOL女宗師,LOL女大師
+技術|英雄聯盟|不限男女|不限段位=LOL男菁英,LOL男宗師,LOL男大師,LOL女菁英,LOL女宗師,LOL女大師
+
+娛樂|英雄聯盟|不限男女=LOL娛樂男陪,LOL娛樂女陪
+娛樂|英雄聯盟|限女生=LOL娛樂女陪
+娛樂|英雄聯盟|限男生=LOL娛樂男陪
+
+Steam|不限男女=喚雨娛樂男陪,喚雨娛樂女陪
+Steam|限女生=喚雨娛樂女陪
+Steam|限男生=喚雨娛樂男陪
+
+語聊|不限男女=喚雨娛樂男陪,喚雨娛樂女陪
+語聊|限女生=喚雨娛樂女陪
+語聊|限男生=喚雨娛樂男陪
+
+聲優=聲優男陪,聲優女陪
+`;
+
+/**
  * 這張單該讓哪些陪玩身分組看到（設定 order_role_routes）。
  * 每行一條規則：`條件|條件=身分組,身分組`
  *   條件會逐一去比對這張單的標籤（單別／服務／分類／性別／指定定級），全部命中才算符合；
@@ -581,14 +653,13 @@ function autoPlayerRoles(guild, t) {
  */
 function routedPlayerRoles(guild, t) {
   const fallback = getSetting('role_player', '', guild.id).split(',').map(x => x.trim()).filter(Boolean);
-  const raw = getSetting('order_role_routes', '', guild.id);
-  // 沒有自訂規則就用身分組名稱自動配對（歌手／娛樂・聲優／VAL 定級）
-  if (!raw.trim()) {
-    const auto = autoPlayerRoles(guild, t);
-    return auto.length ? auto : fallback;
-  }
+  // 沒有自訂規則就套預設派單表；預設表也對不到身分組時，再退回名稱自動配對
+  const custom = getSetting('order_role_routes', '', guild.id);
+  const raw = custom.trim() ? custom : DEFAULT_ROLE_ROUTES;
 
-  const labels = [ticketLabel(guild.id, t.service), t.service, t.subject, t.gender, rankKey(t.want_rank)]
+  // 加購（聲優…）也要能當派單條件，所以一起放進標籤
+  const labels = [ticketLabel(guild.id, t.service), t.service, t.subject, t.gender, rankKey(t.want_rank),
+    ...String(t.addons || '').split(',')]
     .map(x => String(x || '').trim()).filter(Boolean);
   const resolve = name => {
     if (/^\d{5,}$/.test(name)) return name;
@@ -617,7 +688,9 @@ function routedPlayerRoles(guild, t) {
       if (rid) hit.add(rid);
     }
   }
-  return hit.size ? [...hit] : fallback;
+  if (hit.size) return [...hit];
+  const auto = autoPlayerRoles(guild, t);
+  return auto.length ? auto : fallback;
 }
 
 /**
@@ -1454,7 +1527,7 @@ async function handleInteraction(i) {
         return i.update({
           content: '請選擇您想指定的陪玩定級：',
           components: [selectRow(`ord:wrank:${sid}`, '請選擇指定定級',
-            wantRankOptions(i.guildId, i.values[0]))]
+            wantRankOptions(i.guildId, i.values[0], S.get(sid).service))]
         });
       }
       return askAddonOrModal(i, sid);

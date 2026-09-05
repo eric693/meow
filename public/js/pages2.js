@@ -862,23 +862,24 @@ Pages.settings = async view => {
       <h4 style="margin:14px 0 6px">下單選單選項（逗號分隔，留空用預設）</h4>
       <div class="grid c2">
         <label class="f"><span>偏好性別</span><input name="order_genders" value="${UI.esc(v.order_genders || '')}" placeholder="男女都可,女生陪玩,男生陪玩"></label>
-        <label class="f"><span>服務類型</span><input name="order_services" value="${UI.esc(v.order_services || '')}" placeholder="雨幣儲值,特戰英豪,Steam 小遊戲,唱歌單曲,語聊"></label>
+        <label class="f"><span>服務類型</span><input name="order_services" value="${UI.esc(v.order_services || '')}" placeholder="雨幣儲值,特戰英豪,英雄聯盟,Steam 小遊戲,唱歌單曲,語聊,其他遊戲"></label>
         <label class="f"><span>服務分類</span><input name="order_categories" value="${UI.esc(v.order_categories || '')}" placeholder="技術,娛樂"></label>
         <label class="f"><span>加購選項（名稱=加價）</span><input name="order_addons" value="${UI.esc(v.order_addons || '')}" placeholder="指定/甜蜜=50,聲優=50,無=0"></label>
-        <label class="f"><span>單別名稱（服務=單別）</span><input name="order_type_labels" value="${UI.esc(v.order_type_labels || '')}" placeholder="特戰英豪=娛樂單,Steam 小遊戲=steam單"></label>
+        <label class="f"><span>單別名稱（服務=單別）</span><input name="order_type_labels" value="${UI.esc(v.order_type_labels || '')}" placeholder="特戰英豪=娛樂單,英雄聯盟=娛樂單,Steam 小遊戲=steam單"></label>
         <label class="f"><span>單號起始值</span><input name="ticket_seq_start" type="number" value="${UI.esc(v.ticket_seq_start || '1001')}"></label>
         <label class="f"><span>每人同時開單上限（0＝不限）</span><input name="order_max_open" type="number" value="${UI.esc(v.order_max_open || '5')}"></label>
         <label class="f"><span>開單冷卻秒數（0＝不限）</span><input name="order_cooldown_sec" type="number" value="${UI.esc(v.order_cooldown_sec || '30')}"></label>
         <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '100')}"></label>
         <label class="f"><span>高薪陪玩門檻（!業績查詢）</span><input name="high_income_threshold" type="number" value="${UI.esc(v.high_income_threshold || '20000')}"></label>
-        <label class="f"><span>要問指定定級的服務</span><input name="order_rank_services" value="${UI.esc(v.order_rank_services || '')}" placeholder="特戰英豪"></label>
-        <label class="f"><span>指定定級選項（男／不限）</span><input name="order_want_ranks" value="${UI.esc(v.order_want_ranks || '')}" placeholder="頂尖賦能 (600分以上),賦能,神話,超凡"></label>
-        <label class="f"><span>指定定級選項（限女生）</span><input name="order_want_ranks_female" value="${UI.esc(v.order_want_ranks_female || '')}" placeholder="賦能,神話,超凡"></label>
-        <label class="f"><span>定級階梯（由低到高；指定某定級時，該定級以上的陪玩都看得到單）</span><input name="order_rank_ladder" value="${UI.esc(v.order_rank_ladder || '')}" placeholder="神話,超凡,賦能,頂尖賦能"></label>
+        <label class="f"><span>要問指定定級的服務</span><input name="order_rank_services" value="${UI.esc(v.order_rank_services || '')}" placeholder="特戰英豪,英雄聯盟"></label>
+        <label class="f"><span>指定定級選項（男／不限）</span><input name="order_want_ranks" value="${UI.esc(v.order_want_ranks || '')}" placeholder="頂尖賦能 (600分以上),賦能,神話,超凡,不限段位"></label>
+        <label class="f"><span>指定定級選項（限女生）</span><input name="order_want_ranks_female" value="${UI.esc(v.order_want_ranks_female || '')}" placeholder="賦能,神話,超凡,不限段位"></label>
+        <label class="f"><span>指定定級選項（英雄聯盟）</span><input name="order_want_ranks_lol" value="${UI.esc(v.order_want_ranks_lol || '')}" placeholder="菁英,宗師,大師,不限段位"></label>
+        <label class="f"><span>定級階梯（由低到高；指定某定級時，該定級以上的陪玩都看得到單）</span><input name="order_rank_ladder" value="${UI.esc(v.order_rank_ladder || '')}" placeholder="超凡,神話,賦能,頂尖賦能"></label>
         <label class="f"><span>結單後幾天刪頻道（0＝不刪）</span><input name="ticket_delete_days" type="number" value="${UI.esc(v.ticket_delete_days || '1')}"></label>
       </div>
-      <label class="f"><span>陪玩身分組分流規則（一行一條：條件|條件=身分組,身分組；<code>*</code>＝不限、<code>!條件</code>＝排除；留空為自動依身分組名稱配對）</span>
-        <textarea name="order_role_routes" rows="6" placeholder="唱歌單=喚雨歌手&#10;娛樂|!技術|限女生=喚雨娛樂女陪&#10;技術|限男生|賦能|!頂尖=VAL男頂尖賦能,VAL男賦能&#10;技術|限女生|神話=VAL女賦能,VAL女神話">${UI.esc(v.order_role_routes || '')}</textarea></label>
+      <label class="f"><span>陪玩身分組分流規則（一行一條：條件|條件=身分組,身分組；<code>*</code>＝不限、<code>!條件</code>＝排除；條件可用單別／服務／分類／性別／指定定級（含<code>不限段位</code>）／加購項目（如<code>聲優</code>）。留空＝套用內建預設派單表）</span>
+        <textarea name="order_role_routes" rows="6" placeholder="唱歌=喚雨歌手&#10;技術|特戰英豪|限女生|神話=VAL女賦能,VAL女神話&#10;技術|英雄聯盟|限男生|不限段位=LOL男菁英,LOL男宗師,LOL男大師&#10;聲優=聲優男陪,聲優女陪">${UI.esc(v.order_role_routes || '')}</textarea></label>
       ${res.roles.length ? '' : '<div class="muted">機器人目前離線或尚未加入伺服器，因此無法列出身分組與頻道。</div>'}
     </div>
     <div class="card"><button class="btn" id="save">儲存設定</button></div>
