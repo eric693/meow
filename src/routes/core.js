@@ -285,6 +285,7 @@ router.get('/staff/export', async (req, res) => {
       { key: 'income', label: '可提領', width: 12, num: 1 },
       { key: 'pending_income', label: '暫存薪水', width: 12, num: 1 },
       { key: 'total_income', label: '歷史入帳', width: 14, num: 1 },
+      { key: 'share_rate', label: '分潤成數', width: 10, map: v => (Number(v) >= 0 ? `${v}%` : '（跟隨全域）') },
       { key: 'card_url', label: '影音名片', width: 30 },
       { key: 'joined_at', label: '入職日', width: 18 }
     ],
@@ -295,13 +296,22 @@ router.get('/staff/export', async (req, res) => {
            + `｜暫存薪水合計 ${rows.reduce((a, r) => a + r.pending_income, 0).toLocaleString('en-US')}`
   });
 });
+// 個人分潤成數：空字串／沒填＝跟隨全域（-1），有填就限制在 0～100
+function shareRateOf(v, fallback = -1) {
+  if (v == null || v === '') return fallback;
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error('分潤成數請填 0～100');
+  return n;
+}
 router.post('/staff', (req, res) => {
-  const { user_id, code, name, card_url = '', kind = 'player' } = req.body || {};
+  const { user_id, code, name, card_url = '', kind = 'player', share_rate } = req.body || {};
   if (!user_id || !code || !name) return res.status(400).json({ error: '請填寫 Discord ID、代號與藝名' });
-  db.prepare(`INSERT INTO staff (guild_id, user_id, code, name, card_url, kind) VALUES (?,?,?,?,?,?)
+  let rate;
+  try { rate = shareRateOf(share_rate); } catch (e) { return res.status(400).json({ error: e.message }); }
+  db.prepare(`INSERT INTO staff (guild_id, user_id, code, name, card_url, kind, share_rate) VALUES (?,?,?,?,?,?,?)
               ON CONFLICT(guild_id, user_id) DO UPDATE SET code=excluded.code, name=excluded.name,
-                card_url=excluded.card_url, kind=excluded.kind, active=1`)
-    .run(req.orgId, String(user_id), code, name, card_url, kind === 'cs' ? 'cs' : 'player');
+                card_url=excluded.card_url, kind=excluded.kind, share_rate=excluded.share_rate, active=1`)
+    .run(req.orgId, String(user_id), code, name, card_url, kind === 'cs' ? 'cs' : 'player', rate);
   audit(req.user.name, '新增／更新員工', `${name}(${code})`, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
@@ -309,9 +319,12 @@ router.put('/staff/:id', (req, res) => {
   const s = db.prepare('SELECT * FROM staff WHERE id=? AND guild_id=?').get(req.params.id, req.orgId);
   if (!s) return res.status(404).json({ error: '查無員工' });
   const b = req.body || {};
-  db.prepare('UPDATE staff SET code=?, name=?, card_url=?, kind=?, active=? WHERE id=?')
+  let rate;
+  try { rate = b.share_rate === undefined ? s.share_rate : shareRateOf(b.share_rate); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+  db.prepare('UPDATE staff SET code=?, name=?, card_url=?, kind=?, share_rate=?, active=? WHERE id=?')
     .run(b.code ?? s.code, b.name ?? s.name, b.card_url ?? s.card_url,
-         b.kind ?? s.kind, b.active == null ? s.active : (b.active ? 1 : 0), s.id);
+         b.kind ?? s.kind, rate, b.active == null ? s.active : (b.active ? 1 : 0), s.id);
   audit(req.user.name, '編輯員工', s.name, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });

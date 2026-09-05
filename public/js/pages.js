@@ -305,9 +305,10 @@ Pages.hr = async view => {
     const rows = d.rows;
     H.pager('hr', d.total, ST);
     document.getElementById('htable').innerHTML = H.table(
-      ['代號', '藝名', 'Discord ID', '職務', '影音名片', '狀態', { label: '可提領', num: 1 }, '入職日', '操作'],
+      ['代號', '藝名', 'Discord ID', '職務', '分潤成數', '影音名片', '狀態', { label: '可提領', num: 1 }, '入職日', '操作'],
       rows.map(s => `<tr><td>${UI.esc(s.code)}</td><td>${UI.esc(s.name)}</td>
         <td><code>${s.user_id}</code></td><td>${s.kind === 'cs' ? '客服' : '陪玩'}</td>
+        <td>${Number(s.share_rate) >= 0 ? `${s.share_rate}%` : '<span class="muted">跟隨全域</span>'}</td>
         <td>${s.card_url ? `<a href="${UI.esc(s.card_url)}" target="_blank" rel="noopener">開啟</a>` : '<span class="muted">—</span>'}</td>
         <td>${s.active ? '<span class="tag ok">在職</span>' : '<span class="tag err">離職</span>'}</td>
         <td class="num">${H.n(s.income)}</td><td>${H.date(s.joined_at)}</td>
@@ -325,7 +326,11 @@ Pages.hr = async view => {
       <label class="f"><span>影音名片網址</span><input name="card_url" value="${UI.esc(json?.card_url || '')}"></label>
       <label class="f"><span>職務</span><select name="kind">
         <option value="player" ${json?.kind !== 'cs' ? 'selected' : ''}>陪玩</option>
-        <option value="cs" ${json?.kind === 'cs' ? 'selected' : ''}>客服</option></select></label>`;
+        <option value="cs" ${json?.kind === 'cs' ? 'selected' : ''}>客服</option></select></label>
+      <label class="f"><span>分潤成數（%）</span>
+        <input name="share_rate" type="number" min="0" max="100" placeholder="留空＝跟隨系統設定的全域成數"
+               value="${Number(json?.share_rate) >= 0 ? json.share_rate : ''}">
+        <small class="muted">獨家／特約陪玩才需要單獨填，留空就沿用系統設定。</small></label>`;
 
     document.querySelectorAll('[data-e]').forEach(b => b.onclick = () => {
       const s = JSON.parse(b.dataset.json);
@@ -335,7 +340,7 @@ Pages.hr = async view => {
         onOk: async back => {
           await PUT('/staff/' + s.id, {
             code: UI.val(back, 'code'), name: UI.val(back, 'name'), card_url: UI.val(back, 'card_url'),
-            kind: UI.val(back, 'kind'), active: UI.val(back, 'active')
+            kind: UI.val(back, 'kind'), share_rate: UI.val(back, 'share_rate'), active: UI.val(back, 'active')
           });
           UI.ok('已更新'); load();
         }
@@ -368,7 +373,8 @@ Pages.hr = async view => {
       onOk: async back => {
         await POST('/staff', {
           code: UI.val(back, 'code'), name: UI.val(back, 'name'), user_id: UI.val(back, 'user_id'),
-          card_url: UI.val(back, 'card_url'), kind: UI.val(back, 'kind')
+          card_url: UI.val(back, 'card_url'), kind: UI.val(back, 'kind'),
+          share_rate: UI.val(back, 'share_rate')
         });
         UI.ok('已建檔'); load();
       }

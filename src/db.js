@@ -46,6 +46,8 @@ ensureColumns('orders', [
   ['cash_confirmed', 'INTEGER NOT NULL DEFAULT 1'],
   ['cash_proof',     "TEXT NOT NULL DEFAULT ''"]
 ]);
+// 獨家／特約陪玩的分潤成數可以跟一般陪玩不同；-1 代表沿用系統設定的全域成數
+ensureColumns('staff', [['share_rate', 'INTEGER NOT NULL DEFAULT -1']]);
 ensureColumns('coin_tx', [['proof', "TEXT NOT NULL DEFAULT ''"]]);
 ensureColumns('audit_logs', [
   ['actor_id',   "TEXT NOT NULL DEFAULT ''"],

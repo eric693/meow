@@ -55,7 +55,7 @@ function checkoutMessage(guildId, o) {
 function checkoutDetail(guildId, o) {
   const c = getCustomer(orgOf(guildId), o.customer_id);
   const discount = Math.max(0, o.list_price - o.amount);
-  const rate = require('./money').shareRate(guildId);
+  const rate = require('./money').shareRate(guildId, o.staff_id);
   const points = require('./gifts').getIntimacy(guildId, o.customer_id, o.staff_id);
   const pending = o.status === 'settled' ? '已入可提領' : '暫存中';
 

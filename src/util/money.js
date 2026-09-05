@@ -18,7 +18,15 @@ const kindLabel = k => (KINDS[k] ? `${KINDS[k].emoji} ${KINDS[k].label}` : k);
 const STATUS = { pending: '暫存中', settled: '已核銷', refunded: '已退單/撤銷' };
 
 // 陪玩分潤成數（%），可在後台「系統設定」調整
-const shareRate = guildId => getNum('staff_share_rate', 80, orgOf(guildId));
+// 獨家／特約陪玩可在員工資料單獨設定成數（staff.share_rate），沒設（-1）才吃全域值。
+function shareRate(guildId, staffId) {
+  guildId = orgOf(guildId);
+  if (staffId) {
+    const own = getStaff(guildId, staffId)?.share_rate;
+    if (own != null && Number(own) >= 0) return Number(own);
+  }
+  return getNum('staff_share_rate', 80, guildId);
+}
 // 送禮分潤成數（%）：禮物定價 × 此比例 = 陪玩實拿，其餘為平台抽成
 const giftShareRate = guildId => getNum('gift_share_rate', 70, orgOf(guildId));
 // 結帳親密度成數（%）：實收金額 × 此比例 = 本單增加的羈絆點數
@@ -98,7 +106,7 @@ function createOrder({
   const list = Math.round(listPrice == null ? paid : Number(listPrice));
   // 折扣一律由伺服器吸收：陪玩抽成固定以「訂單原價」計算，不受折價券或 VIP 折扣影響
   const share = !staffId ? 0
-    : Math.round(staffShare == null ? list * shareRate(guildId) / 100 : Number(staffShare));
+    : Math.round(staffShare == null ? list * shareRate(guildId, staffId) / 100 : Number(staffShare));
   const net = paid - share;
   // 一般訂單與身分組結帳會累積羈絆；送禮由 gifts.sendGift 另外計算，這裡傳 0
   const bond = Math.round(intimacy == null

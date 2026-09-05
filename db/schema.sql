@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS staff (
   name           TEXT NOT NULL DEFAULT '',   -- 藝名
   card_url       TEXT NOT NULL DEFAULT '',   -- 影音名片網址
   kind           TEXT NOT NULL DEFAULT 'player', -- player 陪玩 / cs 客服
+  share_rate     INTEGER NOT NULL DEFAULT -1, -- 個人分潤成數（%）；-1＝跟隨系統設定的全域成數
   income         INTEGER NOT NULL DEFAULT 0,  -- 可提領
   pending_income INTEGER NOT NULL DEFAULT 0,  -- 暫存（未核銷）
   total_income   INTEGER NOT NULL DEFAULT 0,  -- 歷史累計已入帳
