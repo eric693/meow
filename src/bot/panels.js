@@ -668,12 +668,16 @@ function routedPlayerRoles(guild, t) {
   const labels = [ticketLabel(guild.id, t.service), t.service, t.subject, t.gender, rankKey(t.want_rank),
     ...String(t.addons || '').split(',')]
     .map(x => String(x || '').trim()).filter(Boolean);
+  // 身分組名稱常混到全形數字與空白（例如「VAL男神話３」），比對前先正規化，
+  // 不然規則寫半形 3 就永遠對不到那個身分組。
+  const norm = x => String(x || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
   const resolve = name => {
     if (/^\d{5,}$/.test(name)) return name;
     const clean = name.replace(/^<@&|>$/g, '').replace(/^@/, '');
     if (/^\d{5,}$/.test(clean)) return clean;
-    const r = guild.roles.cache.find(x => x.name === clean)
-           || guild.roles.cache.find(x => x.name.includes(clean));
+    const k = norm(clean);
+    const r = guild.roles.cache.find(x => norm(x.name) === k)
+           || guild.roles.cache.find(x => norm(x.name).includes(k));
     return r ? r.id : '';
   };
 
