@@ -872,7 +872,8 @@ Pages.settings = async view => {
         <label class="f"><span>結帳親密度成數（%）</span><input name="order_intimacy_rate" type="number" value="${UI.esc(v.order_intimacy_rate || '100')}"></label>
         <label class="f"><span>高薪陪玩門檻（!業績查詢）</span><input name="high_income_threshold" type="number" value="${UI.esc(v.high_income_threshold || '20000')}"></label>
         <label class="f"><span>要問指定定級的服務</span><input name="order_rank_services" value="${UI.esc(v.order_rank_services || '')}" placeholder="特戰英豪,英雄聯盟"></label>
-        <label class="f"><span>指定定級選項（男／不限）</span><input name="order_want_ranks" value="${UI.esc(v.order_want_ranks || '')}" placeholder="頂尖賦能 (600分以上),賦能,神話3,神話,超凡,不限段位"></label>
+        <label class="f"><span>指定定級選項（不限男女）</span><input name="order_want_ranks" value="${UI.esc(v.order_want_ranks || '')}" placeholder="頂尖賦能 (600分以上),賦能,神話3,神話,超凡,不限段位"></label>
+        <label class="f"><span>指定定級選項（限男生）</span><input name="order_want_ranks_male" value="${UI.esc(v.order_want_ranks_male || '')}" placeholder="頂尖賦能 (600分以上),賦能,神話3,神話,不限段位"></label>
         <label class="f"><span>指定定級選項（限女生）</span><input name="order_want_ranks_female" value="${UI.esc(v.order_want_ranks_female || '')}" placeholder="賦能,神話,超凡,不限段位"></label>
         <label class="f"><span>指定定級選項（英雄聯盟）</span><input name="order_want_ranks_lol" value="${UI.esc(v.order_want_ranks_lol || '')}" placeholder="菁英,宗師,大師,不限段位"></label>
         <label class="f"><span>定級階梯（由低到高；指定某定級時，該定級以上的陪玩都看得到單）</span><input name="order_rank_ladder" value="${UI.esc(v.order_rank_ladder || '')}" placeholder="超凡,神話,神話3,賦能,頂尖賦能"></label>

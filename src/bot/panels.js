@@ -400,28 +400,34 @@ const SKIP_ADDON = ['唱歌單曲'];
 const SKIP_RANK = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊'];
 // 技術單要老闆指定陪玩定級的服務（可用設定 order_rank_services 覆蓋）
 const DEFAULT_RANK_SERVICES = ['特戰英豪', '英雄聯盟'];
-// 指定定級的選項；限女生時沒有「頂尖賦能」這個定級，所以分成兩份
-// （可用設定 order_want_ranks／order_want_ranks_female 覆蓋）
-// 老闆不在意定級時選「不限段位」，派單就不做定級篩選
+// 指定定級的選項；男女的定級不完全一樣（男生沒有超凡、女生沒有頂尖賦能與神話3），
+// 所以分成三份：不限男女／限男生／限女生，
+// 可用設定 order_want_ranks／order_want_ranks_male／order_want_ranks_female 覆蓋。
+// 老闆不在意定級時選「不限段位」，派單就不做定級篩選。
 const DEFAULT_WANT_RANKS = ['頂尖賦能 (600分以上)', '賦能', '神話3', '神話', '超凡', '不限段位'];
+const DEFAULT_WANT_RANKS_M = ['頂尖賦能 (600分以上)', '賦能', '神話3', '神話', '不限段位'];
 const DEFAULT_WANT_RANKS_F = ['賦能', '神話', '超凡', '不限段位'];
 // 英雄聯盟的定級名稱跟特戰不同，男女共用一份
 const DEFAULT_WANT_RANKS_LOL = ['菁英', '宗師', '大師', '不限段位'];
 
-// 服務 → 定級選項（男用 / 女用）的設定鍵與預設值
+// 服務 → 定級選項的設定鍵與預設值：{ any, male, female }，每項是 [設定鍵, 預設清單]
+const LOL_RANKS = ['order_want_ranks_lol', DEFAULT_WANT_RANKS_LOL];
 const WANT_RANKS_BY_SERVICE = {
-  '英雄聯盟': ['order_want_ranks_lol', DEFAULT_WANT_RANKS_LOL, 'order_want_ranks_lol', DEFAULT_WANT_RANKS_LOL]
+  '英雄聯盟': { any: LOL_RANKS, male: LOL_RANKS, female: LOL_RANKS }
 };
-const DEFAULT_WANT_RANK_KEYS =
-  ['order_want_ranks', DEFAULT_WANT_RANKS, 'order_want_ranks_female', DEFAULT_WANT_RANKS_F];
+const DEFAULT_WANT_RANK_KEYS = {
+  any: ['order_want_ranks', DEFAULT_WANT_RANKS],
+  male: ['order_want_ranks_male', DEFAULT_WANT_RANKS_M],
+  female: ['order_want_ranks_female', DEFAULT_WANT_RANKS_F]
+};
 
-/** 依服務與老闆選的性別給定級選項（特戰限女生少一個頂尖賦能） */
+/** 依服務與老闆選的性別給定級選項 */
 const wantRankOptions = (guildId, gender, service) => {
-  const [key, list, keyF, listF] = WANT_RANKS_BY_SERVICE[service] || DEFAULT_WANT_RANK_KEYS;
+  const conf = WANT_RANKS_BY_SERVICE[service] || DEFAULT_WANT_RANK_KEYS;
   const g = String(gender || '');
-  return /限女/.test(g) && !/不限/.test(g)
-    ? optionList(guildId, keyF, listF)
-    : optionList(guildId, key, list);
+  const only = /不限/.test(g) ? 'any' : /限女/.test(g) ? 'female' : /限男/.test(g) ? 'male' : 'any';
+  const [key, list] = conf[only];
+  return optionList(guildId, key, list);
 };
 
 /** 定級選項可能帶說明（「頂尖賦能 (600分以上)」），比對身分組時只取前面的定級名 */
@@ -596,7 +602,6 @@ const DEFAULT_ROLE_ROUTES = `
 技術|特戰英豪|限男生|賦能|!頂尖=VAL男頂尖賦能,VAL男賦能
 技術|特戰英豪|限男生|神話3=VAL男頂尖賦能,VAL男賦能,VAL男神話3
 技術|特戰英豪|限男生|神話|!神話3=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
-技術|特戰英豪|限男生|超凡=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
 技術|特戰英豪|限男生|不限段位=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話
 
 技術|特戰英豪|不限男女|頂尖=VAL男頂尖賦能
