@@ -111,6 +111,22 @@ npm run register                # 手動重新註冊 slash 指令
 預設表在這個群完全對不到身分組時，才退回名稱自動配對（唱歌找含「歌手」、技術找含
 「賦能／神話／超凡／VAL」再依性別與定級篩選、其餘找含「娛樂／聲優」），都沒命中則退回 `role_player`。
 
+## PWA（安裝到手機／桌面）
+
+後台與玩家手冊都是 PWA，用 Chrome／Edge／Safari 開 <https://meow.crownai.ink> 就能「加入主畫面」，
+開起來是獨立視窗、沒有網址列，圖示為紫色雨滴。
+
+- `public/manifest.webmanifest`：名稱、圖示（192／512／maskable）、主題色，
+  以及三個捷徑（交易流水帳、薪資與提領、玩家手冊）——長按桌面圖示可直接跳頁。
+- `public/sw.js`：**帳務資料一律不快取**。`/api/*` 永遠走網路，離線就直接失敗；
+  只有 js／css／icons／manifest 走 stale-while-revalidate，頁面本身 network-first，
+  離線時回退 `public/offline.html`。版本號 `VERSION` 改掉即清空舊快取。
+- `public/js/pwa.js`：註冊 SW、`?p=<頁面>` 捷徑跳頁、離線提示條、
+  偵測到新版時跳「更新」提示（按下去換版並自動重整）、可安裝時跳「安裝」提示（關掉後 30 天內不再問）。
+- `sw.js` 由 `src/server.js` 以 `no-store` + `Service-Worker-Allowed: /` 提供，改版才推得出去。
+
+iOS 需用 Safari →「分享 → 加入主畫面」（iOS 不支援安裝提示）。
+
 ## 玩家手冊
 
 公開頁面 <https://meow.crownai.ink/rules>（免登入），內容涵蓋新手上路、雨幣、下單與核銷、
@@ -150,6 +166,8 @@ meow/
 │   ├── routes/        core（訂單金庫薪資老闆人事）／extras（禮物背包客服單投票）／admin（報表設定帳號）
 │   └── util/          money 金流、gifts 禮物親密度、reports 報表 CSV、embed 訊息樣式
 ├── public/            後台 SPA（index.html + css/style.css + js/*）
+│   ├── rules.html     公開玩家手冊　　offline.html  離線頁
+│   ├── manifest.webmanifest / sw.js / icons/   PWA（可安裝、離線提示）
 ├── db/schema.sql      資料庫結構
 └── scripts/           seed.js（建管理員）／register-commands.js
 ```

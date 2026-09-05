@@ -227,3 +227,26 @@ label.f > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 .help-body dt { font-weight: 600; }
 .help-body dd { margin: 0 0 5px; color: var(--muted); }
 .help-body code { background: var(--panel); padding: 1px 5px; border-radius: 5px; }
+
+/* ---- PWA 提示條（安裝／更新／離線） ---- */
+.pwa-bar{
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 9999; display: flex; align-items: center; gap: 10px;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 10px 12px 10px 16px; border-radius: 14px;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line, rgba(140,120,190,.25));
+  box-shadow: 0 10px 30px rgba(60,40,110,.22);
+  font-size: 14px; animation: pwa-in .25s ease;
+}
+.pwa-bar span{ flex: 1; min-width: 0; }
+.pwa-bar .pwa-ok{
+  border: 0; border-radius: 10px; padding: 7px 14px; cursor: pointer;
+  background: var(--brand, #9b6dd6); color: #fff; font-size: 14px; white-space: nowrap;
+}
+.pwa-bar .pwa-x{
+  border: 0; background: transparent; color: inherit; opacity: .55; cursor: pointer; font-size: 14px; padding: 4px;
+}
+.pwa-bar .pwa-x:hover{ opacity: 1; }
+@keyframes pwa-in{ from{ opacity: 0; transform: translate(-50%, 12px); } to{ opacity: 1; transform: translate(-50%, 0); } }

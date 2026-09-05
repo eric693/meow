@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>喚雨機器喵 後台</title>
   <meta name="theme-color" content="#9b6dd6">
+  <meta name="description" content="喚雨陪玩接單管理後台：訂單、薪資、報表、系統設定。">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="喚雨後台">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☔</text></svg>">
 </head>
@@ -22,6 +29,7 @@
   <script src="/js/pages-payroll.js"></script>
   <script src="/js/pages-reconcile.js"></script>
   <script src="/js/pages2.js"></script>
-  <script>App.boot();</script>
+  <script src="/js/pwa.js"></script>
+  <script>App.boot(); PWA.init();</script>
 </body>
 </html>

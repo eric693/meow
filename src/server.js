@@ -147,6 +147,17 @@ function assetVersion() {
   }
   return Math.floor(mx).toString(36);
 }
+// PWA：Service Worker 一定要在根目錄才能控制整站，且不能被快取住（否則改版推不出去）
+app.get('/sw.js', (req, res) => {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Service-Worker-Allowed', '/');
+  res.type('application/javascript').sendFile(path.join(PUB, 'sw.js'));
+});
+app.get('/manifest.webmanifest', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.type('application/manifest+json').sendFile(path.join(PUB, 'manifest.webmanifest'));
+});
+
 // 公開玩家手冊（不需登入，Discord 玩家可直接看）
 app.get(['/rules', '/handbook'], (req, res) => {
   res.set('Cache-Control', 'no-cache');
