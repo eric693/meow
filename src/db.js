@@ -72,7 +72,8 @@ ensureColumns('tickets', [
   ['publish',   "TEXT NOT NULL DEFAULT 'draft'"],
   ['published_at', 'TEXT'],
   ['card_channel_id', "TEXT NOT NULL DEFAULT ''"],
-  ['want_rank', "TEXT NOT NULL DEFAULT ''"]
+  ['want_rank', "TEXT NOT NULL DEFAULT ''"],
+  ['play_mode', "TEXT NOT NULL DEFAULT ''"]
 ]);
 ensureColumns('exams', [
   ['src_guild', "TEXT NOT NULL DEFAULT ''"],

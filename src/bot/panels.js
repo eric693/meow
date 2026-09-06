@@ -398,6 +398,10 @@ const SKIP_CATEGORY = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊',
 const SKIP_ADDON = ['唱歌單曲'];
 // 需求單不問段位的服務（沒有段位可言）
 const SKIP_RANK = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊'];
+// 要老闆選遊玩模式的服務（可用設定 order_mode_services 覆蓋）
+const DEFAULT_MODE_SERVICES = ['英雄聯盟'];
+// 遊玩模式選項（可用設定 order_play_modes 覆蓋）
+const DEFAULT_PLAY_MODES = ['一般模式', '競技模式', '單雙積分', '彈性積分', '隨機單中', '其他'];
 // 技術單要老闆指定陪玩定級的服務（可用設定 order_rank_services 覆蓋）
 const DEFAULT_RANK_SERVICES = ['特戰英豪', '英雄聯盟', '聯盟戰棋'];
 // 指定定級的選項；男女的定級不完全一樣（男生沒有超凡、女生沒有頂尖賦能與神話3），
@@ -500,6 +504,21 @@ function needWantRank(guildId, d) {
 }
 
 /** 選完（定級）之後：有加購選項就先問加購，沒有就直接進需求單 */
+/** 這張單要不要問遊玩模式（英雄聯盟等） */
+const needPlayMode = (guildId, sess) =>
+  optionList(guildId, 'order_mode_services', DEFAULT_MODE_SERVICES).includes(String(sess.service || ''));
+
+/** 需要就先問遊玩模式，否則直接進加購／需求單 */
+function askModeOrAddon(i, sid) {
+  const sess = S.get(sid);
+  if (!needPlayMode(i.guildId, sess)) return askAddonOrModal(i, sid);
+  return i.update({
+    content: '請選擇遊玩模式：',
+    components: [selectRow(`ord:mode:${sid}`, '請選擇遊玩模式',
+      optionList(i.guildId, 'order_play_modes', DEFAULT_PLAY_MODES))]
+  });
+}
+
 function askAddonOrModal(i, sid) {
   const sess = S.get(sid);
   if (SKIP_ADDON.includes(sess.service)) return i.showModal(finalModal(sid, sess));
@@ -760,7 +779,9 @@ const serviceText = (t) => {
   const game = String(t.subject || '').trim();
   const svc = String(t.service || '').trim();
   const head = game && game !== svc ? `${game}${svc}` : svc;
-  return `${head}${t.gender || ''}`;
+  // 有選遊玩模式（英雄聯盟等）就接在後面：英雄聯盟技術限男生－一般模式
+  const mode = String(t.play_mode || '').trim();
+  return `${head}${t.gender || ''}${mode ? `－${mode}` : ''}`;
 };
 
 const addonText = (guildId, t) => {
@@ -1571,11 +1592,16 @@ async function handleInteraction(i) {
             wantRankOptions(i.guildId, i.values[0], S.get(sid).service))]
         });
       }
-      return askAddonOrModal(i, sid);
+      return askModeOrAddon(i, sid);
     }
 
     if (step === 'wrank') {
       S.update(sid, { want_rank: i.values[0] });
+      return askModeOrAddon(i, sid);
+    }
+
+    if (step === 'mode') {
+      S.update(sid, { play_mode: i.values[0] });
       return askAddonOrModal(i, sid);
     }
 
@@ -1600,11 +1626,11 @@ async function handleInteraction(i) {
       });
       const info = db.prepare(`INSERT INTO tickets
           (guild_id, src_guild, channel_id, customer_id, kind, subject, seq, service, gender,
-           rank, want_rank, play_at, duration, publish)
-          VALUES (?,?,?,?,'order',?,?,?,?,?,?,?,?,'draft')`)
+           rank, want_rank, play_mode, play_at, duration, publish)
+          VALUES (?,?,?,?,'order',?,?,?,?,?,?,?,?,?,'draft')`)
         .run(orgOf(i.guildId), i.guildId, ch.id, i.user.id, sess.service, seq,
              sess.category || sess.service, sess.gender, f('rank'), sess.want_rank || '',
-             f('play_at'), f('duration'));
+             sess.play_mode || '', f('play_at'), f('duration'));
       if (sess.addons?.length)
         db.prepare('UPDATE tickets SET addons=? WHERE id=?').run(sess.addons.join(','), info.lastInsertRowid);
       const note = [
