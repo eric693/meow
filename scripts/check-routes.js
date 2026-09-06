@@ -13,15 +13,26 @@ const GUILD = process.env.GUILD_ID;
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
   const roles = await rest.get(Routes.guildRoles(GUILD));
   const byId = new Map(roles.map(r => [r.id, r]));
-  // 只用到 roles.cache.find，湊一個最小的假 guild 就能驗，不必真的連上 gateway
-  const guild = { id: GUILD, roles: { cache: { find: f => roles.find(f) } } };
+  // 湊一個假的 roles.cache 就能驗，不必真的連上 gateway。
+  // 規則沒命中時會走 autoPlayerRoles，那邊用到 filter／map，一併補齊。
+  const cache = {
+    find: f => roles.find(f),
+    filter: f => { const m = new Map(roles.filter(f).map(r => [r.id, r])); m.map = fn => [...m.values()].map(fn); return m; },
+    map: fn => roles.map(fn),
+    get: id => byId.get(id),
+    has: id => byId.has(id),
+    values: () => roles.values(),
+    [Symbol.iterator]: () => roles.map(r => [r.id, r])[Symbol.iterator]()
+  };
+  const guild = { id: GUILD, roles: { cache } };
   const nameOf = id => (byId.get(id) || {}).name || id;
 
-  const ranks = ['菁英', '宗師', '大師', '不限段位'];
+  // 段位選項要跟下單選單同一個來源，而且男女不一樣（例如女生沒有「頂尖賦能」）。
+  // 自己寫死清單會驗到選單根本不會出現的組合，看起來像有 bug。
   const genders = ['限女生', '限男生', '不限男女'];
   const rows = [];
   for (const gender of genders)
-    for (const want_rank of ranks)
+    for (const want_rank of P.wantRankOptions(GUILD, gender, SERVICE))
       rows.push({ subject: '技術', service: SERVICE, gender, want_rank, addons: '' });
   for (const gender of ['不限男女', '限女生', '限男生'])
     rows.push({ subject: '娛樂', service: SERVICE, gender, want_rank: '', addons: '' });

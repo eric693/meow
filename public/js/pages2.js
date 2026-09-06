@@ -1214,3 +1214,47 @@ Pages.snippets = async view => {
   });
   load();
 };
+
+// ---------------- 操作紀錄 ----------------
+// 側邊欄與 /api/logs 一直都在，就是沒有這頁，點進去只會看到「此功能尚未開放」。
+Pages.logs = async view => {
+  const ST = { offset: 0, limit: 100 };
+  const SRC = { web: '後台', discord: 'Discord', orders: '訂單', settings: '設定',
+                script: '維護腳本', system: '系統' };
+  const F = [
+    { id: 'q', label: '關鍵字（動作／內容）' },
+    { id: 'actor', label: '操作者（名稱或 Discord ID）' },
+    { id: 'source', label: '來源', type: 'select',
+      options: [{ v: '', t: '全部' }, ...Object.entries(SRC).map(([v, t]) => ({ v, t }))] },
+    { id: 'status', label: '結果', type: 'select',
+      options: [{ v: '', t: '全部' }, { v: 'ok', t: '成功' }, { v: 'fail', t: '失敗' }] },
+    { id: 'from', label: '起日', type: 'date' },
+    { id: 'to', label: '迄日', type: 'date' }
+  ];
+
+  const load = async () => {
+    const d = await GET('/logs?' + new URLSearchParams({ ...bind.values(), limit: ST.limit, offset: ST.offset }));
+    H.pager('lg', d.total, ST);
+    document.getElementById('lgt').innerHTML = H.table(
+      ['時間', '操作者', '來源', '動作', '內容', '結果'],
+      d.rows.map(r => `<tr>
+        <td style="white-space:nowrap">${UI.esc(r.created_at)}</td>
+        <td>${UI.esc(r.actor || '—')}${r.actor_id
+          ? `<div class="muted" style="font-size:12px">${UI.esc(r.actor_id)}</div>` : ''}</td>
+        <td>${UI.esc(SRC[r.source] || r.source || '—')}</td>
+        <td>${UI.esc(r.action)}</td>
+        <td style="white-space:normal;max-width:420px">${UI.esc(r.detail || '')}</td>
+        <td>${r.status === 'ok' ? '<span class="tag ok">成功</span>' : `<span class="tag err">${UI.esc(r.status)}</span>`}</td>
+      </tr>`), '沒有符合條件的紀錄');
+  };
+
+  view.innerHTML = `
+    <div class="card"><div class="row"><div class="grow"><h3 style="margin:0">操作紀錄</h3>
+      <div class="muted" style="font-size:13px">所有 Discord 指令與後台操作的稽核軌跡，不可修改也不可刪除。</div>
+    </div></div></div>
+    ${H.filters('lg', F)}
+    <div class="card" id="lgt"><div class="empty">載入中…</div></div>`;
+
+  const bind = H.bindFilters('lg', F, () => load(), ST);
+  load();
+};

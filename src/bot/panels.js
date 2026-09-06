@@ -2003,4 +2003,4 @@ async function handleInteraction(i) {
 module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEmbed,
                    closeTicket, closedNotice, ticketOfChannel, ticketOfCardChannel, looksLikeOrderRoom,
                    // 派單規則改動很頻繁，匯出讓 scripts/check-routes.js 可以逐一驗證會標到誰
-                   routedPlayerRoles };
+                   routedPlayerRoles, wantRankOptions };
