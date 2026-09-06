@@ -662,7 +662,9 @@ Steam|限男生=喚雨娛樂男陪
 語聊|限女生=喚雨娛樂女陪
 語聊|限男生=喚雨娛樂男陪
 
-聲優=聲優男陪,聲優女陪
+聲優|不限男女=聲優男陪,聲優女陪
+聲優|限女生=聲優女陪
+聲優|限男生=聲優男陪
 `;
 
 /**
@@ -753,6 +755,14 @@ function addonOptions(guildId) {
     return { name, price: p, label: p ? `${name} (+${p}元/局)` : name };
   });
 }
+/** 需求類型顯示：技術／娛樂單只存分類，補上 subject 的遊戲名才看得出是哪款遊戲 */
+const serviceText = (t) => {
+  const game = String(t.subject || '').trim();
+  const svc = String(t.service || '').trim();
+  const head = game && game !== svc ? `${game}${svc}` : svc;
+  return `${head}${t.gender || ''}`;
+};
+
 const addonText = (guildId, t) => {
   if (!t.addons) return '無';
   const map = Object.fromEntries(addonOptions(guildId).map(a => [a.name, a]));
@@ -767,7 +777,7 @@ function draftPayload(guildId, tid) {
       title: '⏳ 訂單建立中...(請確認並發布)',
       desc: `老闆 ${mention(t.customer_id)} 您好！您的需求已記錄，確認無誤後請點下方按鈕發布訂單：`,
       fields: [
-        { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
+        { name: '需求類型', value: serviceText(t), inline: true },
         { name: '老闆段位', value: t.rank || '無', inline: true },
         { name: '指定定級', value: t.want_rank || '不限', inline: true },
         { name: '附加選項', value: addonText(guildId, t), inline: true },
@@ -796,7 +806,7 @@ function publishedPayload(guildId, t) {
       desc: `老闆 ${mention(t.customer_id)} 您好！您的需求已送出，以下是這張單的內容：`,
       color: COLOR.ok,
       fields: [
-        { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
+        { name: '需求類型', value: serviceText(t), inline: true },
         { name: '老闆段位', value: t.rank || '無', inline: true },
         { name: '指定定級', value: t.want_rank || '不限', inline: true },
         { name: '附加選項', value: addonText(guildId, t), inline: true },
@@ -820,7 +830,7 @@ function recruitEmbed(guildId, t) {
       ? '⚠️ 有老闆發布了新任務！符合條件的陪玩們請火速遞交名片！'
       : `老闆 ${mention(t.customer_id)} 發布了新任務！符合條件的陪玩們請火速遞交名片！`,
     fields: [
-      { name: '需求類型', value: `${t.service}${t.gender}`, inline: true },
+      { name: '需求類型', value: serviceText(t), inline: true },
       { name: '老闆段位', value: t.rank || '無', inline: true },
       { name: '指定定級', value: t.want_rank || '不限', inline: true },
       { name: '附加選項', value: addonText(guildId, t), inline: true },
