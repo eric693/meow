@@ -389,7 +389,7 @@ const markOrderCreated = i => lastOrderAt.set(`${i.guildId}:${i.user.id}`, Date.
 
 // 下單選單的選項，皆可用後台設定覆蓋（逗號分隔）
 const DEFAULT_GENDERS = ['不限男女', '限女生', '限男生'];
-const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', '英雄聯盟', 'Steam 小遊戲', '唱歌單曲', '語聊', '其他遊戲'];
+const DEFAULT_SERVICES = ['雨幣儲值', '特戰英豪', '英雄聯盟', '聯盟戰棋', 'Steam 小遊戲', '唱歌單曲', '語聊', '其他遊戲'];
 // 需要再問子類型的服務（服務 → 子選項清單）
 const SERVICE_SUBTYPES = { '語聊': ['一般語聊', '戀愛語聊'] };
 // 不必問技術／娛樂分類的服務，選完（子類型後）直接問性別
@@ -399,7 +399,7 @@ const SKIP_ADDON = ['唱歌單曲'];
 // 需求單不問段位的服務（沒有段位可言）
 const SKIP_RANK = ['唱歌單曲', '語聊', '一般語聊', '戀愛語聊'];
 // 技術單要老闆指定陪玩定級的服務（可用設定 order_rank_services 覆蓋）
-const DEFAULT_RANK_SERVICES = ['特戰英豪', '英雄聯盟'];
+const DEFAULT_RANK_SERVICES = ['特戰英豪', '英雄聯盟', '聯盟戰棋'];
 // 指定定級的選項；男女的定級不完全一樣（男生沒有超凡、女生沒有頂尖賦能與神話3），
 // 所以分成三份：不限男女／限男生／限女生，
 // 可用設定 order_want_ranks／order_want_ranks_male／order_want_ranks_female 覆蓋。
@@ -407,13 +407,14 @@ const DEFAULT_RANK_SERVICES = ['特戰英豪', '英雄聯盟'];
 const DEFAULT_WANT_RANKS = ['頂尖賦能 (600分以上)', '賦能', '神話3', '神話', '超凡', '不限段位'];
 const DEFAULT_WANT_RANKS_M = ['頂尖賦能 (600分以上)', '賦能', '神話3', '神話', '不限段位'];
 const DEFAULT_WANT_RANKS_F = ['賦能', '神話', '超凡', '不限段位'];
-// 英雄聯盟的定級名稱跟特戰不同，男女共用一份
+// 英雄聯盟／聯盟戰棋的定級名稱跟特戰不同，男女共用一份
 const DEFAULT_WANT_RANKS_LOL = ['菁英', '宗師', '大師', '不限段位'];
 
 // 服務 → 定級選項的設定鍵與預設值：{ any, male, female }，每項是 [設定鍵, 預設清單]
 const LOL_RANKS = ['order_want_ranks_lol', DEFAULT_WANT_RANKS_LOL];
 const WANT_RANKS_BY_SERVICE = {
-  '英雄聯盟': { any: LOL_RANKS, male: LOL_RANKS, female: LOL_RANKS }
+  '英雄聯盟': { any: LOL_RANKS, male: LOL_RANKS, female: LOL_RANKS },
+  '聯盟戰棋': { any: LOL_RANKS, male: LOL_RANKS, female: LOL_RANKS }
 };
 const DEFAULT_WANT_RANK_KEYS = {
   any: ['order_want_ranks', DEFAULT_WANT_RANKS],
@@ -462,7 +463,7 @@ const DEFAULT_CATEGORIES = ['技術', '娛樂'];
 // 服務類型 → 頻道名稱用的單別，可用設定 order_type_labels 覆蓋（格式：服務=單別,服務=單別）
 const DEFAULT_TYPE_LABELS = {
   '雨幣儲值': '儲值單', '特戰英豪': '娛樂單', 'Steam 小遊戲': 'steam單',
-  '英雄聯盟': '娛樂單', '唱歌單曲': '唱歌單', '語聊': '語聊單',
+  '英雄聯盟': '娛樂單', '聯盟戰棋': '娛樂單', '唱歌單曲': '唱歌單', '語聊': '語聊單',
   '一般語聊': '語聊單', '戀愛語聊': '語聊單', '其他遊戲': '娛樂單'
 };
 
@@ -611,9 +612,9 @@ const DEFAULT_ROLE_ROUTES = `
 技術|特戰英豪|不限男女|超凡=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話,VAL女超凡
 技術|特戰英豪|不限男女|不限段位=VAL男頂尖賦能,VAL男賦能,VAL男神話3,VAL男神話,VAL女賦能,VAL女神話,VAL女超凡
 
-娛樂|特戰英豪|不限男女=VAL娛樂男陪,VAL娛樂女陪
-娛樂|特戰英豪|限女生=VAL娛樂女陪
-娛樂|特戰英豪|限男生=VAL娛樂男陪
+娛樂|!技術|特戰英豪|不限男女=VAL娛樂男陪,VAL娛樂女陪
+娛樂|!技術|特戰英豪|限女生=VAL娛樂女陪
+娛樂|!技術|特戰英豪|限男生=VAL娛樂男陪
 
 技術|英雄聯盟|限女生|菁英=LOL女菁英
 技術|英雄聯盟|限女生|宗師=LOL女菁英,LOL女宗師
@@ -630,9 +631,28 @@ const DEFAULT_ROLE_ROUTES = `
 技術|英雄聯盟|不限男女|大師=LOL男菁英,LOL男宗師,LOL男大師,LOL女菁英,LOL女宗師,LOL女大師
 技術|英雄聯盟|不限男女|不限段位=LOL男菁英,LOL男宗師,LOL男大師,LOL女菁英,LOL女宗師,LOL女大師
 
-娛樂|英雄聯盟|不限男女=LOL娛樂男陪,LOL娛樂女陪
-娛樂|英雄聯盟|限女生=LOL娛樂女陪
-娛樂|英雄聯盟|限男生=LOL娛樂男陪
+娛樂|!技術|英雄聯盟|不限男女=LOL娛樂男陪,LOL娛樂女陪
+娛樂|!技術|英雄聯盟|限女生=LOL娛樂女陪
+娛樂|!技術|英雄聯盟|限男生=LOL娛樂男陪
+
+技術|聯盟戰棋|限女生|菁英=TFT女菁英
+技術|聯盟戰棋|限女生|宗師=TFT女菁英,TFT女宗師
+技術|聯盟戰棋|限女生|大師=TFT女菁英,TFT女宗師,TFT女大師
+技術|聯盟戰棋|限女生|不限段位=TFT女菁英,TFT女宗師,TFT女大師
+
+技術|聯盟戰棋|限男生|菁英=TFT男菁英
+技術|聯盟戰棋|限男生|宗師=TFT男菁英,TFT男宗師
+技術|聯盟戰棋|限男生|大師=TFT男菁英,TFT男宗師,TFT男大師
+技術|聯盟戰棋|限男生|不限段位=TFT男菁英,TFT男宗師,TFT男大師
+
+技術|聯盟戰棋|不限男女|菁英=TFT男菁英,TFT女菁英
+技術|聯盟戰棋|不限男女|宗師=TFT男菁英,TFT男宗師,TFT女菁英,TFT女宗師
+技術|聯盟戰棋|不限男女|大師=TFT男菁英,TFT男宗師,TFT男大師,TFT女菁英,TFT女宗師,TFT女大師
+技術|聯盟戰棋|不限男女|不限段位=TFT男菁英,TFT男宗師,TFT男大師,TFT女菁英,TFT女宗師,TFT女大師
+
+娛樂|!技術|聯盟戰棋|不限男女=TFT娛樂男陪,TFT娛樂女陪
+娛樂|!技術|聯盟戰棋|限女生=TFT娛樂女陪
+娛樂|!技術|聯盟戰棋|限男生=TFT娛樂男陪
 
 Steam|不限男女=喚雨娛樂男陪,喚雨娛樂女陪
 Steam|限女生=喚雨娛樂女陪
