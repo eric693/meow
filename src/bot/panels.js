@@ -784,6 +784,19 @@ const serviceText = (t) => {
   return `${head}${t.gender || ''}${mode ? `－${mode}` : ''}`;
 };
 
+/**
+ * 三張訂單卡（草稿／已發布／招募）共用的前段欄位。
+ * 指定定級只有技術單會問，娛樂單沒有定級可言——沒值就整欄不顯示，不要留一個「不限」佔版面。
+ */
+const orderFields = (guildId, t) => [
+  { name: '需求類型', value: serviceText(t), inline: true },
+  { name: '老闆段位', value: t.rank || '無', inline: true },
+  ...(String(t.want_rank || '').trim()
+    ? [{ name: '指定定級', value: t.want_rank, inline: true }] : []),
+  { name: '附加選項', value: addonText(guildId, t), inline: true },
+  { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` }
+];
+
 const addonText = (guildId, t) => {
   if (!t.addons) return '無';
   const map = Object.fromEntries(addonOptions(guildId).map(a => [a.name, a]));
@@ -798,11 +811,7 @@ function draftPayload(guildId, tid) {
       title: '⏳ 訂單建立中...(請確認並發布)',
       desc: `老闆 ${mention(t.customer_id)} 您好！您的需求已記錄，確認無誤後請點下方按鈕發布訂單：`,
       fields: [
-        { name: '需求類型', value: serviceText(t), inline: true },
-        { name: '老闆段位', value: t.rank || '無', inline: true },
-        { name: '指定定級', value: t.want_rank || '不限', inline: true },
-        { name: '附加選項', value: addonText(guildId, t), inline: true },
-        { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` },
+        ...orderFields(guildId, t),
         { name: '​', value: '⚠️ 尚未發布，陪玩目前還看不到這張單喔！' }
       ]
     })],
@@ -827,11 +836,7 @@ function publishedPayload(guildId, t) {
       desc: `老闆 ${mention(t.customer_id)} 您好！您的需求已送出，以下是這張單的內容：`,
       color: COLOR.ok,
       fields: [
-        { name: '需求類型', value: serviceText(t), inline: true },
-        { name: '老闆段位', value: t.rank || '無', inline: true },
-        { name: '指定定級', value: t.want_rank || '不限', inline: true },
-        { name: '附加選項', value: addonText(guildId, t), inline: true },
-        { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` },
+        ...orderFields(guildId, t),
         { name: '​', value: anon
             ? '此為匿名頻道。陪玩的報名名片將會直接發送至此。'
             : '這是公開單，陪玩可以直接在本頻道遞交名片。' }
@@ -850,13 +855,7 @@ function recruitEmbed(guildId, t) {
     desc: anon
       ? '⚠️ 有老闆發布了新任務！符合條件的陪玩們請火速遞交名片！'
       : `老闆 ${mention(t.customer_id)} 發布了新任務！符合條件的陪玩們請火速遞交名片！`,
-    fields: [
-      { name: '需求類型', value: serviceText(t), inline: true },
-      { name: '老闆段位', value: t.rank || '無', inline: true },
-      { name: '指定定級', value: t.want_rank || '不限', inline: true },
-      { name: '附加選項', value: addonText(guildId, t), inline: true },
-      { name: '其他需求', value: `時間：${t.play_at || '—'}\n時長：${t.duration || '—'}\n備註：${t.content || '無'}` }
-    ]
+    fields: orderFields(guildId, t)
   });
 }
 
@@ -2029,4 +2028,6 @@ async function handleInteraction(i) {
 module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEmbed,
                    closeTicket, closedNotice, ticketOfChannel, ticketOfCardChannel, looksLikeOrderRoom,
                    // 派單規則改動很頻繁，匯出讓 scripts/check-routes.js 可以逐一驗證會標到誰
-                   routedPlayerRoles, wantRankOptions };
+                   routedPlayerRoles, wantRankOptions,
+                   // 訂單卡的欄位也常改，一併匯出方便驗證顯示內容
+                   draftPayload, publishedPayload, recruitEmbed };
