@@ -58,6 +58,8 @@ const GUILD_KEYS = [
   'channel_member_system', 'channel_notice_log', 'channel_cs_lobby',
   // 入口類
   'channel_order_entry', 'channel_exam_entry', 'channel_intro',
+  // 新成員歡迎
+  'channel_welcome', 'channel_role_claim', 'welcome_title', 'welcome_text',
   'channel_command_log', 'channel_money_log',
   // 語音房
   'channel_voice_hub', 'category_voice', 'voice_room_name', 'voice_room_private',

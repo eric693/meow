@@ -849,6 +849,16 @@ Pages.settings = async view => {
         <label class="f"><span>點我入職頻道</span><select name="channel_exam_entry">${opts(res.channels, v.channel_exam_entry)}</select></label>
         <label class="f"><span>陪陪介紹／評價頻道</span><select name="channel_intro">${opts(res.channels, v.channel_intro)}</select></label>
       </div>
+      <h4 style="margin:14px 0 6px">新成員歡迎</h4>
+      <div class="grid c2">
+        <label class="f"><span>歡迎頻道（留空＝不發歡迎訊息）</span><select name="channel_welcome">${opts(res.channels, v.channel_welcome)}</select></label>
+        <label class="f"><span>身分領取頻道（文案的 {roles} 會換成它）</span><select name="channel_role_claim">${opts(res.channels, v.channel_role_claim)}</select></label>
+      </div>
+      <label class="f"><span>歡迎標題</span>
+        <input name="welcome_title" value="${UI.esc(v.welcome_title || '')}" placeholder="🛬 貴賓降落！歡迎來到{server}！"></label>
+      <label class="f"><span>歡迎內容（可用 {user} 標記本人、{name} 暱稱、{server} 伺服器名、{count} 目前人數、{roles} 身分領取頻道）</span>
+        <textarea name="welcome_text" rows="3" placeholder="▶ 歡迎 {user} 光臨 ◀&#10;&#10;別忘了先到 {roles} 點擊領取您的身份組喔！✨">${UI.esc(v.welcome_text || '')}</textarea></label>
+
       <h4 style="margin:14px 0 6px">自動語音房</h4>
       <div class="grid c2">
         <label class="f"><span>「創建語音房」大廳語音頻道</span><select name="channel_voice_hub">${opts(res.voices || [], v.channel_voice_hub)}</select></label>
