@@ -33,15 +33,16 @@ const GUILD = process.env.GUILD_ID;
   const rows = [];
   for (const gender of genders)
     for (const want_rank of P.wantRankOptions(GUILD, gender, SERVICE))
-      rows.push({ subject: '技術', service: SERVICE, gender, want_rank, addons: '' });
+      // 欄位對應要跟建單時一致：service 存的是技術／娛樂，subject 才是遊戲名
+      rows.push({ service: '技術', subject: SERVICE, gender, want_rank, addons: '' });
   for (const gender of ['不限男女', '限女生', '限男生'])
-    rows.push({ subject: '娛樂', service: SERVICE, gender, want_rank: '', addons: '' });
+    rows.push({ service: '娛樂', subject: SERVICE, gender, want_rank: '', addons: '' });
 
   console.log(`派單驗證：${SERVICE}（伺服器 ${GUILD}）\n`);
   for (const t of rows) {
     const ids = P.routedPlayerRoles(guild, t);
     const names = ids.map(nameOf);
-    console.log(`${t.subject}單｜${t.gender}｜${t.want_rank || '—'}`.padEnd(24), '→', names.join('、') || '（沒有對到任何身分組）');
+    console.log(`${t.service}單｜${t.gender}｜${t.want_rank || '—'}`.padEnd(24), '→', names.join('、') || '（沒有對到任何身分組）');
   }
   const fallback = getSetting('role_player', '', GUILD);
   console.log(`\n（對不到規則時的退路 role_player：${fallback || '未設定'}）`);
