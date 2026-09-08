@@ -59,6 +59,16 @@ function chargedCoins(guildId, o) {
 }
 const paidByCoins = (guildId, o) => /雨幣/.test(o.pay_method || '') && chargedCoins(guildId, o) > 0;
 
+/**
+ * 這張單「動得了老闆的雨幣」嗎？改單、刪單都要問這一句。
+ *
+ * 匯入的歷史單一律不行：舊系統的扣款早就反映在轉入的期初餘額裡（2026-08-09 那 208 筆），
+ * 匯入的流水只是把歷史搬過來給人看。照著那些流水退錢＝同一筆錢退兩次，老闆的餘額
+ * 就會莫名其妙一直長回來。退單那邊 8/20 已經堵過（月冠母單白送 65,000），
+ * 但改單與刪單漏掉了——月冠拆單 ORD-01009038 被改個金額就又生出 7,050。
+ */
+const canMoveCoins = (guildId, o) => !isLegacyOrder(o) && paidByCoins(guildId, o);
+
 // 現金／轉帳是場外收款，系統無從得知錢有沒有真的進來。
 // 這種單一律標記為「待對帳」，但不擋核銷：財務不會隨時在線，擋著會讓客服沒辦法
 // 即時幫陪玩核銷報單。改成事後對帳制——財務從後台核對銀行帳單／現金，
@@ -181,7 +191,7 @@ function updateOrder(guildId, orderNo, patch = {}, operator = '') {
 
   db.transaction(() => {
     // 現金／轉帳的單只改帳面數字，不動雨幣錢包（當初就沒扣過）
-    if (dAmount && o.status !== 'refunded' && paidByCoins(guildId, o) && o.customer_id) {
+    if (dAmount && o.status !== 'refunded' && canMoveCoins(guildId, o) && o.customer_id) {
       // 實收變多 → 老闆再扣款；變少 → 退還差額。
       // 補收的方向不允許扣成負數：餘額不夠就要先請老闆儲值，
       // 讓餘額默默變負只會把問題往後推，之後結帳與對帳都會怪怪的。
@@ -233,7 +243,7 @@ function deleteOrder(guildId, orderNo, operator = '') {
   if (!o) throw new Error(`查無訂單 ${orderNo}`);
   db.transaction(() => {
     if (o.status !== 'refunded') {
-      if (paidByCoins(guildId, o) && o.customer_id) {
+      if (canMoveCoins(guildId, o) && o.customer_id) {
         addCoins(guildId, o.customer_id, o.amount, `刪除訂單 ${orderNo}`, { ref: orderNo, operator, allowNegative: true });
       }
       db.prepare('UPDATE customers SET total_spend = MAX(0, total_spend - ?) WHERE guild_id=? AND user_id=?')
@@ -497,7 +507,7 @@ function reviewWithdraw(guildId, id, status, operator = '') {
 
 module.exports = {
   createOrder, updateOrder, deleteOrder, getOrder, reportOrder, unreportOrder, settleOrder, refundOrder,
-  recalcPending, isLegacyOrder, isCashPay, isUnconfirmedCash,
+  recalcPending, isLegacyOrder, isCashPay, isUnconfirmedCash, canMoveCoins,
   confirmCashPayment, revokeCashPayment, unconfirmedCashOrders, checkTopupProof,
   requestWithdraw, reviewWithdraw, payoutStaff,
   shareRate, giftShareRate, intimacyRate, KINDS, STATUS, kindLabel
