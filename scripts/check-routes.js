@@ -30,11 +30,14 @@ const GUILD = process.env.GUILD_ID;
   // 段位選項要跟下單選單同一個來源，而且男女不一樣（例如女生沒有「頂尖賦能」）。
   // 自己寫死清單會驗到選單根本不會出現的組合，看起來像有 bug。
   const genders = ['限女生', '限男生', '不限男女'];
+  // 只有技術單會問定級；Steam、語聊、其他遊戲、唱歌這類服務連技術單都沒有
+  const RANKED = ['特戰英豪', '英雄聯盟', '聯盟戰棋'].includes(SERVICE);
   const rows = [];
-  for (const gender of genders)
-    for (const want_rank of P.wantRankOptions(GUILD, gender, SERVICE))
-      // 欄位對應要跟建單時一致：service 存的是技術／娛樂，subject 才是遊戲名
-      rows.push({ service: '技術', subject: SERVICE, gender, want_rank, addons: '' });
+  if (RANKED)
+    for (const gender of genders)
+      for (const want_rank of P.wantRankOptions(GUILD, gender, SERVICE))
+        // 欄位對應要跟建單時一致：service 存的是技術／娛樂，subject 才是遊戲名
+        rows.push({ service: '技術', subject: SERVICE, gender, want_rank, addons: '' });
   for (const gender of ['不限男女', '限女生', '限男生'])
     rows.push({ service: '娛樂', subject: SERVICE, gender, want_rank: '', addons: '' });
 
