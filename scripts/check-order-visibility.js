@@ -31,11 +31,12 @@ const VIEW = PermissionsBitField.Flags.ViewChannel;
                               AND publish IN ('public','anon') AND status<>'closed'
                               ORDER BY id DESC LIMIT ?`).all(orgOf(GUILD), GUILD, LIMIT);
   console.log(`比對最近 ${tickets.length} 張已發布的單\n`);
-  let bad = 0, gone = 0;
+  let bad = 0, gone = 0, done = 0;
   for (const t of tickets) {
-    // 匿名單要看的是名片專區，不是老闆的包廂（包廂本來就不該讓陪玩看到）
+    // 匿名單要看的是名片專區，不是老闆的包廂（包廂本來就不該讓陪玩看到）。
+    // 名片專區關掉時欄位就清空了＝招募已結束、陪玩已選定，這種沒得比也不用比。
     const chId = t.publish === 'anon' ? t.card_channel_id : t.channel_id;
-    if (!chId) { console.log(`#${t.seq} ${t.service}｜${t.subject}：匿名單但沒有名片專區，陪玩看不到這張單`); bad++; continue; }
+    if (!chId) { done++; continue; }
     const ch = await rest.get(Routes.channel(chId)).catch(() => null);
     if (!ch) { gone++; continue; }   // 頻道已被手動刪掉
     const canSee = new Set((ch.permission_overwrites || [])
@@ -50,6 +51,8 @@ const VIEW = PermissionsBitField.Flags.ViewChannel;
     if (extra.length) console.log(`   多看到：${extra.map(nameOf).join('、')}`);
     if (missing.length) console.log(`   看不到：${missing.map(nameOf).join('、')}`);
   }
+  const notes = [gone && `${gone} 張頻道已刪除`, done && `${done} 張匿名單的招募已結束`]
+    .filter(Boolean).join('、');
   console.log(`\n${bad ? `❌ ${bad} 張單的頻道權限與該標的身分組不一致` : '✅ 全部一致'}`
-    + (gone ? `（另有 ${gone} 張的頻道已刪除，略過）` : ''));
+    + (notes ? `（另有 ${notes}，略過）` : ''));
 })().catch(e => { console.error('失敗：', e.message); process.exit(1); });

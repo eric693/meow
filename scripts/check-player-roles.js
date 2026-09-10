@@ -11,7 +11,9 @@ const { db, getSetting } = require('../src/db');
 
 // 看起來是陪玩的身分組：帶技術／娛樂／聲優／歌手／獨家／陪等字樣；考官與分隔線除外
 const LOOKS_LIKE = /技術|娛樂|聲優|歌手|獨家|陪/;
-const NOT = /考官|-----|管理|客服|培訓|小編|店長/;
+// 排除：考官另有身分組；「--- 陪玩身份組 ---」這類分隔線是裝飾用的，
+// 常常整個伺服器的人都有，列進去等於誰都能報單
+const NOT = /考官|管理|客服|培訓|小編|店長|^[\s\-─—_=]*$|[\-─—_=]{3}/;
 
 (async () => {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
