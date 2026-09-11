@@ -56,15 +56,24 @@ const brief = v => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
  * @param {string} o.detail     參數或結果摘要
  * @param {string} o.status     ok / fail / deny
  * @param {string} o.channelId  發生的頻道
+ * @param {number} o.ms         這次互動處理了幾毫秒（-1 = 沒測）
  */
-function logAction({ guildId, source = 'system', action, user, detail = '', status = 'ok', channelId = '' }) {
+function logAction({ guildId, source = 'system', action, user, detail = '', status = 'ok', channelId = '', ms = -1 }) {
   const actor = user ? (user.tag || user.username || user.id) : '系統';
   action = friendly(action);
   audit(actor, action, brief(detail), guildId,
-    { actorId: user ? user.id : '', source, channelId, status });
+    { actorId: user ? user.id : '', source, channelId, status, ms });
+  // 慢的操作直接印到 journal，不用開後台就能 journalctl -u meow -g 慢 查到
+  if (ms >= SLOW_MS) console.warn(`慢操作：${action} ${ms}ms（${SOURCE_LABEL[source] || source}／${actor}）`);
   mirror({ guildId, source, action, actor, userId: user ? user.id : '', detail, status, channelId })
     .catch(() => {});   // 鏡像失敗不能影響指令本身
 }
+// 超過這個毫秒數就當成慢操作。Discord 要求 3 秒內回應互動，抓一半當警戒線。
+const SLOW_MS = Number(process.env.SLOW_MS) || 1500;
+
+// 查不到的紀錄頻道（被刪或機器人看不到）。每 30 分鐘清空一次，讓重新設定的頻道有機會復活。
+const missingChannels = new Set();
+setInterval(() => missingChannels.clear(), 30 * 60 * 1000).unref();
 
 /** 把紀錄鏡像到 Discord 頻道（後台設定 channel_command_log；沒設定就跳過） */
 async function mirror({ guildId, source, action, actor, userId, detail, status, channelId }) {
@@ -72,8 +81,15 @@ async function mirror({ guildId, source, action, actor, userId, detail, status, 
   if (!target) return;
   const client = require('../bot').getClient();
   if (!client) return;
-  const ch = await client.channels.fetch(target).catch(() => null);
-  if (!ch || !ch.isTextBased?.()) return;
+  // 先吃 discord.js 本地快取；只有真的沒有才打 API。紀錄頻道被刪掉時記一筆負向快取，
+  // 否則每一個操作都會為了同一個不存在的頻道多送一次 REST 請求（也很容易吃到限流）。
+  let ch = client.channels.cache.get(target);
+  if (!ch) {
+    if (missingChannels.has(target)) return;
+    ch = await client.channels.fetch(target).catch(() => null);
+    if (!ch) { missingChannels.add(target); return; }
+  }
+  if (!ch.isTextBased?.()) return;
   // 避免紀錄頻道自己記自己造成無限迴圈
   if (channelId && channelId === target) return;
 

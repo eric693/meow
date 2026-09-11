@@ -14,6 +14,24 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'meow.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// WAL 模式下 synchronous=NORMAL 已足夠安全（只有作業系統整台當掉才可能掉最後幾筆，
+// 行程自己崩潰不會壞帳），但每次寫入省掉一次 fsync，報單／結帳這種連續寫入快很多。
+db.pragma('synchronous = NORMAL');
+// 預設 cache 只有 2MB，整個資料庫也才 8MB——直接讓它整顆進記憶體，查詢不必再讀磁碟。
+db.pragma('cache_size = -65536');   // 64MB
+db.pragma('mmap_size = 268435456'); // 256MB，讀取走 mmap 少一次複製
+db.pragma('temp_store = MEMORY');
+// 預設 1000 頁（≈4MB）才 checkpoint，WAL 會長期停在 4MB，每次讀都要多掃一遍 WAL 索引。
+db.pragma('wal_autocheckpoint = 256');
+
+// 自動 checkpoint 只會把 WAL 內容寫回主檔，不會把檔案縮回去；長時間執行下 WAL 仍會停在
+// 高水位。開機先收一次，之後每 10 分鐘收一次（TRUNCATE 會真的把檔案砍回 0）。
+// PASSIVE 語意：有人正在讀就跳過不等，不會卡住機器人。
+function checkpoint(mode = 'TRUNCATE') {
+  try { db.pragma(`wal_checkpoint(${mode})`); } catch { /* 有人在讀就下次再收 */ }
+}
+checkpoint();
+setInterval(() => checkpoint(), 10 * 60 * 1000).unref();
 // 舊資料庫升級：schema.sql 的 CREATE TABLE IF NOT EXISTS 不會補欄位，這裡逐一補上。
 function ensureColumns(table, cols) {
   // 資料表還不存在（全新資料庫）就跳過，交給 schema.sql 直接建好
@@ -53,7 +71,9 @@ ensureColumns('audit_logs', [
   ['actor_id',   "TEXT NOT NULL DEFAULT ''"],
   ['source',     "TEXT NOT NULL DEFAULT 'system'"],
   ['channel_id', "TEXT NOT NULL DEFAULT ''"],
-  ['status',     "TEXT NOT NULL DEFAULT 'ok'"]
+  ['status',     "TEXT NOT NULL DEFAULT 'ok'"],
+  // 這次互動處理了幾毫秒；-1 代表沒測（後台／系統寫入，或這個欄位加上去之前的舊資料）
+  ['duration_ms', 'INTEGER NOT NULL DEFAULT -1']
 ]);
 ensureColumns('backpack', [
   ['percent',   'INTEGER NOT NULL DEFAULT 0'],
@@ -161,15 +181,30 @@ function migrateOrgData(fromOrg, toOrg) {
 }
 
 // ---------- 設定 ----------
+// 設定幾乎不變，但每個面板、每次權限檢查、每筆操作紀錄都在讀，一次互動可能查上百次。
+// 全部快取在記憶體，寫入時才失效——後台改設定走的是同一個行程，不會讀到舊值。
+const settingCache = new Map();
+const settingKey = (guildId, key) => `${guildId} ${key}`;
+const SETTING_GET = db.prepare('SELECT value FROM settings WHERE guild_id = ? AND key = ?');
 function getSetting(key, def = '', guildId = '') {
-  const r = db.prepare('SELECT value FROM settings WHERE guild_id = ? AND key = ?').get(guildId, key);
-  return r ? r.value : def;
+  const ck = settingKey(guildId, key);
+  let v = settingCache.get(ck);
+  if (v === undefined) {
+    const r = SETTING_GET.get(guildId, key);
+    v = r ? r.value : null;        // null = 查過但沒這筆，避免每次都再問一次資料庫
+    settingCache.set(ck, v);
+  }
+  return v === null ? def : v;
 }
+const SETTING_SET = db.prepare(`INSERT INTO settings (guild_id, key, value) VALUES (?, ?, ?)
+              ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value`);
 function setSetting(key, value, guildId = '') {
-  db.prepare(`INSERT INTO settings (guild_id, key, value) VALUES (?, ?, ?)
-              ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value`)
-    .run(guildId, key, value == null ? '' : String(value));
+  const v = value == null ? '' : String(value);
+  SETTING_SET.run(guildId, key, v);
+  settingCache.set(settingKey(guildId, key), v);
 }
+/** 繞過本模組直接改 settings 資料表時（例如匯入腳本）用來清快取 */
+function clearSettingCache() { settingCache.clear(); }
 function getNum(key, def, guildId = '') {
   const v = getSetting(key, '', guildId);
   const n = Number(v);
@@ -177,13 +212,15 @@ function getNum(key, def, guildId = '') {
 }
 
 // 通用稽核紀錄。opts 供 Discord 端補上操作者 ID、來源、頻道與成敗狀態。
+const AUDIT_INS = db.prepare(
+  `INSERT INTO audit_logs (guild_id, actor, actor_id, action, detail, source, channel_id, status, duration_ms)
+   VALUES (?,?,?,?,?,?,?,?,?)`);
 function audit(actor, action, detail = '', guildId = '',
-               { actorId = '', source = 'system', channelId = '', status = 'ok' } = {}) {
+               { actorId = '', source = 'system', channelId = '', status = 'ok', ms = -1 } = {}) {
   guildId = orgOf(guildId);
-  db.prepare(`INSERT INTO audit_logs (guild_id, actor, actor_id, action, detail, source, channel_id, status)
-              VALUES (?,?,?,?,?,?,?,?)`)
-    .run(guildId, String(actor || ''), String(actorId || ''), action,
-         String(detail || '').slice(0, 500), source, String(channelId || ''), status);
+  AUDIT_INS.run(guildId, String(actor || ''), String(actorId || ''), action,
+         String(detail || '').slice(0, 500), source, String(channelId || ''), status,
+         Number.isFinite(ms) ? Math.round(ms) : -1);
 }
 
 function activeGuildIds() {
@@ -296,8 +333,8 @@ function nextOrderNo(prefix = 'ORD') {
 }
 
 module.exports = {
-  db, SECRET, HOME_GUILD, now, monthPrefix,
-  getSetting, setSetting, getNum, audit, activeGuildIds, upsertGuild,
+  db, SECRET, HOME_GUILD, now, monthPrefix, checkpoint,
+  getSetting, setSetting, clearSettingCache, getNum, audit, activeGuildIds, upsertGuild,
   orgOf, bindOrg, orgGuilds, migrateOrgData,
   getCustomer, vipThresholds, vipLevelFor, refreshVip, addCoins,
   getStaff, findStaff, nextOrderNo, DEFAULT_VIP

@@ -166,6 +166,9 @@ async function start() {
     const action = isCmd ? `/${i.commandName}` : (i.customId || '未知互動');
     const detail = isCmd ? slashArgs(i) : i.isModalSubmit() ? modalArgs(i) : '';
     const base = { guildId: i.guildId, source, action, user: i.user, channelId: i.channelId };
+    // 從收到互動算到處理完的毫秒數，寫進 audit_logs.duration_ms。
+    // Discord 只給 3 秒回應時間，這個數字就是「還剩多少餘裕」的唯一依據。
+    const t0 = Date.now();
     try {
       if (isCmd) {
         const h = require('./slash').handlers[i.commandName];
@@ -174,10 +177,10 @@ async function start() {
       } else if (i.isButton() || i.isModalSubmit() || i.isStringSelectMenu()) {
         await require('./panels').handleInteraction(i);
       } else return;
-      logAction({ ...base, detail, status: i._denied ? 'deny' : 'ok' });
+      logAction({ ...base, detail, status: i._denied ? 'deny' : 'ok', ms: Date.now() - t0 });
     } catch (e) {
       console.error('互動錯誤：', e);
-      logAction({ ...base, detail: `${detail}${detail ? ' | ' : ''}錯誤：${e.message}`, status: 'fail' });
+      logAction({ ...base, detail: `${detail}${detail ? ' | ' : ''}錯誤：${e.message}`, status: 'fail', ms: Date.now() - t0 });
       const payload = { embeds: [err(i.guildId, e.message || '發生未知錯誤')], ephemeral: true };
       if (i.deferred || i.replied) await i.followUp(payload).catch(() => {});
       else await i.reply(payload).catch(() => {});
@@ -205,14 +208,15 @@ async function start() {
     };
     const base = { guildId: msg.guild.id, source: 'prefix', action: `${PREFIX}${name}`,
                    user: msg.author, channelId: msg.channelId };
+    const t0 = Date.now();
     try {
       await h(msg, args);
-      logAction({ ...base, detail: args, status: 'ok' });
+      logAction({ ...base, detail: args, status: 'ok', ms: Date.now() - t0 });
     } catch (e) {
       console.error(`指令 ${name} 失敗：`, e.message);
       // 權限相關的錯誤另外標記，方便後台過濾誰在踩紅線
       const denied = /權限|僅限|只有/.test(e.message || '');
-      logAction({ ...base, detail: `${args}${args ? ' | ' : ''}${e.message}`, status: denied ? 'deny' : 'fail' });
+      logAction({ ...base, detail: `${args}${args ? ' | ' : ''}${e.message}`, status: denied ? 'deny' : 'fail', ms: Date.now() - t0 });
       await msg.reply({ embeds: [err(msg.guild.id, e.message || '指令執行失敗')] }).catch(() => {});
     }
   });

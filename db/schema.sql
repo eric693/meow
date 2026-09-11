@@ -59,9 +59,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   source     TEXT NOT NULL DEFAULT 'system',   -- prefix / slash / button / modal / web / system
   channel_id TEXT NOT NULL DEFAULT '',
   status     TEXT NOT NULL DEFAULT 'ok',       -- ok 成功 / fail 失敗 / deny 權限不足
+  duration_ms INTEGER NOT NULL DEFAULT -1,      -- 這次互動處理了幾毫秒；-1 = 沒測（後台／系統）
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs (created_at DESC);
+-- 查「最近哪些操作最慢」用；只索引有測到的那些，省空間
+CREATE INDEX IF NOT EXISTS idx_audit_slow ON audit_logs (duration_ms DESC) WHERE duration_ms >= 0;
 CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs (guild_id, actor_id, created_at DESC);
 
 -- ---------- 人事：陪玩師 / 客服 ----------
