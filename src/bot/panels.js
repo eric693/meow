@@ -941,6 +941,24 @@ function archivedName(channel, t, suffix) {
 const deleteDays = guildId => cfgNum('ticket_delete_days', 1, guildId);
 
 /**
+ * 只對「頻道上本來就有權限設定」的對象改權限，並行送出。
+ *
+ * 原本是把陪玩身分組清單逐一 await 改一遍。清單有十幾個身分組時，關一個頻道就要
+ * 十幾次 API、十幾秒，超過 Discord 的 3 秒回應時限，客服按了就顯示「此交互失敗」。
+ * 頻道上沒有權限設定的身分組本來就看不到這個頻道，替它新增一條拒絕規則沒有意義。
+ */
+function editExisting(channel, ids, perms) {
+  if (!channel) return Promise.resolve();
+  const have = channel.permissionOverwrites?.cache;
+  const targets = [...new Set(ids.map(x => String(x || '').trim()).filter(Boolean))]
+    .filter(id => !have || have.has(id));
+  return Promise.all(targets.map(id =>
+    channel.permissionOverwrites.edit(id, perms).catch(() => {})));
+}
+const playerRoleIds = guildId =>
+  getSetting('role_player', '', guildId).split(',').map(x => x.trim()).filter(Boolean);
+
+/**
  * 結單：收掉名片專區、把包廂搬到結單分類、鎖住發言、改名歸檔。
  * 按鈕（ticket:close / tk:end）與 !結單 共用同一套。
  */
@@ -953,9 +971,7 @@ async function closeTicket(guild, channel, t) {
   const target = getSetting('category_order_closed', '', guild.id)
               || getSetting('category_ticket', '', guild.id);
   if (target) await channel.setParent(target, { lockPermissions: false }).catch(() => {});
-  for (const rid of [t.customer_id, ...getSetting('role_player', '', guild.id).split(',').map(x => x.trim())]) {
-    if (rid) await channel.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
-  }
+  await editExisting(channel, [t.customer_id, ...playerRoleIds(guild.id)], { SendMessages: false });
   await channel.setName(archivedName(channel, t, '已結單')).catch(() => {});
 }
 
@@ -966,9 +982,7 @@ async function closeTicket(guild, channel, t) {
 async function lockCardChannel(guild, t) {
   const cc = await guild.channels.fetch(t.card_channel_id).catch(() => null);
   if (!cc) return;
-  for (const rid of getSetting('role_player', '', guild.id).split(',').map(x => x.trim()).filter(Boolean)) {
-    await cc.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
-  }
+  await editExisting(cc, playerRoleIds(guild.id), { SendMessages: false });
   if (!/│已結單$/.test(cc.name)) await cc.setName(`${cc.name}│已結單`.slice(0, 100)).catch(() => {});
 }
 
@@ -1810,6 +1824,8 @@ async function handleInteraction(i) {
         await eph(i, ok(i.guildId, '已關閉',
           '名片專區已關閉，陪玩不會再看到這張單。\n（本頻道已移除，紀錄已存到老闆的包廂）'));
       }
+      // 後面要改分類、改權限、改名，加起來常常超過 3 秒；先佔住回應，做完再補上結果
+      if (!i.replied && !i.deferred) await i.deferReply({ ephemeral: true });
       if (t.card_channel_id && act === 'end') {
         // 結單：名片專區留著（陪玩可能事後才報單，要看得到訂單編號），只鎖發言改名
         await lockCardChannel(i.guild, t);
@@ -1823,9 +1839,7 @@ async function handleInteraction(i) {
       } else if (act !== 'end') {
         // 公開單沒有獨立頻道，單純「關閉名片專區」時才收回陪玩的檢視權限；
         // 結單不收（陪玩常常事後才報單，要留著看訂單編號），只在下面鎖發言
-        for (const rid of getSetting('role_player', '', i.guildId).split(',').map(x => x.trim()).filter(Boolean)) {
-          if (i.channel) await i.channel.permissionOverwrites.edit(rid, { ViewChannel: false }).catch(() => {});
-        }
+        await editExisting(i.channel, playerRoleIds(i.guildId), { ViewChannel: false });
       }
       // 結單：老闆的包廂搬到結單分類、鎖住發言、改名歸檔，紀錄保留供日後查閱
       if (act === 'end') {
@@ -1837,9 +1851,7 @@ async function handleInteraction(i) {
           const parent = getSetting('category_order_closed', '', i.guildId)
                       || getSetting('category_ticket', '', i.guildId);
           if (parent) await boss.setParent(parent, { lockPermissions: false }).catch(() => {});
-          for (const rid of [t.customer_id, ...getSetting('role_player', '', i.guildId).split(',').map(x => x.trim())]) {
-            if (rid) await boss.permissionOverwrites.edit(rid, { SendMessages: false }).catch(() => {});
-          }
+          await editExisting(boss, [t.customer_id, ...playerRoleIds(i.guildId)], { SendMessages: false });
           await boss.setName(archivedName(boss, t, '已結單')).catch(() => {});
           await boss.send(closedNotice(i.guildId, tid)).catch(() => {});
         }
@@ -1848,8 +1860,9 @@ async function handleInteraction(i) {
         ? '訂單已結束，頻道已移到結單分類並鎖定發言，紀錄保留供日後查閱。'
         : '名片專區已關閉，陪玩不會再看到這張單。';
       // 按鈕若按在名片專區，那個頻道已經被刪掉了，一律用 ephemeral 回覆才不會送到死掉的頻道
-      if (i.replied || i.deferred) return;   // 上面已經先回過了
-      return eph(i, ok(i.guildId, '已關閉', msg + (inCardChannel ? '\n（本頻道已移除，紀錄已存到老闆的包廂）' : '')));
+      if (i.replied) return;   // 上面已經先回過了
+      const done = { embeds: [ok(i.guildId, '已關閉', msg + (inCardChannel ? '\n（本頻道已移除，紀錄已存到老闆的包廂）' : ''))] };
+      return i.editReply(done).catch(() => {});   // 頻道若已被刪，回覆送不出去也無妨
     }
 
   }
@@ -1902,8 +1915,10 @@ async function handleInteraction(i) {
     if (!t) return eph(i, err(i.guildId, '查無此傳票。'));
     if (!isCS(i.member)) return denyEph(i, '只有客服／管理員可以關閉訂單。');
 
+    // 結單要改分類、權限、名稱，常常超過 3 秒；先佔住回應再做，否則客服會看到「此交互失敗」
+    await i.deferReply();
     await closeTicket(i.guild, i.channel, t);
-    return i.reply(closedNotice(i.guildId, tid));
+    return i.editReply(closedNotice(i.guildId, tid));
   }
 
   // ---- 考核入職 ----
@@ -2034,4 +2049,6 @@ module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEm
                    // 派單規則改動很頻繁，匯出讓 scripts/check-routes.js 可以逐一驗證會標到誰
                    routedPlayerRoles, wantRankOptions,
                    // 訂單卡的欄位也常改，一併匯出方便驗證顯示內容
-                   draftPayload, publishedPayload, recruitEmbed };
+                   draftPayload, publishedPayload, recruitEmbed,
+                   // 結單改權限的邏輯，測試用
+                   editExisting };

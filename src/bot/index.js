@@ -10,8 +10,47 @@ const PREFIX = process.env.CMD_PREFIX || '!';
 let client = null;
 let ready = false;
 
+// ---- Discord 限流 ----
+// @discordjs/rest 收到 429 的預設行為是「照 retry_after 睡完再送」，不會報錯。
+// 2026-09-16 Discord 對建立頻道回了約 16 小時的 retry_after，下單、考核、開頻道
+// 全部默默卡住一整晚：使用者只看到「機器人思考中…」，連按十幾次；限流一解除，
+// 排隊的請求一口氣全部執行，建出一堆沒人在等的頻道，而且單號全部撞在同一號。
+// 改成：等太久的直接拋錯，讓使用者立刻知道要晚點再試。
+const REJECT_AFTER_MS = {
+  // 建頻道是使用者當下在等的動作，15 秒就該放棄
+  '/guilds/:id/channels': 15_000
+};
+// 其餘路由維持原本「等完再送」的行為：頻道改名的 sublimit 最多等 10 分鐘，
+// 門檻放在 11 分鐘，改名照舊會成功；只擋掉像這次這種動輒數小時的異常等待。
+const REJECT_DEFAULT_MS = 660_000;
+// 真正要等多久不一定寫在 timeToReset：Discord 對建頻道的隱藏 sublimit 不帶重置標頭，
+// timeToReset 會算成 0，等待時間藏在 retryAfter／sublimitTimeout（這次就是這種）。三個取最大。
+const waitOf = d => Math.max(d.timeToReset || 0, d.retryAfter || 0, d.sublimitTimeout || 0);
+function rejectOnRateLimit(d) {
+  const wait = waitOf(d);
+  const reject = wait > (REJECT_AFTER_MS[d.route] ?? REJECT_DEFAULT_MS);
+  // 這個函式每次收到 429 都會被問，比 'rateLimited' 事件可靠（sublimit 那條路不發事件）
+  if (wait >= 5000) {
+    console.warn(`Discord 限流：${d.method} ${d.route} 需等 ${Math.round(wait / 1000)} 秒`
+      + `${d.global ? '（全域）' : ''}${reject ? '，已直接回報錯誤' : '，排隊等待中'}`);
+  }
+  return reject;
+}
+
+const mins = ms => Math.max(1, Math.ceil(ms / 60000));
+/** 把限流錯誤轉成看得懂的訊息；不是限流就回 null */
+function rateLimitMessage(e) {
+  if (!e || !String(e.name || '').startsWith('RateLimitError')) return null;
+  const wait = mins(waitOf(e));
+  const what = e.route === '/guilds/:id/channels' ? '建立頻道' : '這個動作';
+  const human = wait >= 120 ? `約 ${Math.round(wait / 60)} 小時` : `約 ${wait} 分鐘`;
+  return `Discord 暫時限制機器人${what}（${human}後解除），請稍後再試。\n`
+       + '這是 Discord 端的保護機制，不是你的操作有問題，也不用重複點。';
+}
+
 function build() {
   return new Client({
+    rest: { rejectOnRateLimit },
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
@@ -145,6 +184,7 @@ async function start() {
     startCardCacheCleaner();
   });
 
+
   client.on(Events.GuildCreate, async g => {
     upsertGuild(g.id, g.name);
     G.seedGifts(g.id);
@@ -179,9 +219,12 @@ async function start() {
       } else return;
       logAction({ ...base, detail, status: i._denied ? 'deny' : 'ok', ms: Date.now() - t0 });
     } catch (e) {
-      console.error('互動錯誤：', e);
-      logAction({ ...base, detail: `${detail}${detail ? ' | ' : ''}錯誤：${e.message}`, status: 'fail', ms: Date.now() - t0 });
-      const payload = { embeds: [err(i.guildId, e.message || '發生未知錯誤')], ephemeral: true };
+      const limited = rateLimitMessage(e);
+      if (limited) console.warn(`互動被限流擋下：${action}（${e.route}，${Math.round(waitOf(e) / 1000)} 秒）`);
+      else console.error('互動錯誤：', e);
+      const msg = limited || e.message || '發生未知錯誤';
+      logAction({ ...base, detail: `${detail}${detail ? ' | ' : ''}錯誤：${limited ? '限流' : e.message}`, status: 'fail', ms: Date.now() - t0 });
+      const payload = { embeds: [err(i.guildId, msg)], ephemeral: true };
       if (i.deferred || i.replied) await i.followUp(payload).catch(() => {});
       else await i.reply(payload).catch(() => {});
     }
@@ -217,7 +260,8 @@ async function start() {
       // 權限相關的錯誤另外標記，方便後台過濾誰在踩紅線
       const denied = /權限|僅限|只有/.test(e.message || '');
       logAction({ ...base, detail: `${args}${args ? ' | ' : ''}${e.message}`, status: denied ? 'deny' : 'fail', ms: Date.now() - t0 });
-      await msg.reply({ embeds: [err(msg.guild.id, e.message || '指令執行失敗')] }).catch(() => {});
+      await msg.reply({ embeds: [err(msg.guild.id, rateLimitMessage(e) || e.message || '指令執行失敗')] })
+        .catch(() => {});
     }
   });
 
@@ -235,5 +279,6 @@ module.exports = {
   getClient: () => client,
   refreshRoster,
   registerFor,
-  activeGuildIds
-};
+  activeGuildIds,
+  // 測試用：限流判斷與訊息
+  rejectOnRateLimit, rateLimitMessage };
