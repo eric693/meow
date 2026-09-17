@@ -868,6 +868,9 @@ Pages.settings = async view => {
           <option value="1" ${v.voice_room_private !== '0' ? 'selected' : ''}>私人（只有老闆、客服與管理看得到，陪玩由客服人工拉入）</option>
           <option value="0" ${v.voice_room_private === '0' ? 'selected' : ''}>公開（所有人都看得到也進得去）</option>
         </select></label>
+        <label class="f"><span>保留幾間待用語音房（0＝不保留，人走光就刪）</span>
+          <input name="voice_room_pool" type="number" min="0" max="10" value="${UI.esc(v.voice_room_pool ?? '3')}"
+            placeholder="3"></label>
       </div>
       <h4 style="margin:14px 0 6px">下單選單選項（逗號分隔，留空用預設）</h4>
       <div class="grid c2">
