@@ -8,6 +8,7 @@ const { isCS } = require('./perm');
 const { checkoutMessage } = require('../util/checkout');
 const { helpEmbed } = require('../util/help');
 const panels = require('./panels');
+const HG = require('../util/hugo');
 
 const firstId = (msg, argStr) => {
   const m = msg.mentions.users.first();
@@ -99,6 +100,47 @@ const handlers = {
       : '目前沒有人持有雨幣。';
     await msg.reply({ embeds: [money(msg.guild.id, '🏦 全服雨幣金庫總覽',
       body.slice(0, 3800) + `\n\n────────────────\n流通總額 \`${n(t.c)}\` 雨幣・持有 ${t.n} 位`)] });
+  },
+
+  // ---------- 雨果幣 ----------
+  async 查詢雨果幣(msg, args) {
+    const target = firstId(msg, args) || msg.author.id;
+    if (target !== msg.author.id && !isCS(msg.member)) throw new Error('只有客服／管理員可以查詢他人。');
+    const bal = HG.balanceOf(msg.guild.id, target);
+    const rows = HG.history(msg.guild.id, target, 15);
+    const LABEL = { topup: '儲值', deduct: '扣款', bet: 'BINGO 下注', win: 'BINGO 派彩', adjust: '調整' };
+    const list = rows.length
+      ? rows.map(r => `\`${r.created_at.slice(5, 16)}\`　${(LABEL[r.kind] || r.kind).padEnd(4)}　`
+          + `**${r.delta > 0 ? '+' : ''}${n(r.delta)}**${r.reason ? `　${r.reason}` : ''}`).join('\n')
+      : '目前沒有任何紀錄。';
+    await msg.reply({ embeds: [money(msg.guild.id, '🍊 雨果幣查詢', null, [
+      { name: '👤 查詢對象', value: mention(target) },
+      { name: '💰 目前餘額', value: `\`${n(bal)}\` 雨果幣`, inline: true },
+      { name: '📜 最近紀錄（15 筆）', value: list.slice(0, 1024) }
+    ])] });
+  },
+
+  async 雨果幣總覽(msg) {
+    if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    const rows = HG.holders(msg.guild.id);
+    const st = HG.stats(msg.guild.id);
+    // 人多的時候 embed 欄位塞不下，超過就只列前面幾位並註明
+    const lines = [];
+    let used = 0;
+    for (const [idx, r] of rows.entries()) {
+      const line = `${idx + 1}. ${mention(r.user_id)}　\`${n(r.balance)}\``;
+      if (used + line.length > 950) { lines.push(`…另有 ${rows.length - idx} 位未列出`); break; }
+      lines.push(line); used += line.length + 1;
+    }
+    await msg.reply({ embeds: [money(msg.guild.id, '🍊 雨果幣總覽', null, [
+      { name: '👥 持有人數', value: `${n(st.holders)} 位`, inline: true },
+      { name: '💰 流通總量', value: `\`${n(st.circulating)}\``, inline: true },
+      { name: '🎰 已玩局數', value: `${n(st.rounds)} 局`, inline: true },
+      { name: '📥 累計儲值', value: `\`${n(st.topup)}\``, inline: true },
+      { name: '📤 累計扣款', value: `\`${n(st.deduct)}\``, inline: true },
+      { name: '🏦 賓果淨收', value: `\`${n(st.bet - st.win)}\``, inline: true },
+      { name: '📋 持有名單', value: lines.join('\n') || '目前沒有人持有雨果幣' }
+    ])] });
   },
 
   async 雨幣查詢(msg, args) {

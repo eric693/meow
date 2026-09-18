@@ -410,3 +410,40 @@ CREATE TABLE IF NOT EXISTS coupon_uses (
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_order ON coupon_uses (guild_id, order_no);
+
+-- ---------- 雨果幣（BINGO 專用，與雨幣完全分開的另一本帳） ----------
+CREATE TABLE IF NOT EXISTS hugo_wallet (
+  guild_id   TEXT NOT NULL,                   -- 存 org_id，整個集團共用一本
+  user_id    TEXT NOT NULL,
+  balance    INTEGER NOT NULL DEFAULT 0,
+  name       TEXT NOT NULL DEFAULT '',        -- 方便總覽顯示，不必每次去查 customers
+  updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  UNIQUE (guild_id, user_id)
+);
+
+-- 雨果幣流水：餘額一定要跟這張表的總和對得起來
+CREATE TABLE IF NOT EXISTS hugo_tx (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id   TEXT NOT NULL,
+  user_id    TEXT NOT NULL,
+  delta      INTEGER NOT NULL,                -- 正＝進帳，負＝扣款
+  kind       TEXT NOT NULL DEFAULT 'adjust',  -- topup 儲值／deduct 扣款／bet 下注／win 派彩
+  reason     TEXT NOT NULL DEFAULT '',
+  ref        TEXT NOT NULL DEFAULT '',        -- 對應的局號
+  operator   TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_hugo_tx_user ON hugo_tx (guild_id, user_id, id);
+
+-- 每一局賓果的結果，對帳與稽核用
+CREATE TABLE IF NOT EXISTS bingo_rounds (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id   TEXT NOT NULL,
+  user_id    TEXT NOT NULL,
+  bet        INTEGER NOT NULL,
+  lines      INTEGER NOT NULL DEFAULT 0,
+  payout     INTEGER NOT NULL DEFAULT 0,      -- 拿回多少（含本金）
+  grid       TEXT NOT NULL DEFAULT '',        -- 25 格的圖案，逗號分隔
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_bingo_rounds_user ON bingo_rounds (guild_id, user_id, id);

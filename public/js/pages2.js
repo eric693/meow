@@ -808,6 +808,23 @@ Pages.settings = async view => {
         <label class="f"><span>考官身分組（可多個，逗號分隔；留空自動抓名稱含「考官」的身分組）</span><input name="role_examiner" value="${UI.esc(v.role_examiner || '')}" placeholder="喚雨技術考官,喚雨娛樂考官,喚雨歌手考官"></label>
       </div>
     </div>
+    <div class="card"><h3>BINGO（雨果幣）</h3>
+      <div class="muted" style="margin-bottom:8px">雨果幣是遊戲專用的另一本帳，跟雨幣完全分開。改動立即生效，不用重啟。</div>
+      <div class="grid c2">
+        <label class="f"><span>最低下注</span>
+          <input name="bingo_min_bet" type="number" min="1" value="${UI.esc(v.bingo_min_bet ?? '500')}" placeholder="500"></label>
+        <label class="f"><span>中獎機率（0 線,1 線,2 線,3 線）</span>
+          <input name="bingo_odds" value="${UI.esc(v.bingo_odds || '')}" placeholder="40,46,12,2"></label>
+        <label class="f"><span>拿回倍數（1 線,2 線,3 線；含本金）</span>
+          <input name="bingo_payouts" value="${UI.esc(v.bingo_payouts || '')}" placeholder="1,2.5,8"></label>
+        <label class="f"><span>圖案（12 種，逗號分隔；可填 &lt;:名稱:ID&gt; 自訂表情）</span>
+          <input name="bingo_symbols" value="${UI.esc(v.bingo_symbols || '')}" placeholder="留空＝用內建的 12 個 emoji"></label>
+      </div>
+      <div class="muted" style="margin-top:6px">
+        算法：把每個線數的機率乘上倍數再加總，就是玩家平均拿回下注的幾成，低於 100% 店家才賺。
+        預設 40,46,12,2 搭 1,2.5,8＝玩家平均拿回 92%（店家抽 8%）。改之前請自己算一次。</div>
+    </div>
+
     <div class="card"><h3>頻道與分類</h3>
       <div class="grid c2">
         <label class="f"><span>下單頻道分類</span><select name="category_ticket">${opts(res.categories, v.category_ticket)}</select></label>

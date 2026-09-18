@@ -10,6 +10,7 @@ const G = require('../util/gifts');
 const { checkoutMessage } = require('../util/checkout');
 const { parseSlots } = require('../util/slots');
 const S = require('../util/session');
+const HG = require('../util/hugo');
 const CF = require('../util/checkout-flow');
 const GF = require('../util/gift-flow');
 const { isCS, isPlayer } = require('./perm');
@@ -1127,6 +1128,48 @@ function lotteryEmbed(guildId, { prize, coupon }) {
   });
 }
 
+/**
+ * BINGO 結果卡片。按鈕帶上玩家 ID，別人按不動別人的局。
+ * 下注金額也放進 customId，「再玩一次」才知道要押多少。
+ */
+function bingoPayload(guildId, r, userId) {
+  const tag = ['槓龜', '一條線', '兩條線', '三條線'][r.lines] || `${r.lines} 條線`;
+  const desc = [
+    HG.renderGrid(r.grid),
+    '',
+    `🎲 下注 \`${n(r.bet)}\`　🎯 **${tag}**`,
+    r.payout > 0 ? `🎁 拿回 \`${n(r.payout)}\`（${r.net >= 0 ? '淨賺' : '淨賠'} \`${n(Math.abs(r.net))}\`）`
+                 : '💸 這局沒有連線',
+    `💰 餘額 \`${n(r.balance)}\` 雨果幣`
+  ].join('\n');
+  return {
+    embeds: [emb(guildId, {
+      title: '🎰 BINGO',
+      desc,
+      color: r.lines > 0 ? COLOR.ok : COLOR.main,
+      footer: `第 ${r.round} 局`
+    })],
+    components: [row(
+      btn(`bingo:again:${r.bet}:${userId}`, `再玩一次（${n(r.bet)}）`, ButtonStyle.Primary, '🔁'),
+      btn(`bingo:double:${r.bet * 2}:${userId}`, `雙倍遊玩（${n(r.bet * 2)}）`, ButtonStyle.Danger, '🔥')
+    )],
+    ephemeral: true
+  };
+}
+
+/** 玩一局並回覆（slash 與按鈕共用）。餘額不足、低於最低下注都在這裡擋。 */
+async function playBingoAndReply(i, bet, isButton = false) {
+  let r;
+  try { r = HG.playBingo(i.guildId, i.user.id, bet, i.user.username); }
+  catch (e) {
+    const payload = { embeds: [err(i.guildId, e.message)], ephemeral: true };
+    return isButton ? i.reply(payload) : i.reply(payload);
+  }
+  const payload = bingoPayload(i.guildId, r, i.user.id);
+  // 按鈕：原本那張卡留著當紀錄，新的一局另外發一張
+  return isButton ? i.reply(payload) : i.reply(payload);
+}
+
 async function handleInteraction(i) {
   if (i.isAutocomplete()) return;
   const id = i.customId || '';
@@ -1979,6 +2022,14 @@ async function handleInteraction(i) {
     return setTimeout(() => i.channel.delete().catch(() => {}), 5000);
   }
 
+  // ---- BINGO ----
+  if (id.startsWith('bingo:')) {
+    const [, act, betRaw, owner] = id.split(':');
+    if (owner && owner !== i.user.id)
+      return denyEph(i, '這是別人的牌局，請自己用 `/bingo` 開一局。');
+    return playBingoAndReply(i, Number(betRaw), true);
+  }
+
   // ---- 喚雨星象：抽籤（不限次數）----
   if (id === 'lot:draw') {
     const L = require('../util/lottery');
@@ -2051,4 +2102,6 @@ module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEm
                    // 訂單卡的欄位也常改，一併匯出方便驗證顯示內容
                    draftPayload, publishedPayload, recruitEmbed,
                    // 結單改權限的邏輯，測試用
-                   editExisting };
+                   editExisting,
+                   // BINGO（slash 與按鈕共用同一套流程）
+                   playBingoAndReply, bingoPayload };

@@ -49,6 +49,20 @@ const commands = [
     .addIntegerOption(o => o.setName('金額').setDescription('輸入扣除數量 (純數字)').setRequired(true).setMinValue(1))
     .addStringOption(o => o.setName('原因').setDescription('例：重複儲值更正')),
 
+  b('儲值雨果幣', '為金主手動增加雨果幣（BINGO 專用，與雨幣分開）')
+    .addUserOption(o => o.setName('儲值對象').setDescription('請選擇要儲值的金主').setRequired(true))
+    .addIntegerOption(o => o.setName('儲值金額').setDescription('輸入儲值數量 (純數字)').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('原因').setDescription('例：活動贈送、轉帳購買')),
+
+  b('扣款雨果幣', '手動扣除金主的雨果幣')
+    .addUserOption(o => o.setName('扣款對象').setDescription('請選擇要扣款的金主').setRequired(true))
+    .addIntegerOption(o => o.setName('扣款金額').setDescription('輸入扣除數量 (純數字)').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('原因').setDescription('例：重複發放更正')),
+
+  b('bingo', '用雨果幣玩賓果，5×5 連線就有獎勵')
+    .addIntegerOption(o => o.setName('下注金額')
+      .setDescription('最低 500 雨果幣').setRequired(true).setMinValue(1)),
+
   b('提領', '發放薪資給陪玩，並從其可提領帳戶中扣除')
     .addStringOption(o => o.setName('陪玩').setDescription('輸入代號／藝名／DC 名稱，會自動跳出選項').setRequired(true).setAutocomplete(true))
     .addIntegerOption(o => o.setName('金額').setDescription('發放金額').setRequired(true).setMinValue(1))

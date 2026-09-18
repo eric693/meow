@@ -11,6 +11,7 @@ const G = require('../util/gifts');
 const R = require('../util/reports');
 const { isCS } = require('./perm');
 const { helpEmbed } = require('../util/help');
+const HG = require('../util/hugo');
 const { getSetting } = require('../db');
 
 /** 把金流紀錄發到「金流紀錄頻道」；沒設定就退回後台財務頻道，再沒有就發在當前頻道 */
@@ -136,6 +137,40 @@ const handlers = {
       desc: `**經辦人：** ${mention(i.user.id)}\n**對象：** ${mention(u.id)}\n`
           + `**扣除：** \`${n(amt)}\` 雨幣\n**剩餘餘額：** \`${n(bal)}\` 雨幣`
     }));
+  },
+
+  // ---------- 雨果幣 / BINGO ----------
+  async 儲值雨果幣(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('儲值對象');
+    const amt = i.options.getInteger('儲值金額');
+    const reason = i.options.getString('原因') || '人工儲值';
+    const after = HG.addHugo(i.guildId, u.id, amt,
+      { kind: 'topup', reason, operator: i.user.tag, name: u.username });
+    audit(i.user.tag, '儲值雨果幣', `${u.id} +${amt}`, i.guildId);
+    return i.reply({ content: `✅ **已儲值 \`${n(amt)}\` 雨果幣給 ${mention(u.id)}**，目前餘額 \`${n(after)}\`。`,
+      ephemeral: true });
+  },
+
+  async 扣款雨果幣(i) {
+    if (!isCS(i.member)) return deny(i);
+    const u = i.options.getUser('扣款對象');
+    const amt = i.options.getInteger('扣款金額');
+    const reason = i.options.getString('原因') || '人工扣款';
+    let after;
+    try {
+      after = HG.addHugo(i.guildId, u.id, -amt,
+        { kind: 'deduct', reason, operator: i.user.tag, name: u.username });
+    } catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
+    audit(i.user.tag, '扣款雨果幣', `${u.id} -${amt}`, i.guildId);
+    return i.reply({ content: `✅ **已扣除 ${mention(u.id)} \`${n(amt)}\` 雨果幣**，目前餘額 \`${n(after)}\`。`,
+      ephemeral: true });
+  },
+
+  async bingo(i) {
+    const bet = i.options.getInteger('下注金額');
+    const P = require('./panels');
+    return P.playBingoAndReply(i, bet);
   },
 
   async 提領(i) {
