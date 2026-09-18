@@ -167,6 +167,19 @@ const handlers = {
       ephemeral: true });
   },
 
+  async 兌換bingo(i) {
+    if (!isCS(i.member)) return deny(i);
+    const id = i.options.getInteger('局號');
+    let r;
+    try { r = HG.redeemRound(i.guildId, id, i.user.tag); }
+    catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
+    const tag = ['', '一條線', '兩條線', '三條線'][r.lines] || `${r.lines} 條線`;
+    // 公開回覆：玩家看得到自己的獎勵已經兌換，之後也不會再有人拿同一張截圖來換
+    return i.reply({ embeds: [ok(i.guildId, '🎁 BINGO 獎勵已兌換',
+      `**局號：** #${r.id}\n**玩家：** ${mention(r.user_id)}\n**結果：** ${tag}（下注 \`${n(r.bet)}\`）\n`
+      + `**獎勵價值：** \`${n(r.payout)}\`\n**經辦：** ${mention(i.user.id)}`)] });
+  },
+
   async bingo(i) {
     const bet = i.options.getInteger('下注金額');
     const P = require('./panels');

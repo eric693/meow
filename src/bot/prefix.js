@@ -117,7 +117,16 @@ const handlers = {
     await msg.reply({ embeds: [money(msg.guild.id, '🍊 雨果幣查詢', null, [
       { name: '👤 查詢對象', value: mention(target) },
       { name: '💰 目前餘額', value: `\`${n(bal)}\` 雨果幣`, inline: true },
-      { name: '📜 最近紀錄（15 筆）', value: list.slice(0, 1024) }
+      { name: '📜 最近紀錄（15 筆）', value: list.slice(0, 1024) },
+      ...(() => {
+        const todo = HG.unredeemed(msg.guild.id, target);
+        if (!todo.length) return [];
+        const shown = todo.slice(0, 10).map(r =>
+          `#${r.id}　${['', '一條線', '兩條線', '三條線'][r.lines]}　價值 \`${n(r.payout)}\`　${r.created_at.slice(5, 16)}`);
+        if (todo.length > 10) shown.push(`…另有 ${todo.length - 10} 局`);
+        return [{ name: `🎁 還沒兌換的中獎局（${todo.length} 局，共 ${n(todo.reduce((a, r) => a + r.payout, 0))}）`,
+                  value: shown.join('\n') }];
+      })()
     ])] });
   },
 
@@ -140,7 +149,8 @@ const handlers = {
       { name: '📥 累計儲值', value: `\`${n(st.topup)}\``, inline: true },
       { name: '📤 累計扣款', value: `\`${n(-st.deduct)}\``, inline: true },
       { name: '🎲 累計下注', value: `\`${n(st.bet)}\``, inline: true },
-      { name: '🎁 開出的獎勵', value: `${n(st.wins)} 局中獎，價值 \`${n(st.rewards)}\`（需找客服兌換）` },
+      { name: '🎁 開出的獎勵', value: `${n(st.wins)} 局中獎，價值 \`${n(st.rewards)}\``, inline: true },
+      { name: '⏳ 待兌換', value: `${n(st.pending.c)} 局，價值 \`${n(st.pending.v)}\``, inline: true },
       { name: '📋 持有名單', value: lines.join('\n') || '目前沒有人持有雨果幣' }
     ])] });
   },

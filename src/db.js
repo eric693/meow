@@ -67,6 +67,11 @@ ensureColumns('orders', [
 // 獨家／特約陪玩的分潤成數可以跟一般陪玩不同；-1 代表沿用系統設定的全域成數
 ensureColumns('staff', [['share_rate', 'INTEGER NOT NULL DEFAULT -1']]);
 ensureColumns('coin_tx', [['proof', "TEXT NOT NULL DEFAULT ''"]]);
+// BINGO 中獎局的兌換紀錄：同一局只能兌換一次
+ensureColumns('bingo_rounds', [
+  ['redeemed_at', "TEXT NOT NULL DEFAULT ''"],
+  ['redeemed_by', "TEXT NOT NULL DEFAULT ''"]
+]);
 ensureColumns('audit_logs', [
   ['actor_id',   "TEXT NOT NULL DEFAULT ''"],
   ['source',     "TEXT NOT NULL DEFAULT 'system'"],

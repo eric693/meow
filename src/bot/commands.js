@@ -59,6 +59,9 @@ const commands = [
     .addIntegerOption(o => o.setName('扣款金額').setDescription('輸入扣除數量 (純數字)').setRequired(true).setMinValue(1))
     .addStringOption(o => o.setName('原因').setDescription('例：重複發放更正')),
 
+  b('兌換bingo', '客服兌換 BINGO 中獎局的獎勵（同一局只能兌換一次）')
+    .addIntegerOption(o => o.setName('局號').setDescription('中獎訊息上的局號，例：20399').setRequired(true).setMinValue(1)),
+
   b('bingo', '用雨果幣玩賓果，5×5 連線可找客服兌換獎勵')
     .addIntegerOption(o => o.setName('下注金額')
       .setDescription('最低 500 雨果幣').setRequired(true).setMinValue(1)),

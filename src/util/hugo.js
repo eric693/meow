@@ -57,7 +57,9 @@ function stats(guildId) {
     rounds: db.prepare('SELECT COUNT(*) c FROM bingo_rounds WHERE guild_id=?').get(gid).c,
     // 開出去的獎勵價值（要找客服兌換的，不是雨果幣）
     rewards: db.prepare('SELECT COALESCE(SUM(payout),0) v FROM bingo_rounds WHERE guild_id=? AND payout > 0').get(gid).v,
-    wins: db.prepare('SELECT COUNT(*) c FROM bingo_rounds WHERE guild_id=? AND lines > 0').get(gid).c
+    wins: db.prepare('SELECT COUNT(*) c FROM bingo_rounds WHERE guild_id=? AND lines > 0').get(gid).c,
+    pending: db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(payout),0) v FROM bingo_rounds
+                         WHERE guild_id=? AND lines > 0 AND redeemed_at=''`).get(gid)
   };
 }
 
@@ -177,6 +179,28 @@ function playBingo(guildId, userId, bet, name = '') {
   return { round, bet, lines, reward: payout, grid, balance: balanceOf(gid, userId) };
 }
 
+/**
+ * 客服兌換中獎局的獎勵。同一局只能兌換一次——截圖可以複製，局號不行。
+ * 用 UPDATE ... WHERE redeemed_at='' 一次完成檢查與標記，兩位客服同時按也只會成功一次。
+ */
+function redeemRound(guildId, roundId, operator) {
+  const gid = orgOf(guildId);
+  const r = db.prepare('SELECT * FROM bingo_rounds WHERE guild_id=? AND id=?').get(gid, roundId);
+  if (!r) throw new Error(`查無局號 #${roundId}`);
+  if (!r.lines) throw new Error(`局號 #${roundId} 沒有中獎，沒有獎勵可兌換`);
+  if (r.redeemed_at) throw new Error(`局號 #${roundId} 已經在 ${r.redeemed_at} 由 ${r.redeemed_by} 兌換過了`);
+  const done = db.prepare(`UPDATE bingo_rounds SET redeemed_at=datetime('now','localtime'), redeemed_by=?
+                           WHERE guild_id=? AND id=? AND redeemed_at=''`).run(operator, gid, roundId);
+  if (!done.changes) throw new Error(`局號 #${roundId} 剛剛已被兌換`);
+  audit(operator, '兌換 BINGO 獎勵', `#${roundId} ${r.user_id} ${r.lines} 線 價值 ${r.payout}`, gid, { source: 'game' });
+  return db.prepare('SELECT * FROM bingo_rounds WHERE id=?').get(roundId);
+}
+
+/** 某人還沒兌換的中獎局 */
+const unredeemed = (guildId, userId) =>
+  db.prepare(`SELECT * FROM bingo_rounds WHERE guild_id=? AND user_id=? AND lines > 0 AND redeemed_at=''
+              ORDER BY id DESC`).all(orgOf(guildId), userId);
+
 // 還沒翻開的牌
 const CARD_BACK = '⬛';
 
@@ -218,6 +242,6 @@ const describeLines = grid => {
 
 module.exports = {
   balanceOf, addHugo, history, holders, stats,
-  playBingo, renderGrid, renderWinMap, winningCells, describeLines,
+  playBingo, redeemRound, unredeemed, renderGrid, renderWinMap, winningCells, describeLines,
   buildGrid, countLines, odds, payouts, minBet, symbols, LINES
 };

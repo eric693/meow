@@ -444,6 +444,8 @@ CREATE TABLE IF NOT EXISTS bingo_rounds (
   lines      INTEGER NOT NULL DEFAULT 0,
   payout     INTEGER NOT NULL DEFAULT 0,      -- 拿回多少（含本金）
   grid       TEXT NOT NULL DEFAULT '',        -- 25 格的圖案，逗號分隔
+  redeemed_at TEXT NOT NULL DEFAULT '',       -- 客服兌換獎勵的時間；空白＝還沒兌換
+  redeemed_by TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_bingo_rounds_user ON bingo_rounds (guild_id, user_id, id);
