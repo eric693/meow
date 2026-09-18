@@ -108,7 +108,8 @@ const handlers = {
     if (target !== msg.author.id && !isCS(msg.member)) throw new Error('只有客服／管理員可以查詢他人。');
     const bal = HG.balanceOf(msg.guild.id, target);
     const rows = HG.history(msg.guild.id, target, 15);
-    const LABEL = { topup: '儲值', deduct: '扣款', bet: 'BINGO 下注', win: 'BINGO 派彩', adjust: '調整' };
+    // win 只剩改版前的舊紀錄會出現；現在中獎不再自動發雨果幣
+    const LABEL = { topup: '儲值', deduct: '扣款', bet: 'BINGO 下注', win: 'BINGO 派彩（舊）', adjust: '調整' };
     const list = rows.length
       ? rows.map(r => `\`${r.created_at.slice(5, 16)}\`　${(LABEL[r.kind] || r.kind).padEnd(4)}　`
           + `**${r.delta > 0 ? '+' : ''}${n(r.delta)}**${r.reason ? `　${r.reason}` : ''}`).join('\n')
@@ -137,8 +138,9 @@ const handlers = {
       { name: '💰 流通總量', value: `\`${n(st.circulating)}\``, inline: true },
       { name: '🎰 已玩局數', value: `${n(st.rounds)} 局`, inline: true },
       { name: '📥 累計儲值', value: `\`${n(st.topup)}\``, inline: true },
-      { name: '📤 累計扣款', value: `\`${n(st.deduct)}\``, inline: true },
-      { name: '🏦 賓果淨收', value: `\`${n(st.bet - st.win)}\``, inline: true },
+      { name: '📤 累計扣款', value: `\`${n(-st.deduct)}\``, inline: true },
+      { name: '🎲 累計下注', value: `\`${n(st.bet)}\``, inline: true },
+      { name: '🎁 開出的獎勵', value: `${n(st.wins)} 局中獎，價值 \`${n(st.rewards)}\`（需找客服兌換）` },
       { name: '📋 持有名單', value: lines.join('\n') || '目前沒有人持有雨果幣' }
     ])] });
   },

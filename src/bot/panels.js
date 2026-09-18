@@ -1140,18 +1140,20 @@ function bingoPayload(guildId, r, userId) {
     fields.push({ name: '🟩 中獎位置', value: HG.renderWinMap(r.grid), inline: true });
     fields.push({ name: '📐 連線', value: HG.describeLines(r.grid).join('\n'), inline: true });
   }
+  // 中獎不會自動發雨果幣（雨果幣只能手動儲值），改成請玩家截圖找客服兌換
   const desc = [
     HG.renderGrid(r.grid),
     '',
     `🎲 下注 \`${n(r.bet)}\`　🎯 **${tag}**`,
-    r.payout > 0 ? `🎁 拿回 \`${n(r.payout)}\`（${r.net >= 0 ? '淨賺' : '淨賠'} \`${n(Math.abs(r.net))}\`）`
-                 : '💸 這局沒有連線',
-    `💰 餘額 \`${n(r.balance)}\` 雨果幣`
+    r.reward > 0
+      ? `🎁 **中獎！可兌換獎勵：價值 \`${n(r.reward)}\`**\n📸 請截圖本訊息，找客服兌換（局號 **#${r.round}**）`
+      : '💸 這局沒有連線',
+    `💰 剩餘 \`${n(r.balance)}\` 雨果幣`
   ].join('\n');
   return {
     embeds: [emb(guildId, {
       title: '🎰 BINGO',
-      desc,
+      desc: `${mention(userId)} 的牌局\n\n${desc}`,
       fields,
       color: r.lines > 0 ? COLOR.ok : COLOR.main,
       footer: `第 ${r.round} 局`
@@ -1159,8 +1161,7 @@ function bingoPayload(guildId, r, userId) {
     components: [row(
       btn(`bingo:again:${r.bet}:${userId}`, `再玩一次（${n(r.bet)}）`, ButtonStyle.Primary, '🔁'),
       btn(`bingo:double:${r.bet * 2}:${userId}`, `雙倍遊玩（${n(r.bet * 2)}）`, ButtonStyle.Danger, '🔥')
-    )],
-    ephemeral: true
+    )]
   };
 }
 
@@ -1169,11 +1170,10 @@ function bingoFrame(guildId, r, revealed) {
   return {
     embeds: [emb(guildId, {
       title: '🎰 BINGO 開牌中…',
-      desc: `${HG.renderGrid(r.grid, revealed)}\n\n🎲 下注 \`${n(r.bet)}\`　已開出 ${revealed}/5 列`,
+      desc: `${mention(r.userId)} 的牌局\n\n${HG.renderGrid(r.grid, revealed)}\n\n🎲 下注 \`${n(r.bet)}\`　已開出 ${revealed}/5 列`,
       footer: `第 ${r.round} 局`
     })],
-    components: [],
-    ephemeral: true
+    components: []
   };
 }
 
@@ -1182,14 +1182,15 @@ const sleep = ms => new Promise(res => setTimeout(res, ms));
 /**
  * 玩一局並回覆（slash 與按鈕共用）。
  *
- * 輸贏在 playBingo 裡就已經算好、錢也入帳了，後面的翻牌只是顯示：
- * 中途斷線、玩家把訊息關掉、機器人重啟，都不會影響他拿到的錢。
+ * 結果在 playBingo 裡就已經定案並記錄（注金已扣、獎勵價值已記下），後面的翻牌只是顯示：
+ * 中途斷線、訊息被刪、機器人重啟，都不會改變這局的結果。
  * 翻牌是「一列一列編輯同一則訊息」，Discord 對同一則訊息的編輯有頻率限制，
  * 所以一列約 0.8 秒、總共 6 次編輯；後台 bingo_animate 設 0 可以關掉直接開結果。
  */
 async function playBingoAndReply(i, bet) {
   let r;
-  try { r = HG.playBingo(i.guildId, i.user.id, bet, i.user.username); }
+  try { r = { ...HG.playBingo(i.guildId, i.user.id, bet, i.user.username), userId: i.user.id }; }
+  // 餘額不足這類錯誤只給本人看，不必公開
   catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
 
   const final = bingoPayload(i.guildId, r, i.user.id);
@@ -1204,7 +1205,7 @@ async function playBingoAndReply(i, bet) {
     await sleep(400);
     await i.editReply(final);
   } catch {
-    // 玩家把訊息關掉、或互動過期了：錢已經入帳，補一則結果就好
+    // 訊息被刪掉、或互動過期了：注金已經扣了、結果也記下了，補一則結果就好
     await i.followUp(final).catch(() => {});
   }
 }

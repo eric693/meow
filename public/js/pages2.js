@@ -809,13 +809,16 @@ Pages.settings = async view => {
       </div>
     </div>
     <div class="card"><h3>BINGO（雨果幣）</h3>
-      <div class="muted" style="margin-bottom:8px">雨果幣是遊戲專用的另一本帳，跟雨幣完全分開。改動立即生效，不用重啟。</div>
+      <div class="muted" style="margin-bottom:8px">
+        雨果幣是遊戲專用的另一本帳，跟雨幣完全分開，<b>只能由客服手動儲值</b>。
+        中獎不會自動發回雨果幣，只會顯示「可兌換獎勵價值＝注金 × 倍數」，由玩家截圖找客服兌換。
+        改動立即生效，不用重啟。</div>
       <div class="grid c2">
         <label class="f"><span>最低下注</span>
           <input name="bingo_min_bet" type="number" min="1" value="${UI.esc(v.bingo_min_bet ?? '500')}" placeholder="500"></label>
         <label class="f"><span>中獎機率（0 線,1 線,2 線,3 線）</span>
           <input name="bingo_odds" value="${UI.esc(v.bingo_odds || '')}" placeholder="40,46,12,2"></label>
-        <label class="f"><span>拿回倍數（1 線,2 線,3 線；含本金）</span>
+        <label class="f"><span>獎勵價值倍數（1 線,2 線,3 線；× 注金）</span>
           <input name="bingo_payouts" value="${UI.esc(v.bingo_payouts || '')}" placeholder="1,2.5,8"></label>
         <label class="f"><span>翻牌動畫</span><select name="bingo_animate">
           <option value="1" ${v.bingo_animate !== '0' ? 'selected' : ''}>開（一列一列翻開，約 5 秒）</option>
@@ -825,8 +828,8 @@ Pages.settings = async view => {
           <input name="bingo_symbols" value="${UI.esc(v.bingo_symbols || '')}" placeholder="留空＝用內建的 12 個 emoji"></label>
       </div>
       <div class="muted" style="margin-top:6px">
-        算法：把每個線數的機率乘上倍數再加總，就是玩家平均拿回下注的幾成，低於 100% 店家才賺。
-        預設 40,46,12,2 搭 1,2.5,8＝玩家平均拿回 92%（店家抽 8%）。改之前請自己算一次。</div>
+        算法：把每個線數的機率乘上倍數再加總，就是平均每下注 1 元會開出多少獎勵價值。
+        預設 40,46,12,2 搭 1,2.5,8＝平均開出注金的 92%。改之前請自己算一次。</div>
     </div>
 
     <div class="card"><h3>頻道與分類</h3>

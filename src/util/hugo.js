@@ -46,15 +46,18 @@ const holders = guildId =>
   db.prepare('SELECT * FROM hugo_wallet WHERE guild_id=? AND balance <> 0 ORDER BY balance DESC')
     .all(orgOf(guildId));
 
-/** 全服統計：流通量、儲值、派彩、店家淨收 */
+/** 全服統計：流通量、儲值、扣款、下注，以及開出的獎勵價值 */
 function stats(guildId) {
   const gid = orgOf(guildId);
   const sum = k => db.prepare('SELECT COALESCE(SUM(delta),0) v FROM hugo_tx WHERE guild_id=? AND kind=?').get(gid, k).v;
   return {
     circulating: db.prepare('SELECT COALESCE(SUM(balance),0) v FROM hugo_wallet WHERE guild_id=?').get(gid).v,
     holders: db.prepare('SELECT COUNT(*) c FROM hugo_wallet WHERE guild_id=? AND balance <> 0').get(gid).c,
-    topup: sum('topup'), deduct: sum('deduct'), bet: -sum('bet'), win: sum('win'),
-    rounds: db.prepare('SELECT COUNT(*) c FROM bingo_rounds WHERE guild_id=?').get(gid).c
+    topup: sum('topup'), deduct: sum('deduct'), bet: -sum('bet'),
+    rounds: db.prepare('SELECT COUNT(*) c FROM bingo_rounds WHERE guild_id=?').get(gid).c,
+    // 開出去的獎勵價值（要找客服兌換的，不是雨果幣）
+    rewards: db.prepare('SELECT COALESCE(SUM(payout),0) v FROM bingo_rounds WHERE guild_id=? AND payout > 0').get(gid).v,
+    wins: db.prepare('SELECT COUNT(*) c FROM bingo_rounds WHERE guild_id=? AND lines > 0').get(gid).c
   };
 }
 
@@ -130,7 +133,7 @@ function odds(guildId) {
   const w = raw.length === 4 ? raw : [40, 46, 12, 2];
   return w.reduce((a, b) => a + b, 0) > 0 ? w : [40, 46, 12, 2];
 }
-/** 各線數拿回多少倍（含本金）。預設 1 線退本、2 線 2.5 倍、3 線 8 倍＝店家抽 8% */
+/** 各線數的獎勵價值倍數（× 注金，找客服兌換，不發雨果幣）。預設 1 線 1 倍、2 線 2.5 倍、3 線 8 倍 */
 function payouts(guildId) {
   const raw = getSetting('bingo_payouts', '', orgOf(guildId)).split(',').map(Number);
   const p = raw.length === 3 && raw.every(n => Number.isFinite(n) && n >= 0) ? raw : [1, 2.5, 8];
@@ -146,8 +149,10 @@ function rollLines(guildId) {
 }
 
 /**
- * 玩一局：先扣注金，再依機率決定線數、產生盤面，中獎才派彩。
- * 扣款與派彩都走 addHugo，所以流水與餘額一定對得起來。
+ * 玩一局：扣注金，再依機率決定線數、產生盤面。
+ *
+ * 雨果幣只能靠客服手動儲值進帳，中獎不會自動發回雨果幣。
+ * 中獎只記下「可兌換的獎勵價值」（注金 × 倍數），由玩家截圖找客服兌換。
  */
 function playBingo(guildId, userId, bet, name = '') {
   const gid = orgOf(guildId);
@@ -163,16 +168,13 @@ function playBingo(guildId, userId, bet, name = '') {
 
   const round = db.transaction(() => {
     addHugo(gid, userId, -bet, { kind: 'bet', reason: `BINGO 下注 ${bet}`, operator: userId, name });
-    const info = db.prepare(`INSERT INTO bingo_rounds (guild_id, user_id, bet, lines, payout, grid)
-                             VALUES (?,?,?,?,?,?)`).run(gid, userId, bet, lines, payout, grid.join(','));
-    if (payout > 0) {
-      addHugo(gid, userId, payout, { kind: 'win', reason: `BINGO ${lines} 條線`, ref: String(info.lastInsertRowid), operator: 'system', name });
-    }
-    return info.lastInsertRowid;
+    // payout 欄位存的是「可兌換的獎勵價值」，不會入帳到雨果幣
+    return db.prepare(`INSERT INTO bingo_rounds (guild_id, user_id, bet, lines, payout, grid)
+                       VALUES (?,?,?,?,?,?)`).run(gid, userId, bet, lines, payout, grid.join(',')).lastInsertRowid;
   })();
 
-  audit(name || userId, 'BINGO', `下注 ${bet}／${lines} 線／拿回 ${payout}`, gid, { actorId: userId, source: 'game' });
-  return { round, bet, lines, payout, grid, balance: balanceOf(gid, userId), net: payout - bet };
+  audit(name || userId, 'BINGO', `下注 ${bet}／${lines} 線／可兌換獎勵 ${payout}`, gid, { actorId: userId, source: 'game' });
+  return { round, bet, lines, reward: payout, grid, balance: balanceOf(gid, userId) };
 }
 
 // 還沒翻開的牌
