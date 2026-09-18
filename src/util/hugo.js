@@ -175,14 +175,47 @@ function playBingo(guildId, userId, bet, name = '') {
   return { round, bet, lines, payout, grid, balance: balanceOf(gid, userId), net: payout - bet };
 }
 
-/** 盤面畫成 5 行文字 */
-const renderGrid = grid => {
+// 還沒翻開的牌
+const CARD_BACK = '⬛';
+
+/** 盤面畫成 5 行文字；revealed 是已翻開幾列（翻牌動畫用，預設全開） */
+const renderGrid = (grid, revealed = 5) => {
   const rows = [];
-  for (let r = 0; r < 5; r++) rows.push(grid.slice(r * 5, r * 5 + 5).join(''));
+  for (let r = 0; r < 5; r++) {
+    rows.push(r < revealed ? grid.slice(r * 5, r * 5 + 5).join('') : CARD_BACK.repeat(5));
+  }
   return rows.join('\n');
+};
+
+/** 落在中獎線上的格子 */
+const winningCells = grid => {
+  const hit = new Set();
+  for (const L of LINES) if (L.every(i => grid[i] === grid[L[0]])) L.forEach(i => hit.add(i));
+  return hit;
+};
+
+/** 中獎位置圖：連成線的格子標綠，其餘暗色，一眼看出是哪幾條 */
+const renderWinMap = grid => {
+  const hit = winningCells(grid);
+  const rows = [];
+  for (let r = 0; r < 5; r++) {
+    rows.push([0, 1, 2, 3, 4].map(c => (hit.has(r * 5 + c) ? '🟩' : '⬛')).join(''));
+  }
+  return rows.join('\n');
+};
+
+/** 中了哪幾條線，寫成人看得懂的字 */
+const describeLines = grid => {
+  const names = [];
+  LINES.forEach((L, k) => {
+    if (!L.every(i => grid[i] === grid[L[0]])) return;
+    names.push(k < 5 ? `第 ${k + 1} 橫列` : k < 10 ? `第 ${k - 4} 直行` : k === 10 ? '左上右下斜線' : '右上左下斜線');
+  });
+  return names;
 };
 
 module.exports = {
   balanceOf, addHugo, history, holders, stats,
-  playBingo, renderGrid, buildGrid, countLines, odds, payouts, minBet, symbols, LINES
+  playBingo, renderGrid, renderWinMap, winningCells, describeLines,
+  buildGrid, countLines, odds, payouts, minBet, symbols, LINES
 };

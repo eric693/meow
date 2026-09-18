@@ -1134,6 +1134,12 @@ function lotteryEmbed(guildId, { prize, coupon }) {
  */
 function bingoPayload(guildId, r, userId) {
   const tag = ['槓龜', '一條線', '兩條線', '三條線'][r.lines] || `${r.lines} 條線`;
+  const fields = [];
+  if (r.lines > 0) {
+    // 綠格子標出連成線的位置，再寫出是哪幾條，玩家不用自己對
+    fields.push({ name: '🟩 中獎位置', value: HG.renderWinMap(r.grid), inline: true });
+    fields.push({ name: '📐 連線', value: HG.describeLines(r.grid).join('\n'), inline: true });
+  }
   const desc = [
     HG.renderGrid(r.grid),
     '',
@@ -1146,6 +1152,7 @@ function bingoPayload(guildId, r, userId) {
     embeds: [emb(guildId, {
       title: '🎰 BINGO',
       desc,
+      fields,
       color: r.lines > 0 ? COLOR.ok : COLOR.main,
       footer: `第 ${r.round} 局`
     })],
@@ -1157,17 +1164,49 @@ function bingoPayload(guildId, r, userId) {
   };
 }
 
-/** 玩一局並回覆（slash 與按鈕共用）。餘額不足、低於最低下注都在這裡擋。 */
-async function playBingoAndReply(i, bet, isButton = false) {
+/** 翻牌中的畫面：翻開前 revealed 列，其餘蓋著；還沒翻完不給按鈕 */
+function bingoFrame(guildId, r, revealed) {
+  return {
+    embeds: [emb(guildId, {
+      title: '🎰 BINGO 開牌中…',
+      desc: `${HG.renderGrid(r.grid, revealed)}\n\n🎲 下注 \`${n(r.bet)}\`　已開出 ${revealed}/5 列`,
+      footer: `第 ${r.round} 局`
+    })],
+    components: [],
+    ephemeral: true
+  };
+}
+
+const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+/**
+ * 玩一局並回覆（slash 與按鈕共用）。
+ *
+ * 輸贏在 playBingo 裡就已經算好、錢也入帳了，後面的翻牌只是顯示：
+ * 中途斷線、玩家把訊息關掉、機器人重啟，都不會影響他拿到的錢。
+ * 翻牌是「一列一列編輯同一則訊息」，Discord 對同一則訊息的編輯有頻率限制，
+ * 所以一列約 0.8 秒、總共 6 次編輯；後台 bingo_animate 設 0 可以關掉直接開結果。
+ */
+async function playBingoAndReply(i, bet) {
   let r;
   try { r = HG.playBingo(i.guildId, i.user.id, bet, i.user.username); }
-  catch (e) {
-    const payload = { embeds: [err(i.guildId, e.message)], ephemeral: true };
-    return isButton ? i.reply(payload) : i.reply(payload);
+  catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
+
+  const final = bingoPayload(i.guildId, r, i.user.id);
+  if (getSetting('bingo_animate', '1', orgOf(i.guildId)) === '0') return i.reply(final);
+
+  await i.reply(bingoFrame(i.guildId, r, 0));
+  try {
+    for (let rowNo = 1; rowNo <= 5; rowNo++) {
+      await sleep(800);
+      await i.editReply(bingoFrame(i.guildId, r, rowNo));
+    }
+    await sleep(400);
+    await i.editReply(final);
+  } catch {
+    // 玩家把訊息關掉、或互動過期了：錢已經入帳，補一則結果就好
+    await i.followUp(final).catch(() => {});
   }
-  const payload = bingoPayload(i.guildId, r, i.user.id);
-  // 按鈕：原本那張卡留著當紀錄，新的一局另外發一張
-  return isButton ? i.reply(payload) : i.reply(payload);
 }
 
 async function handleInteraction(i) {
@@ -2027,7 +2066,7 @@ async function handleInteraction(i) {
     const [, act, betRaw, owner] = id.split(':');
     if (owner && owner !== i.user.id)
       return denyEph(i, '這是別人的牌局，請自己用 `/bingo` 開一局。');
-    return playBingoAndReply(i, Number(betRaw), true);
+    return playBingoAndReply(i, Number(betRaw));
   }
 
   // ---- 喚雨星象：抽籤（不限次數）----
@@ -2104,4 +2143,4 @@ module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEm
                    // 結單改權限的邏輯，測試用
                    editExisting,
                    // BINGO（slash 與按鈕共用同一套流程）
-                   playBingoAndReply, bingoPayload };
+                   playBingoAndReply, bingoPayload, bingoFrame };

@@ -817,6 +817,10 @@ Pages.settings = async view => {
           <input name="bingo_odds" value="${UI.esc(v.bingo_odds || '')}" placeholder="40,46,12,2"></label>
         <label class="f"><span>拿回倍數（1 線,2 線,3 線；含本金）</span>
           <input name="bingo_payouts" value="${UI.esc(v.bingo_payouts || '')}" placeholder="1,2.5,8"></label>
+        <label class="f"><span>翻牌動畫</span><select name="bingo_animate">
+          <option value="1" ${v.bingo_animate !== '0' ? 'selected' : ''}>開（一列一列翻開，約 5 秒）</option>
+          <option value="0" ${v.bingo_animate === '0' ? 'selected' : ''}>關（直接顯示結果）</option>
+        </select></label>
         <label class="f"><span>圖案（12 種，逗號分隔；可填 &lt;:名稱:ID&gt; 自訂表情）</span>
           <input name="bingo_symbols" value="${UI.esc(v.bingo_symbols || '')}" placeholder="留空＝用內建的 12 個 emoji"></label>
       </div>
