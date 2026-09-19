@@ -1146,8 +1146,8 @@ function bingoPayload(guildId, r, userId) {
     '',
     `🎲 下注 \`${n(r.bet)}\`　🎯 **${tag}**`,
     r.lines > 0
-      ? `🎁 **中獎！${tag}**\n📸 請截圖本訊息，找客服兌換獎勵（局號 **#${r.round}**）`
-      : '💸 這局沒有連線',
+      ? `**恭喜闆闆中獎！請找客服兌換獎勵（局號#${r.round}）**`
+      : '很可惜這次沒中獎，別灰心！再接再厲！',
     `💰 剩餘 \`${n(r.balance)}\` 雨果幣`
   ].join('\n');
   return {
