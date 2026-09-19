@@ -122,9 +122,9 @@ const handlers = {
         const todo = HG.unredeemed(msg.guild.id, target);
         if (!todo.length) return [];
         const shown = todo.slice(0, 10).map(r =>
-          `#${r.id}　${['', '一條線', '兩條線', '三條線'][r.lines]}　價值 \`${n(r.payout)}\`　${r.created_at.slice(5, 16)}`);
+          `#${r.id}　${['', '一條線', '兩條線', '三條線'][r.lines]}　${r.created_at.slice(5, 16)}`);
         if (todo.length > 10) shown.push(`…另有 ${todo.length - 10} 局`);
-        return [{ name: `🎁 還沒兌換的中獎局（${todo.length} 局，共 ${n(todo.reduce((a, r) => a + r.payout, 0))}）`,
+        return [{ name: `🎁 還沒兌換的中獎局（${todo.length} 局）`,
                   value: shown.join('\n') }];
       })()
     ])] });
@@ -132,6 +132,9 @@ const handlers = {
 
   async 雨果幣總覽(msg) {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
+    // 依線數分開列，客服才知道各要準備幾份獎
+    const tiers = t => t.total
+      ? `一條線 ${n(t[1])}\n兩條線 ${n(t[2])}\n三條線 ${n(t[3])}\n共 ${n(t.total)} 局` : '0 局';
     const rows = HG.holders(msg.guild.id);
     const st = HG.stats(msg.guild.id);
     // 人多的時候 embed 欄位塞不下，超過就只列前面幾位並註明
@@ -149,8 +152,8 @@ const handlers = {
       { name: '📥 累計儲值', value: `\`${n(st.topup)}\``, inline: true },
       { name: '📤 累計扣款', value: `\`${n(-st.deduct)}\``, inline: true },
       { name: '🎲 累計下注', value: `\`${n(st.bet)}\``, inline: true },
-      { name: '🎁 開出的獎勵', value: `${n(st.wins)} 局中獎，價值 \`${n(st.rewards)}\``, inline: true },
-      { name: '⏳ 待兌換', value: `${n(st.pending.c)} 局，價值 \`${n(st.pending.v)}\``, inline: true },
+      { name: '🎁 中獎局數', value: tiers(st.wins), inline: true },
+      { name: '⏳ 待兌換', value: tiers(st.pending), inline: true },
       { name: '📋 持有名單', value: lines.join('\n') || '目前沒有人持有雨果幣' }
     ])] });
   },

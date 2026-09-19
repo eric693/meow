@@ -1145,8 +1145,8 @@ function bingoPayload(guildId, r, userId) {
     HG.renderGrid(r.grid),
     '',
     `🎲 下注 \`${n(r.bet)}\`　🎯 **${tag}**`,
-    r.reward > 0
-      ? `🎁 **中獎！可兌換獎勵：價值 \`${n(r.reward)}\`**\n📸 請截圖本訊息，找客服兌換（局號 **#${r.round}**）`
+    r.lines > 0
+      ? `🎁 **中獎！${tag}**\n📸 請截圖本訊息，找客服兌換獎勵（局號 **#${r.round}**）`
       : '💸 這局沒有連線',
     `💰 剩餘 \`${n(r.balance)}\` 雨果幣`
   ].join('\n');
@@ -1182,7 +1182,7 @@ const sleep = ms => new Promise(res => setTimeout(res, ms));
 /**
  * 玩一局並回覆（slash 與按鈕共用）。
  *
- * 結果在 playBingo 裡就已經定案並記錄（注金已扣、獎勵價值已記下），後面的翻牌只是顯示：
+ * 結果在 playBingo 裡就已經定案並記錄（注金已扣、線數已記下），後面的翻牌只是顯示：
  * 中途斷線、訊息被刪、機器人重啟，都不會改變這局的結果。
  * 翻牌是「一列一列編輯同一則訊息」，Discord 對同一則訊息的編輯有頻率限制，
  * 所以一列約 0.8 秒、總共 6 次編輯；後台 bingo_animate 設 0 可以關掉直接開結果。
