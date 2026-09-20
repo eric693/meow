@@ -192,7 +192,7 @@ router.delete('/titles/:id', (req, res) => {
 });
 
 // ---------------- 客服單 / 考核 / 意見箱 ----------------
-router.use(['/tickets', '/exams', '/suggestions'], guardModule('tickets'));
+router.use(['/tickets', '/exams', '/suggestions', '/boxes'], guardModule('tickets'));
 router.get('/tickets', (req, res) => {
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (req.query.status) { cond.push('status = ?'); args.push(req.query.status); }
@@ -227,9 +227,22 @@ router.put('/exams/:id', (req, res) => {
   audit(req.user.name, '考核審核', `#${req.params.id} ${st}`, req.orgId, { source: 'web' });
   res.json({ ok: true });
 });
+// 自訂意見箱：清單（含收件數）與開關
+router.get('/boxes', (req, res) => {
+  const BX = require('../util/boxes');
+  res.json(BX.list(req.orgId, { all: true })
+    .map(b => ({ ...b, replies: BX.countReplies(req.orgId, b.id) })));
+});
+router.put('/boxes/:id', (req, res) => {
+  const BX = require('../util/boxes');
+  try { res.json(BX.setActive(req.orgId, req.params.id, !!req.body?.active, req.user.name)); }
+  catch (e) { res.status(404).json({ error: e.message }); }
+});
+
 router.get('/suggestions', (req, res) => {
   const cond = ['guild_id = ?'], args = [req.orgId];
   if (req.query.kind) { cond.push('kind = ?'); args.push(req.query.kind); }
+  if (req.query.box_id) { cond.push('box_id = ?'); args.push(Number(req.query.box_id)); }
   if (req.query.handled !== undefined && req.query.handled !== '') {
     cond.push('handled = ?'); args.push(req.query.handled === '1' ? 1 : 0);
   }

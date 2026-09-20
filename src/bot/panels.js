@@ -851,6 +851,15 @@ function publishedPayload(guildId, t) {
   };
 }
 
+/** 自訂意見箱的面板卡片（/意見箱 發布用） */
+function boxPanel(guildId, box) {
+  return {
+    embeds: [emb(guildId, { title: box.title, desc: box.body || '　' })],
+    components: [row(btn(`box:${box.id}`, box.button_label || '填寫',
+      ButtonStyle.Primary, box.button_emoji || '📝'))]
+  };
+}
+
 /** 給陪玩看的招募卡；匿名單不顯示老闆是誰 */
 function recruitEmbed(guildId, t) {
   const anon = t.publish === 'anon';
@@ -2083,6 +2092,56 @@ async function handleInteraction(i) {
   }
 
   // ---- 意見箱 ----
+  // ---- 自訂意見箱／答題箱 ----
+  if (id.startsWith('box:')) {
+    const BX = require('../util/boxes');
+    const box = BX.get(i.guildId, id.split(':')[1]);
+    if (!box) return eph(i, err(i.guildId, '這個意見箱已經被刪掉了。'));
+    if (!box.active) return eph(i, err(i.guildId, '這個意見箱目前已關閉，暫時不收件。'));
+    const fields = [];
+    if (box.ask_name) {
+      fields.push(input('name', '填表人（可留空，留空為匿名）', { required: false, ph: '想具名再填' }));
+    }
+    fields.push(input('content', box.question || '內容',
+      { style: TextInputStyle.Paragraph, ph: box.placeholder || '請填寫於此…' }));
+    return i.showModal(new ModalBuilder().setCustomId(`boxm:${box.id}`)
+      .setTitle((box.form_title || box.title).slice(0, 45)).addComponents(...fields));
+  }
+  if (id.startsWith('boxm:')) {
+    const BX = require('../util/boxes');
+    const box = BX.get(i.guildId, id.split(':')[1]);
+    if (!box) return eph(i, err(i.guildId, '這個意見箱已經被刪掉了。'));
+    const f = k => { try { return (i.fields.getTextInputValue(k) || '').trim(); } catch { return ''; } };
+    const content = f('content');
+    const name = f('name');
+    db.prepare(`INSERT INTO suggestions (guild_id, user_id, kind, name, content, box_id)
+                VALUES (?,?,'box',?,?,?)`)
+      .run(orgOf(i.guildId), i.user.id, name, content, box.id);
+
+    // 收件頻道：箱子自己設的優先，沒設就用後台的意見箱接收頻道
+    const chId = BX.inboxOf(i.guildId, box);
+    const ch = chId ? await i.guild.channels.fetch(chId).catch(() => null) : null;
+    let sent = false;
+    if (ch?.isTextBased?.()) {
+      sent = !!await ch.send({
+        embeds: [emb(i.guildId, {
+          title: `📥 ${box.title}`,
+          color: COLOR.warn,
+          fields: [
+            { name: '填表人', value: box.ask_name ? (name || '匿名用戶') : '匿名用戶' },
+            { name: box.question || '內容', value: content.slice(0, 1000) }
+          ],
+          footer: `意見箱 #${box.id}`
+        })]
+      }).catch(() => null);
+    }
+    return eph(i, ok(i.guildId, '已送出',
+      sent ? '我們收到了，謝謝你的回覆 💜'
+        : chId
+          ? '已記錄到後台，但機器人送不進收件頻道（請管理員確認它有該頻道的「檢視頻道」與「發送訊息」權限）。'
+          : '已記錄到後台（管理員尚未設定收件頻道）。'));
+  }
+
   if (id.startsWith('sug:')) {
     const kind = id.split(':')[1];
     return i.showModal(new ModalBuilder().setCustomId(`sugm:${kind}`)
@@ -2147,4 +2206,6 @@ module.exports = { commands, handleInteraction, PANELS, unsettledPage, lotteryEm
                    // 結單改權限的邏輯，測試用
                    editExisting,
                    // BINGO（slash 與按鈕共用同一套流程）
-                   playBingoAndReply, bingoPayload, bingoFrame };
+                   playBingoAndReply, bingoPayload, bingoFrame,
+                   // 自訂意見箱的面板卡片（/意見箱 發布用）
+                   boxPanel };

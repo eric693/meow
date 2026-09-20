@@ -106,7 +106,11 @@ ensureColumns('exams', [
   ['grade',     "TEXT NOT NULL DEFAULT ''"],
   ['gender',    "TEXT NOT NULL DEFAULT ''"]
 ]);
-ensureColumns('suggestions', [['name', "TEXT NOT NULL DEFAULT ''"]]);
+ensureColumns('suggestions', [
+  ['name', "TEXT NOT NULL DEFAULT ''"],
+  // 自訂意見箱的投稿會記下是哪一個箱子，後台才分得出來自哪裡
+  ['box_id', 'INTEGER NOT NULL DEFAULT 0']
+]);
 
 // 抽籤改成不限次數：舊資料庫的 (guild_id, user_id, day) 唯一鍵會擋住第二次，重建掉
 (() => {

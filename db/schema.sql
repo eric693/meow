@@ -449,3 +449,24 @@ CREATE TABLE IF NOT EXISTS bingo_rounds (
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_bingo_rounds_user ON bingo_rounds (guild_id, user_id, id);
+
+-- ---------- 自訂意見箱／答題箱（標題、內文、按鈕文案都可自訂）----------
+CREATE TABLE IF NOT EXISTS boxes (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id     TEXT NOT NULL,                  -- 集團 org id
+  src_guild    TEXT NOT NULL DEFAULT '',       -- 面板發在哪一台伺服器
+  title        TEXT NOT NULL DEFAULT '',       -- 卡片標題
+  body         TEXT NOT NULL DEFAULT '',       -- 卡片內文
+  button_label TEXT NOT NULL DEFAULT '填寫',   -- 按鈕文字
+  button_emoji TEXT NOT NULL DEFAULT '📝',
+  form_title   TEXT NOT NULL DEFAULT '',       -- 表單視窗標題（留空用卡片標題）
+  question     TEXT NOT NULL DEFAULT '內容',   -- 表單欄位的問題
+  placeholder  TEXT NOT NULL DEFAULT '',
+  ask_name     INTEGER NOT NULL DEFAULT 1,     -- 是否附「填表人（可留空）」欄位
+  channel_id   TEXT NOT NULL DEFAULT '',       -- 投稿收到哪個頻道（留空用意見箱接收頻道）
+  panel_channel TEXT NOT NULL DEFAULT '',      -- 面板貼在哪個頻道
+  active       INTEGER NOT NULL DEFAULT 1,
+  created_by   TEXT NOT NULL DEFAULT '',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_boxes ON boxes (guild_id, active);

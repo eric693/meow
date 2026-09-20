@@ -148,6 +148,23 @@ const commands = [
     .addStringOption(o => o.setName('標題').setDescription('投票主題').setRequired(true))
     .addStringOption(o => o.setName('選項').setDescription('用「、」或「,」分隔，最多 10 個').setRequired(true)),
 
+  // ---- 自訂意見箱／答題箱 ----
+  b('意見箱', '在這個頻道發一個意見箱／答題箱面板，文案與按鈕都可自訂')
+    .addStringOption(o => o.setName('標題').setDescription('卡片標題，例：📮 喚雨｜意見箱').setRequired(true))
+    .addStringOption(o => o.setName('內文').setDescription('卡片內文；用 \\n 換行').setRequired(true))
+    .addStringOption(o => o.setName('按鈕文字').setDescription('按鈕上的字，例：填寫意見表單'))
+    .addStringOption(o => o.setName('按鈕表情').setDescription('按鈕左邊的 emoji，預設 📝'))
+    .addStringOption(o => o.setName('問題').setDescription('表單欄位的問題，例：你的建議是？（預設「內容」）'))
+    .addStringOption(o => o.setName('提示文字').setDescription('表單輸入框裡的灰字提示'))
+    .addChannelOption(o => o.setName('收件頻道').setDescription('投稿送到哪裡；不填就用後台設定的意見箱接收頻道'))
+    .addBooleanOption(o => o.setName('要填表人').setDescription('表單是否附「填表人（可留空）」欄位，預設是')),
+
+  b('意見箱列表', '列出目前的意見箱、收件數與開關狀態'),
+
+  b('關閉意見箱', '停用某個意見箱，按鈕會回覆已關閉（面板不用刪）')
+    .addIntegerOption(o => o.setName('編號').setDescription('用 /意見箱列表 查編號').setRequired(true).setMinValue(1))
+    .addBooleanOption(o => o.setName('重新啟用').setDescription('勾選＝改成重新開放收件')),
+
   // ---- 冠名與身份組期限 ----
   b('冠名', '登記冠名期限，到期自動在播報頻道提醒')
     .addStringOption(o => o.setName('名稱').setDescription('冠名名稱，例：往後餘生 幸虧有泥').setRequired(true))

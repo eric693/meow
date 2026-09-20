@@ -404,16 +404,46 @@ Pages.polls = async view => {
     <div class="card"><div id="sg"><div class="empty">載入中…</div></div></div>
     <div class="card"><h3>員工輔導室</h3></div>
     ${H.filters('st', stF)}
-    <div class="card"><div id="sgs"><div class="empty">載入中…</div></div></div>`;
+    <div class="card"><div id="sgs"><div class="empty">載入中…</div></div></div>
+    <div class="card"><h3>📮 自訂意見箱（/意見箱 建立）</h3>
+      <div class="muted" style="margin-bottom:8px">
+        標題、內文、按鈕文字都在建立指令裡填。停用之後按鈕會回覆「目前已關閉」，面板不用刪。</div>
+      <div id="bxs"><div class="empty">載入中…</div></div></div>`;
 
   document.getElementById('lpAdd').onclick = async () => {
     await POST('/lottery/prizes', { name: '新籤', emoji: '🔮', type: 'fortune', weight: 10, enabled: 1 });
     loadLottery();
   };
 
+  // 自訂意見箱：列出每個箱子、收件數與開關，點「查看」直接展開投稿
+  const loadBoxes = async () => {
+    const rows = await GET('/boxes');
+    document.getElementById('bxs').innerHTML = rows.length
+      ? H.table(['#', '標題', '按鈕', '收件頻道', { label: '收件', num: 1 }, '狀態', '操作'],
+        rows.map(b => `<tr><td>${b.id}</td><td>${UI.esc(b.title)}</td>
+          <td>${UI.esc((b.button_emoji || '') + b.button_label)}</td>
+          <td>${b.channel_id ? `<code>${b.channel_id}</code>` : '<span class="muted">用後台設定</span>'}</td>
+          <td class="num">${H.n(b.replies)}</td>
+          <td>${b.active ? '<span class="tag ok">收件中</span>' : '<span class="tag err">已關閉</span>'}</td>
+          <td><button class="btn secondary sm" data-bxv="${b.id}" data-t="${UI.esc(b.title)}">查看投稿</button>
+              <button class="btn sm" data-bxa="${b.id}" data-v="${b.active ? 0 : 1}">${b.active ? '關閉收件' : '重新開放'}</button></td></tr>`),
+        '目前沒有自訂意見箱')
+      : '<div class="empty">目前沒有自訂意見箱，到 Discord 用 <code>/意見箱</code> 建立</div>';
+
+    document.querySelectorAll('[data-bxa]').forEach(b => b.onclick = async () => {
+      await PUT('/boxes/' + b.dataset.bxa, { active: Number(b.dataset.v) });
+      UI.ok(Number(b.dataset.v) ? '已重新開放' : '已關閉收件'); loadBoxes();
+    });
+    document.querySelectorAll('[data-bxv]').forEach(b => b.onclick = async () => {
+      const d = await GET('/suggestions?' + new URLSearchParams({ kind: 'box', box_id: b.dataset.bxv, limit: 100 }));
+      UI.modal({ title: `${b.dataset.t}　共 ${d.total} 筆`, okText: '關閉', onOk: () => {},
+        bodyHTML: sugTable(d.rows) });
+    });
+  };
+
   const sgBind = H.bindFilters('sg', sgF, () => loadSug(), SG);
   const stBind = H.bindFilters('st', stF, () => loadStaffSug(), ST);
-  loadPolls(); loadSug(); loadStaffSug(); loadLottery();
+  loadPolls(); loadSug(); loadStaffSug(); loadLottery(); loadBoxes();
 };
 
 // ---------------- 報表與匯出 ----------------

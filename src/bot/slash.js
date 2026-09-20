@@ -455,6 +455,57 @@ const handlers = {
   },
 
   // ---------- 人事 ----------
+  // ---------- 自訂意見箱／答題箱 ----------
+  async 意見箱(i) {
+    if (!isCS(i.member)) return deny(i);
+    const BX = require('../util/boxes');
+    const P = require('./panels');
+    const ch = i.options.getChannel('收件頻道');
+    let box;
+    try {
+      box = BX.create(i.guildId, {
+        title: i.options.getString('標題'),
+        // 指令列打不出換行，讓他們用 \n 表示
+        body: (i.options.getString('內文') || '').replace(/\\n/g, '\n'),
+        buttonLabel: i.options.getString('按鈕文字') || '填寫',
+        buttonEmoji: i.options.getString('按鈕表情') || '📝',
+        question: i.options.getString('問題') || '內容',
+        placeholder: i.options.getString('提示文字') || '',
+        askName: i.options.getBoolean('要填表人') !== false,
+        channelId: ch?.id || '',
+        panelChannel: i.channelId,
+        operator: i.user.tag
+      });
+    } catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
+
+    await i.reply({ embeds: [ok(i.guildId, `意見箱已建立（#${box.id}）`,
+      `面板已發在本頻道。收件送往：${ch ? `<#${ch.id}>` : '後台設定的意見箱接收頻道'}\n`
+      + '要關閉收件用 `/關閉意見箱 編號`，不必刪面板。')], ephemeral: true });
+    return i.channel.send(P.boxPanel(i.guildId, box));
+  },
+
+  async 意見箱列表(i) {
+    if (!isCS(i.member)) return deny(i);
+    const BX = require('../util/boxes');
+    const rows = BX.list(i.guildId, { all: true });
+    if (!rows.length) return i.reply({ embeds: [ok(i.guildId, '目前沒有意見箱', '用 `/意見箱` 建一個')], ephemeral: true });
+    const body = rows.map(b => `\`#${b.id}\` ${b.active ? '🟢' : '⛔'} **${b.title}**　收件 ${BX.countReplies(i.guildId, b.id)} 筆\n`
+      + `　按鈕：${b.button_emoji || ''}${b.button_label}　收件頻道：${b.channel_id ? `<#${b.channel_id}>` : '（用後台設定）'}`)
+      .join('\n');
+    return i.reply({ embeds: [emb(i.guildId, { title: '📮 意見箱一覽', desc: body.slice(0, 4000) })], ephemeral: true });
+  },
+
+  async 關閉意見箱(i) {
+    if (!isCS(i.member)) return deny(i);
+    const BX = require('../util/boxes');
+    const on = !!i.options.getBoolean('重新啟用');
+    let box;
+    try { box = BX.setActive(i.guildId, i.options.getInteger('編號'), on, i.user.tag); }
+    catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
+    return i.reply({ embeds: [ok(i.guildId, on ? '已重新開放收件' : '已關閉收件',
+      `#${box.id}　${box.title}`)], ephemeral: true });
+  },
+
   // ---------- 冠名與身份組期限 ----------
   async 冠名(i) {
     if (!isCS(i.member)) return deny(i);
