@@ -850,6 +850,10 @@ Pages.settings = async view => {
           <input name="bingo_odds" value="${UI.esc(v.bingo_odds || '')}" placeholder="30,40,20,8,2"></label>
         <label class="f"><span>頭獎（全盤同圖）總共幾份</span>
           <input name="bingo_jackpot_limit" type="number" min="0" value="${UI.esc(v.bingo_jackpot_limit ?? '1')}" placeholder="1"></label>
+        <label class="f"><span>下注加成上限（百分點，0＝關閉）</span>
+          <input name="bingo_bet_bonus" type="number" min="0" max="30" value="${UI.esc(v.bingo_bet_bonus ?? '6')}" placeholder="6"></label>
+        <label class="f"><span>保底：連續槓龜幾局後保證中一條線（0＝不啟用）</span>
+          <input name="bingo_pity" type="number" min="0" value="${UI.esc(v.bingo_pity ?? '0')}" placeholder="0"></label>
         <label class="f"><span>翻牌動畫</span><select name="bingo_animate">
           <option value="1" ${v.bingo_animate !== '0' ? 'selected' : ''}>開（一列一列翻開，約 5 秒）</option>
           <option value="0" ${v.bingo_animate === '0' ? 'selected' : ''}>關（直接顯示結果）</option>
@@ -860,7 +864,11 @@ Pages.settings = async view => {
       <div class="muted" style="margin-top:6px">
         中獎機率五個數字依序是 0 條線、1 條線、2 條線、3 條線、5×5 全盤同圖（頭獎）的比例，不用加起來剛好 100。
         比例是<b>對全體玩家</b>而言的長期分布，不是保證每個人都照這個比例中。
-        頭獎發完（達到設定的份數）之後就不會再開出，那份機率由其餘結果依比例分攤；填 0 代表頭獎不限份數。</div>
+        頭獎發完（達到設定的份數）之後就不會再開出，那份機率由其餘結果依比例分攤；填 0 代表頭獎不限份數。<br>
+        <b>下注加成</b>：押越多，中一般連線的機率越高一點——做法是從「零線」挪出最多這麼多百分點，
+        按 1:2:3 線原本的比例分給它們，所以<b>頭獎那份完全不受影響</b>。
+        押最低注沒有加成，兩倍注拿到一半上限，再往上越加越平。<br>
+        <b>保底</b>：同一個人連續槓龜到設定局數時，下一局保證至少一條線（不保頭獎）；中過線就重新計算。</div>
     </div>
 
     <div class="card"><h3>頻道與分類</h3>

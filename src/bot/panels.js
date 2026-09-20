@@ -1144,6 +1144,7 @@ function lotteryEmbed(guildId, { prize, coupon }) {
 function bingoPayload(guildId, r, userId) {
   const tag = HG.resultTag(r.lines);
   const jackpot = HG.isJackpot(r.lines);
+  const bonus = HG.betBonus(guildId, r.bet);
   const fields = [];
   if (r.lines > 0) {
     // 綠格子標出連成線的位置，再寫出是哪幾條，玩家不用自己對
@@ -1168,7 +1169,9 @@ function bingoPayload(guildId, r, userId) {
       desc: `${mention(userId)} 的牌局\n\n${desc}`,
       fields,
       color: jackpot ? COLOR.money : r.lines > 0 ? COLOR.ok : COLOR.main,
+      // 押超過最低注時把加成寫出來，玩家看得到多押的好處
       footer: `第 ${r.round} 局`
+            + (bonus > 0 ? `　·　下注加成 +${bonus.toFixed(1)}%（不含頭獎）` : '')
     })],
     components: [row(
       btn(`bingo:again:${r.bet}:${userId}`, `再玩一次（${n(r.bet)}）`, ButtonStyle.Primary, '🔁'),

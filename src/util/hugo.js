@@ -172,9 +172,64 @@ function jackpotLeft(guildId) {
   return Math.max(0, limit - won);
 }
 
-/** 抽這一局中幾條線；頭獎已經被抽走就把那份機率讓給其餘結果 */
-function rollLines(guildId) {
+/**
+ * 下注加成：押越多，中一般連線的機率越高一點點。
+ *
+ * 規則刻意做成「從零線那份挪出幾個百分點，按 1:2:3 線原本的比例分給它們」——
+ * 總和不變，所以**頭獎那 2% 完全不受下注金額影響**，對外公布的頭獎機率永遠成立。
+ * 加成幅度 = 上限 × (1 − 最低注/實際注)：押最低注沒加成、兩倍注拿到一半上限、
+ * 再往上加成越來越平，不會因為有人重押就把機率玩壞。
+ * 後台 bingo_bet_bonus 設定上限幾個百分點（預設 6，填 0 就完全關閉加成）。
+ */
+const betBonusCap = guildId => Math.max(0, getNum('bingo_bet_bonus', 6, orgOf(guildId)));
+
+function betBonus(guildId, bet) {
+  const cap = betBonusCap(guildId);
+  const min = minBet(guildId);
+  bet = Number(bet) || 0;
+  if (cap <= 0 || bet <= min) return 0;
+  return cap * (1 - min / bet);
+}
+
+/** 這一注實際生效的機率分布（已套用下注加成；頭獎那份原封不動） */
+function oddsFor(guildId, bet) {
   const w = odds(guildId).slice();
+  const bonus = betBonus(guildId, bet);
+  if (bonus <= 0) return w;
+  const winSum = w[1] + w[2] + w[3];
+  if (winSum <= 0) return w;
+  // 最多只能把零線那份挪光，挪不出來就少挪一點
+  const move = Math.min(bonus, w[0]);
+  w[0] -= move;
+  for (const i of [1, 2, 3]) w[i] += move * (w[i] / winSum);
+  return w;
+}
+
+/**
+ * 保底：連續槓龜幾局之後，下一局保證至少一條線。
+ * 後台 bingo_pity 設幾局（預設 0＝不啟用保底）。只算這個人最近連續的 0 線局數，
+ * 中過任何一條線就重新計算。保底只保「至少一條線」，不會保到頭獎。
+ */
+const pityAfter = guildId => Math.max(0, getNum('bingo_pity', 0, orgOf(guildId)));
+
+/** 這個人目前連續槓龜幾局 */
+function losingStreak(guildId, userId) {
+  const rows = db.prepare(`SELECT lines FROM bingo_rounds WHERE guild_id=? AND user_id=?
+                           ORDER BY id DESC LIMIT 100`).all(orgOf(guildId), userId);
+  let k = 0;
+  for (const r of rows) { if (r.lines > 0) break; k++; }
+  return k;
+}
+
+/** 這一局是不是該觸發保底 */
+function pityDue(guildId, userId) {
+  const need = pityAfter(guildId);
+  return need > 0 && losingStreak(guildId, userId) >= need;
+}
+
+/** 抽這一局中幾條線；頭獎已經被抽走就把那份機率讓給其餘結果 */
+function rollLines(guildId, bet = 0) {
+  const w = oddsFor(guildId, bet);
   if (!jackpotLeft(guildId)) w[4] = 0;
   const total = w.reduce((a, b) => a + b, 0);
   if (total <= 0) return 0;
@@ -203,8 +258,11 @@ function playBingo(guildId, userId, bet, name = '') {
   // 抽線數與寫入放在同一個交易裡：兩個人幾乎同時抽中頭獎時，
   // 後面那位在交易內會發現頭獎已經沒了，改成一般結果，不會發出兩份頭獎。
   const { round, lines, grid } = db.transaction(() => {
-    let lines = rollLines(gid);
+    let lines = rollLines(gid, bet);
     if (lines >= JACKPOT_LINES && !jackpotLeft(gid)) lines = 3;
+    // 保底：連續槓龜到設定局數時，這局至少給一條線（不保頭獎）
+    const pity = lines === 0 && pityDue(gid, userId);
+    if (pity) lines = 1;
     const grid = buildGrid(gid, lines);
     addHugo(gid, userId, -bet, { kind: 'bet', reason: `BINGO 下注 ${bet}`, operator: userId, name });
     // payout 欄位保留不用（固定 0）：獎勵另外公布，不在系統裡定價
@@ -292,5 +350,6 @@ module.exports = {
   balanceOf, addHugo, history, holders, stats,
   playBingo, redeemRound, unredeemed, renderGrid, renderWinMap, winningCells, describeLines,
   buildGrid, countLines, odds, minBet, symbols, LINES,
-  JACKPOT_LINES, jackpotLimit, jackpotLeft, isJackpot, resultTag, rollLines
+  JACKPOT_LINES, jackpotLimit, jackpotLeft, isJackpot, resultTag, rollLines,
+  betBonus, betBonusCap, oddsFor, pityAfter, losingStreak, pityDue
 };
