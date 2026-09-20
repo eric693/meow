@@ -816,8 +816,10 @@ Pages.settings = async view => {
       <div class="grid c2">
         <label class="f"><span>最低下注</span>
           <input name="bingo_min_bet" type="number" min="1" value="${UI.esc(v.bingo_min_bet ?? '500')}" placeholder="500"></label>
-        <label class="f"><span>中獎機率（0 線,1 線,2 線,3 線）</span>
-          <input name="bingo_odds" value="${UI.esc(v.bingo_odds || '')}" placeholder="40,46,12,2"></label>
+        <label class="f"><span>中獎機率（0 線,1 線,2 線,3 線,全盤同圖）</span>
+          <input name="bingo_odds" value="${UI.esc(v.bingo_odds || '')}" placeholder="30,40,20,8,2"></label>
+        <label class="f"><span>頭獎（全盤同圖）總共幾份</span>
+          <input name="bingo_jackpot_limit" type="number" min="0" value="${UI.esc(v.bingo_jackpot_limit ?? '1')}" placeholder="1"></label>
         <label class="f"><span>翻牌動畫</span><select name="bingo_animate">
           <option value="1" ${v.bingo_animate !== '0' ? 'selected' : ''}>開（一列一列翻開，約 5 秒）</option>
           <option value="0" ${v.bingo_animate === '0' ? 'selected' : ''}>關（直接顯示結果）</option>
@@ -825,7 +827,10 @@ Pages.settings = async view => {
         <label class="f"><span>圖案（12 種，逗號分隔；可填 &lt;:名稱:ID&gt; 自訂表情）</span>
           <input name="bingo_symbols" value="${UI.esc(v.bingo_symbols || '')}" placeholder="留空＝用內建的 12 個 emoji"></label>
       </div>
-      <div class="muted" style="margin-top:6px">中獎機率四個數字依序是 0 條線、1 條線、2 條線、3 條線的比例，不用加起來剛好 100。</div>
+      <div class="muted" style="margin-top:6px">
+        中獎機率五個數字依序是 0 條線、1 條線、2 條線、3 條線、5×5 全盤同圖（頭獎）的比例，不用加起來剛好 100。
+        比例是<b>對全體玩家</b>而言的長期分布，不是保證每個人都照這個比例中。
+        頭獎發完（達到設定的份數）之後就不會再開出，那份機率由其餘結果依比例分攤；填 0 代表頭獎不限份數。</div>
     </div>
 
     <div class="card"><h3>頻道與分類</h3>

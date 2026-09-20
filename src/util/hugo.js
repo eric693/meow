@@ -46,12 +46,15 @@ const holders = guildId =>
   db.prepare('SELECT * FROM hugo_wallet WHERE guild_id=? AND balance <> 0 ORDER BY balance DESC')
     .all(orgOf(guildId));
 
-// 中獎局數依線數分：{ 1: n, 2: n, 3: n, total: n }
+// 中獎局數依線數分：{ 1: n, 2: n, 3: n, jackpot: n, total: n }
+// 全盤同圖案（12 條線）另外歸到 jackpot，客服備獎時才分得出頭獎與一般連線
 function byLines(gid, extra) {
-  const out = { 1: 0, 2: 0, 3: 0, total: 0 };
+  const out = { 1: 0, 2: 0, 3: 0, jackpot: 0, total: 0 };
   for (const r of db.prepare(`SELECT lines, COUNT(*) c FROM bingo_rounds
                               WHERE guild_id=? AND lines > 0 ${extra} GROUP BY lines`).all(gid)) {
-    out[r.lines] = r.c; out.total += r.c;
+    if (r.lines >= JACKPOT_LINES) out.jackpot += r.c;
+    else out[r.lines] = (out[r.lines] || 0) + r.c;
+    out.total += r.c;
   }
   return out;
 }
@@ -106,6 +109,8 @@ const shuffle = arr => arr.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[
  */
 function buildGrid(guildId, target) {
   const SYM = symbols(guildId);
+  // 頭獎：整盤同一個圖案，12 條線全中
+  if (target >= JACKPOT_LINES) return new Array(25).fill(pick(SYM));
   for (let attempt = 0; attempt < 400; attempt++) {
     const chosen = shuffle([...LINES.keys()]).slice(0, target);
     // 有交點的目標線要同圖案
@@ -137,18 +142,47 @@ function buildGrid(guildId, target) {
   return Array.from({ length: 25 }, (_, i) => SYM[(Math.floor(i / 5) * 5 + (i % 5) * 3) % SYM.length]);
 }
 
-/** 中獎線數的機率（後台 bingo_odds 可調，預設 0 線 40%、1 線 46%、2 線 12%、3 線 2%） */
+// 全盤同圖案＝12 條線全中，也就是頭獎
+const JACKPOT_LINES = 12;
+const DEFAULT_ODDS = [30, 40, 20, 8, 2];
+
+/**
+ * 中獎機率（後台 bingo_odds 可調）：依序是 0 線、1 線、2 線、3 線、全盤同圖案。
+ * 機率是對全體玩家而言的長期比例，不是保證每個人都照這個比例中。
+ * 舊設定只填四個數字時，補一個 0 當頭獎機率，行為跟以前一樣。
+ */
 function odds(guildId) {
   const raw = getSetting('bingo_odds', '', orgOf(guildId)).split(',').map(Number).filter(n => n >= 0);
-  const w = raw.length === 4 ? raw : [40, 46, 12, 2];
-  return w.reduce((a, b) => a + b, 0) > 0 ? w : [40, 46, 12, 2];
+  let w = raw.length >= 4 ? raw.slice(0, 5) : DEFAULT_ODDS;
+  if (w.length === 4) w = [...w, 0];
+  return w.reduce((a, b) => a + b, 0) > 0 ? w : DEFAULT_ODDS;
 }
 const minBet = guildId => Math.max(1, getNum('bingo_min_bet', 500, orgOf(guildId)));
 
+/** 頭獎總共幾份（後台 bingo_jackpot_limit，預設 1；填 0 代表不限） */
+const jackpotLimit = guildId => Math.max(0, getNum('bingo_jackpot_limit', 1, orgOf(guildId)));
+
+/** 頭獎還有沒有剩：開出過的全盤同圖局數還沒達到上限就算有 */
+function jackpotLeft(guildId) {
+  const gid = orgOf(guildId);
+  const limit = jackpotLimit(gid);
+  if (limit === 0) return Infinity;
+  const won = db.prepare('SELECT COUNT(*) c FROM bingo_rounds WHERE guild_id=? AND lines >= ?')
+    .get(gid, JACKPOT_LINES).c;
+  return Math.max(0, limit - won);
+}
+
+/** 抽這一局中幾條線；頭獎已經被抽走就把那份機率讓給其餘結果 */
 function rollLines(guildId) {
-  const w = odds(guildId);
-  let r = Math.random() * w.reduce((a, b) => a + b, 0);
-  for (let i = 0; i < w.length; i++) { r -= w[i]; if (r <= 0) return i; }
+  const w = odds(guildId).slice();
+  if (!jackpotLeft(guildId)) w[4] = 0;
+  const total = w.reduce((a, b) => a + b, 0);
+  if (total <= 0) return 0;
+  let r = Math.random() * total;
+  for (let i = 0; i < w.length; i++) {
+    r -= w[i];
+    if (r <= 0) return i === 4 ? JACKPOT_LINES : i;
+  }
   return 0;
 }
 
@@ -166,17 +200,22 @@ function playBingo(guildId, userId, bet, name = '') {
   const before = balanceOf(gid, userId);
   if (before < bet) throw new Error(`雨果幣不足：目前 ${before.toLocaleString('en-US')}，需要 ${bet.toLocaleString('en-US')}`);
 
-  const lines = rollLines(gid);
-  const grid = buildGrid(gid, lines);
-
-  const round = db.transaction(() => {
+  // 抽線數與寫入放在同一個交易裡：兩個人幾乎同時抽中頭獎時，
+  // 後面那位在交易內會發現頭獎已經沒了，改成一般結果，不會發出兩份頭獎。
+  const { round, lines, grid } = db.transaction(() => {
+    let lines = rollLines(gid);
+    if (lines >= JACKPOT_LINES && !jackpotLeft(gid)) lines = 3;
+    const grid = buildGrid(gid, lines);
     addHugo(gid, userId, -bet, { kind: 'bet', reason: `BINGO 下注 ${bet}`, operator: userId, name });
     // payout 欄位保留不用（固定 0）：獎勵另外公布，不在系統裡定價
-    return db.prepare(`INSERT INTO bingo_rounds (guild_id, user_id, bet, lines, payout, grid)
+    const round = db.prepare(`INSERT INTO bingo_rounds (guild_id, user_id, bet, lines, payout, grid)
                        VALUES (?,?,?,?,0,?)`).run(gid, userId, bet, lines, grid.join(',')).lastInsertRowid;
+    return { round, lines, grid };
   })();
 
-  audit(name || userId, 'BINGO', `下注 ${bet}／${lines} 線`, gid, { actorId: userId, source: 'game' });
+  audit(name || userId, 'BINGO',
+    `下注 ${bet}／${lines >= JACKPOT_LINES ? '全盤同圖（頭獎）' : `${lines} 線`}`,
+    gid, { actorId: userId, source: 'game' });
   return { round, bet, lines, grid, balance: balanceOf(gid, userId) };
 }
 
@@ -233,6 +272,8 @@ const renderWinMap = grid => {
 
 /** 中了哪幾條線，寫成人看得懂的字 */
 const describeLines = grid => {
+  // 全盤同圖案列 12 條線太長，直接講結論
+  if (countLines(grid) >= JACKPOT_LINES) return ['全盤同圖案（12 條線全中）'];
   const names = [];
   LINES.forEach((L, k) => {
     if (!L.every(i => grid[i] === grid[L[0]])) return;
@@ -241,8 +282,15 @@ const describeLines = grid => {
   return names;
 };
 
+/** 這一局是不是頭獎（全盤同圖案） */
+const isJackpot = lines => Number(lines) >= JACKPOT_LINES;
+/** 結果的顯示名稱，指令與卡片共用同一套說法 */
+const resultTag = lines => (isJackpot(lines) ? '🏆 5×5 全盤同圖（頭獎）'
+  : ['槓龜', '一條線', '兩條線', '三條線'][lines] || `${lines} 條線`);
+
 module.exports = {
   balanceOf, addHugo, history, holders, stats,
   playBingo, redeemRound, unredeemed, renderGrid, renderWinMap, winningCells, describeLines,
-  buildGrid, countLines, odds, minBet, symbols, LINES
+  buildGrid, countLines, odds, minBet, symbols, LINES,
+  JACKPOT_LINES, jackpotLimit, jackpotLeft, isJackpot, resultTag, rollLines
 };

@@ -1133,7 +1133,8 @@ function lotteryEmbed(guildId, { prize, coupon }) {
  * 下注金額也放進 customId，「再玩一次」才知道要押多少。
  */
 function bingoPayload(guildId, r, userId) {
-  const tag = ['槓龜', '一條線', '兩條線', '三條線'][r.lines] || `${r.lines} 條線`;
+  const tag = HG.resultTag(r.lines);
+  const jackpot = HG.isJackpot(r.lines);
   const fields = [];
   if (r.lines > 0) {
     // 綠格子標出連成線的位置，再寫出是哪幾條，玩家不用自己對
@@ -1145,9 +1146,11 @@ function bingoPayload(guildId, r, userId) {
     HG.renderGrid(r.grid),
     '',
     `🎲 下注 \`${n(r.bet)}\`　🎯 **${tag}**`,
-    r.lines > 0
-      ? `**恭喜闆闆中獎！請找客服兌換獎勵（局號#${r.round}）**`
-      : '很可惜這次沒中獎，別灰心！再接再厲！',
+    jackpot
+      ? `🎉🎉 **恭喜闆闆開出全盤同圖，頭獎只有一份，是您的了！請找客服兌換（局號#${r.round}）**`
+      : r.lines > 0
+        ? `**恭喜闆闆中獎！請找客服兌換獎勵（局號#${r.round}）**`
+        : '很可惜這次沒中獎，別灰心！再接再厲！',
     `💰 剩餘 \`${n(r.balance)}\` 雨果幣`
   ].join('\n');
   return {
@@ -1155,7 +1158,7 @@ function bingoPayload(guildId, r, userId) {
       title: '🎰 BINGO',
       desc: `${mention(userId)} 的牌局\n\n${desc}`,
       fields,
-      color: r.lines > 0 ? COLOR.ok : COLOR.main,
+      color: jackpot ? COLOR.money : r.lines > 0 ? COLOR.ok : COLOR.main,
       footer: `第 ${r.round} 局`
     })],
     components: [row(

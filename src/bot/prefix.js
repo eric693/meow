@@ -122,7 +122,7 @@ const handlers = {
         const todo = HG.unredeemed(msg.guild.id, target);
         if (!todo.length) return [];
         const shown = todo.slice(0, 10).map(r =>
-          `#${r.id}　${['', '一條線', '兩條線', '三條線'][r.lines]}　${r.created_at.slice(5, 16)}`);
+          `#${r.id}　${HG.resultTag(r.lines)}　${r.created_at.slice(5, 16)}`);
         if (todo.length > 10) shown.push(`…另有 ${todo.length - 10} 局`);
         return [{ name: `🎁 還沒兌換的中獎局（${todo.length} 局）`,
                   value: shown.join('\n') }];
@@ -134,7 +134,9 @@ const handlers = {
     if (!isCS(msg.member)) throw new Error('僅限客服／管理員使用。');
     // 依線數分開列，客服才知道各要準備幾份獎
     const tiers = t => t.total
-      ? `一條線 ${n(t[1])}\n兩條線 ${n(t[2])}\n三條線 ${n(t[3])}\n共 ${n(t.total)} 局` : '0 局';
+      ? [`一條線 ${n(t[1])}`, `兩條線 ${n(t[2])}`, `三條線 ${n(t[3])}`,
+         t.jackpot ? `🏆 頭獎 ${n(t.jackpot)}` : '', `共 ${n(t.total)} 局`].filter(Boolean).join('\n')
+      : '0 局';
     const rows = HG.holders(msg.guild.id);
     const st = HG.stats(msg.guild.id);
     // 人多的時候 embed 欄位塞不下，超過就只列前面幾位並註明

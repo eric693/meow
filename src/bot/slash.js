@@ -173,7 +173,7 @@ const handlers = {
     let r;
     try { r = HG.redeemRound(i.guildId, id, i.user.tag); }
     catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
-    const tag = ['', '一條線', '兩條線', '三條線'][r.lines] || `${r.lines} 條線`;
+    const tag = HG.resultTag(r.lines);
     // 公開回覆：玩家看得到自己的獎勵已經兌換，之後也不會再有人拿同一張截圖來換
     return i.reply({ embeds: [ok(i.guildId, '🎁 BINGO 獎勵已兌換',
       `**局號：** #${r.id}\n**玩家：** ${mention(r.user_id)}\n**結果：** ${tag}（下注 \`${n(r.bet)}\`）\n`
