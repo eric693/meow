@@ -1171,7 +1171,7 @@ function bingoPayload(guildId, r, userId) {
       color: jackpot ? COLOR.money : r.lines > 0 ? COLOR.ok : COLOR.main,
       // 押超過最低注時把加成寫出來，玩家看得到多押的好處
       footer: `第 ${r.round} 局`
-            + (bonus > 0 ? `　·　下注加成 +${bonus.toFixed(1)}%（不含頭獎）` : '')
+            + (bonus > 0 ? `　·　下注加成 +${bonus.toFixed(1)}%` : '')
     })],
     components: [row(
       btn(`bingo:again:${r.bet}:${userId}`, `再玩一次（${n(r.bet)}）`, ButtonStyle.Primary, '🔁'),
@@ -1212,12 +1212,14 @@ async function playBingoAndReply(i, bet) {
   if (getSetting('bingo_animate', '1', orgOf(i.guildId)) === '0') return i.reply(final);
 
   await i.reply(bingoFrame(i.guildId, r, 0));
+  // 翻到第 4 列為止用動畫，第 5 列直接換成結果卡片。
+  // 以前是「翻完 5 列」再多編輯一次換結果，那一次失敗就會卡在「已開出 5/5 列」且沒有按鈕。
   try {
-    for (let rowNo = 1; rowNo <= 5; rowNo++) {
+    for (let rowNo = 1; rowNo <= 4; rowNo++) {
       await sleep(800);
       await i.editReply(bingoFrame(i.guildId, r, rowNo));
     }
-    await sleep(400);
+    await sleep(800);
     await i.editReply(final);
   } catch {
     // 訊息被刪掉、或互動過期了：注金已經扣了、結果也記下了，補一則結果就好
