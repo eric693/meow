@@ -1,6 +1,7 @@
 // 自訂意見箱／答題箱：標題、內文、按鈕文案、表單問題都由建立者自己填。
 // 投稿一律寫進 suggestions（kind='box'、box_id 指向這個箱子），後台看得到。
 const { db, orgOf, getSetting, audit } = require('../db');
+const { isEmoji } = require('./embed');
 
 const CAP = { title: 256, body: 4000, label: 80, emoji: 32, question: 45, ph: 100 };
 const clip = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
@@ -18,7 +19,9 @@ function create(guildId, {
        form_title, question, placeholder, ask_name, channel_id, panel_channel, created_by)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(org, String(guildId), clip(title, CAP.title), clip(body, CAP.body),
-         clip(buttonLabel, CAP.label) || '填寫', clip(buttonEmoji, CAP.emoji),
+         clip(buttonLabel, CAP.label) || '填寫',
+         // 不合法的表情直接不存：留著只會讓面板發不出去
+         isEmoji(buttonEmoji) ? clip(buttonEmoji, CAP.emoji) : '',
          clip(formTitle, CAP.title), clip(question, CAP.question) || '內容',
          clip(placeholder, CAP.ph), askName ? 1 : 0, String(channelId || ''),
          String(panelChannel || ''), operator);

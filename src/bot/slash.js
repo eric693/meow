@@ -478,8 +478,13 @@ const handlers = {
       });
     } catch (e) { return i.reply({ embeds: [err(i.guildId, e.message)], ephemeral: true }); }
 
+    const wanted = i.options.getString('按鈕表情');
     await i.reply({ embeds: [ok(i.guildId, `意見箱已建立（#${box.id}）`,
       `面板已發在本頻道。收件送往：${ch ? `<#${ch.id}>` : '後台設定的意見箱接收頻道'}\n`
+      + (wanted && !box.button_emoji
+        ? `⚠️ 按鈕表情「${wanted}」不是有效的表情符號，已略過（按鈕文字照用）。\n`
+          + '要放自訂表情請填 `<:名稱:ID>` 這種格式。\n'
+        : '')
       + '要關閉收件用 `/關閉意見箱 編號`，不必刪面板。')], ephemeral: true });
     return i.channel.send(P.boxPanel(i.guildId, box));
   },

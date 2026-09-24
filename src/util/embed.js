@@ -19,6 +19,20 @@ function emb(guildId, { title, desc, color = COLOR.main, fields = [], footer, im
   return e;
 }
 
+/**
+ * 是不是 Discord 按鈕能用的表情。
+ * 兩種合法：伺服器自訂表情 `<:name:id>` / `<a:name:id>`，或真正的 unicode 表情。
+ * 填到別的東西（例如「2」或一段文字）Discord 會退掉整則訊息，所以要先擋掉。
+ */
+const isEmoji = v => {
+  const x = String(v == null ? '' : v).trim();
+  if (!x) return false;
+  if (/^<a?:[\w~]{2,32}:\d{15,25}>$/.test(x)) return true;
+  // 表情本體可能由多個碼位組成（膚色、ZWJ 組合、國旗、數字鍵帽）
+  return /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[0-9#*])[\p{Extended_Pictographic}\p{Regional_Indicator}\u200d\uFE0F\u20E3\p{Emoji_Modifier}]*$/u.test(x)
+    && /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20E3]/u.test(x);
+};
+
 /** 網址的副檔名（Discord CDN 連結會帶一長串過期參數，要先去掉）*/
 const extOf = url => (String(url || '').split('?')[0].match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
 const isHttp = url => /^https?:\/\//i.test(String(url || ''));
@@ -35,4 +49,4 @@ const money = (guildId, title, desc, fields) => emb(guildId, { title, desc, colo
 const n = v => Number(v || 0).toLocaleString('en-US');
 const mention = id => `<@${id}>`;
 
-module.exports = { emb, ok, err, money, COLOR, n, mention, brand, isImageUrl, isVideoUrl, extOf };
+module.exports = { emb, ok, err, money, COLOR, n, mention, brand, isImageUrl, isVideoUrl, extOf, isEmoji };

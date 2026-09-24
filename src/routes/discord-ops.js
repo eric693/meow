@@ -3,7 +3,7 @@
 const express = require('express');
 const { db, getSetting, findStaff, getCustomer, audit, orgOf } = require('../db');
 const { requireAuth, guardModule } = require('../auth');
-const { emb, ok, COLOR, mention } = require('../util/embed');
+const { emb, ok, COLOR, mention, brand } = require('../util/embed');
 const M = require('../util/money');
 const G = require('../util/gifts');
 const { checkoutMessage, checkoutDetail, refundNotice } = require('../util/checkout');
@@ -257,7 +257,8 @@ router.post('/dm', guardModule('panels'), async (req, res) => {
     if (!client || !bot.isReady()) return res.status(503).json({ error: '機器人目前離線' });
     const u = await client.users.fetch(String(user_id)).catch(() => null);
     if (!u) return res.status(404).json({ error: '查無這位成員' });
-    await u.send({ embeds: [emb(req.guildId, { title: '📩 來自客服的訊息', desc: content })] });
+    // 標題用品牌名（後台 brand_name），對老闆來說是「喚雨」發的訊息，不是某個客服個人
+    await u.send({ embeds: [emb(req.guildId, { title: `📩 來自${brand(req.guildId)}的訊息`, desc: content })] });
     audit(who(req), '私訊成員', `${u.tag}：${content.slice(0, 60)}`, req.orgId, { source: 'web' });
     res.json({ ok: true });
   } catch (e) {

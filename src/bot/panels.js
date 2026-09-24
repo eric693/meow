@@ -4,7 +4,7 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder
 } = require('discord.js');
 const { db, getSetting, getNum, getCustomer, findStaff, getStaff, now, audit, orgOf } = require('../db');
-const { emb, ok, err, money, COLOR, n, mention, isImageUrl, isVideoUrl } = require('../util/embed');
+const { emb, ok, err, money, COLOR, n, mention, isImageUrl, isVideoUrl, isEmoji } = require('../util/embed');
 const M = require('../util/money');
 const G = require('../util/gifts');
 const { checkoutMessage } = require('../util/checkout');
@@ -18,7 +18,9 @@ const CardMedia = require('../util/cardmedia');
 
 const btn = (id, label, style = ButtonStyle.Primary, emoji) => {
   const b = new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
-  if (emoji) b.setEmoji(emoji);
+  // 表情不合法就不要放：Discord 會用 COMPONENT_INVALID_EMOJI 退掉整則訊息，
+  // 一個字打錯就整張面板發不出去，寧可少一個圖案也要把面板發出來。
+  if (emoji && isEmoji(emoji)) b.setEmoji(emoji);
   return b;
 };
 const row = (...c) => new ActionRowBuilder().addComponents(...c);
